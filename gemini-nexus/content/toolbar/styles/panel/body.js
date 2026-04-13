@@ -1,6 +1,4 @@
-(function() {
-    window.GeminiStyles = window.GeminiStyles || {};
-    window.GeminiStyles.PanelBody = `
+export const panelBodyStyles = `
         /* --- Window Body --- */
 
         .window-body {
@@ -60,4 +58,3 @@
             color: #0b57d0;
         }
     `;
-})();

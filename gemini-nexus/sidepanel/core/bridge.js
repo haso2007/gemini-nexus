@@ -1,6 +1,10 @@
-
 // sidepanel/core/bridge.js
 import { downloadFile, downloadText } from '../utils/download.js';
+import {
+    CONNECTION_STORAGE_KEYS,
+    normalizeStoredConnectionSettings,
+    serializeConnectionSettingsForStorage,
+} from '../../lib/connection_settings.js';
 
 export class MessageBridge {
     constructor(frameManager, stateManager) {
@@ -14,8 +18,8 @@ export class MessageBridge {
     }
 
     handleWindowMessage(event) {
-        // Security check: Only accept messages from our direct iframe
-        if (!this.frame.isWindow(event.source)) return;
+        // Security check: Only accept messages from our direct iframe and extension origin.
+        if (!this.frame.isWindow(event.source) || !this.frame.isOrigin(event.origin)) return;
 
         const { action, payload } = event.data;
 
@@ -44,7 +48,7 @@ export class MessageBridge {
                         });
                     }
                 })
-                .catch(err => console.warn("Error forwarding to background:", err));
+                .catch(err => console.warn('Error forwarding to background:', err));
             return;
         }
 
@@ -68,8 +72,6 @@ export class MessageBridge {
             return;
         }
         if (action === 'GET_TEXT_SELECTION') {
-            // Some keys might not be in initial bulk fetch if added later, but usually are.
-            // Fallback to async storage if needed, but state.data usually has it.
             chrome.storage.local.get(['geminiTextSelectionEnabled'], (res) => {
                 const val = res.geminiTextSelectionEnabled !== false;
                 this.frame.postMessage({ action: 'RESTORE_TEXT_SELECTION', payload: val });
@@ -85,42 +87,15 @@ export class MessageBridge {
         }
         if (action === 'GET_ACCOUNT_INDICES') {
             chrome.storage.local.get(['geminiAccountIndices'], (res) => {
-                this.frame.postMessage({ action: 'RESTORE_ACCOUNT_INDICES', payload: res.geminiAccountIndices || "0" });
+                this.frame.postMessage({ action: 'RESTORE_ACCOUNT_INDICES', payload: res.geminiAccountIndices || '0' });
             });
             return;
         }
         if (action === 'GET_CONNECTION_SETTINGS') {
-            chrome.storage.local.get([
-                'geminiProvider',
-                'geminiUseOfficialApi', 
-                'geminiApiKey', 
-                'geminiThinkingLevel',
-                'geminiOpenaiBaseUrl',
-                'geminiOpenaiApiKey',
-                'geminiOpenaiModel',
-                'geminiMcpEnabled',
-                'geminiMcpTransport',
-                'geminiMcpServerUrl',
-                'geminiMcpServers',
-                'geminiMcpActiveServerId'
-            ], (res) => {
-                this.frame.postMessage({ 
-                    action: 'RESTORE_CONNECTION_SETTINGS', 
-                    payload: { 
-                        provider: res.geminiProvider || (res.geminiUseOfficialApi ? 'official' : 'web'),
-                        useOfficialApi: res.geminiUseOfficialApi === true, 
-                        apiKey: res.geminiApiKey || "",
-                        thinkingLevel: res.geminiThinkingLevel || "low",
-                        openaiBaseUrl: res.geminiOpenaiBaseUrl || "",
-                        openaiApiKey: res.geminiOpenaiApiKey || "",
-                        openaiModel: res.geminiOpenaiModel || "",
-                        // MCP
-                        mcpEnabled: res.geminiMcpEnabled === true,
-                        mcpTransport: res.geminiMcpTransport || "sse",
-                        mcpServerUrl: res.geminiMcpServerUrl || "http://127.0.0.1:3006/sse",
-                        mcpServers: Array.isArray(res.geminiMcpServers) ? res.geminiMcpServers : null,
-                        mcpActiveServerId: res.geminiMcpActiveServerId || null
-                    } 
+            chrome.storage.local.get(CONNECTION_STORAGE_KEYS, (res) => {
+                this.frame.postMessage({
+                    action: 'RESTORE_CONNECTION_SETTINGS',
+                    payload: normalizeStoredConnectionSettings(res)
                 });
             });
             return;
@@ -137,21 +112,11 @@ export class MessageBridge {
         if (action === 'SAVE_SIDEBAR_BEHAVIOR') this.state.save('geminiSidebarBehavior', payload);
         if (action === 'SAVE_ACCOUNT_INDICES') this.state.save('geminiAccountIndices', payload);
         if (action === 'SAVE_CONNECTION_SETTINGS') {
-            this.state.save('geminiProvider', payload.provider);
-            // Official
-            this.state.save('geminiUseOfficialApi', payload.provider === 'official'); // Maintain legacy bool for now
-            this.state.save('geminiApiKey', payload.apiKey);
-            this.state.save('geminiThinkingLevel', payload.thinkingLevel);
-            // OpenAI
-            this.state.save('geminiOpenaiBaseUrl', payload.openaiBaseUrl);
-            this.state.save('geminiOpenaiApiKey', payload.openaiApiKey);
-            this.state.save('geminiOpenaiModel', payload.openaiModel);
-            // MCP
-            this.state.save('geminiMcpEnabled', payload.mcpEnabled === true);
-            this.state.save('geminiMcpTransport', payload.mcpTransport || "sse");
-            this.state.save('geminiMcpServerUrl', payload.mcpServerUrl || "");
-            this.state.save('geminiMcpServers', Array.isArray(payload.mcpServers) ? payload.mcpServers : []);
-            this.state.save('geminiMcpActiveServerId', payload.mcpActiveServerId || null);
+            const updates = serializeConnectionSettingsForStorage(payload);
+            for (const [key, value] of Object.entries(updates.values)) {
+                this.state.save(key, value);
+            }
+            this.state.remove(updates.remove);
         }
     }
 

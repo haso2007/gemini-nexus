@@ -1,6 +1,11 @@
 
 // background/managers/history_manager.js
 import { generateUUID } from '../../lib/utils.js';
+import {
+    loadSessions,
+    moveSessionToFront,
+    saveSessions,
+} from './session/history_store.js';
 
 /**
  * Saves a completed interaction to the chat history in local storage.
@@ -11,7 +16,7 @@ import { generateUUID } from '../../lib/utils.js';
  */
 export async function saveToHistory(text, result, filesObj = null) {
     try {
-        const { geminiSessions = [] } = await chrome.storage.local.get(['geminiSessions']);
+        const geminiSessions = await loadSessions();
         
         const sessionId = generateUUID();
         const title = text.length > 30 ? text.substring(0, 30) + "..." : text;
@@ -48,7 +53,7 @@ export async function saveToHistory(text, result, filesObj = null) {
         };
 
         geminiSessions.unshift(newSession);
-        await chrome.storage.local.set({ geminiSessions });
+        await saveSessions(geminiSessions);
         
         // Notify Sidepanel to reload if open
         chrome.runtime.sendMessage({ 
@@ -71,8 +76,8 @@ export async function saveToHistory(text, result, filesObj = null) {
  */
 export async function appendAiMessage(sessionId, result) {
     try {
-        const { geminiSessions = [] } = await chrome.storage.local.get(['geminiSessions']);
-        const sessionIndex = geminiSessions.findIndex(s => s.id === sessionId);
+        const geminiSessions = await loadSessions();
+        const sessionIndex = geminiSessions.findIndex((session) => session.id === sessionId);
         
         if (sessionIndex !== -1) {
             const session = geminiSessions[sessionIndex];
@@ -87,15 +92,13 @@ export async function appendAiMessage(sessionId, result) {
             session.context = result.context; // Update context
             session.timestamp = Date.now();
             
-            // Move to top
-            geminiSessions.splice(sessionIndex, 1);
-            geminiSessions.unshift(session);
+            const updatedSessions = moveSessionToFront(geminiSessions, sessionIndex);
             
-            await chrome.storage.local.set({ geminiSessions });
+            await saveSessions(updatedSessions);
             
             chrome.runtime.sendMessage({ 
                 action: "SESSIONS_UPDATED", 
-                sessions: geminiSessions 
+                sessions: updatedSessions 
             }).catch(() => {});
             
             return true;
@@ -116,8 +119,8 @@ export async function appendAiMessage(sessionId, result) {
  */
 export async function appendUserMessage(sessionId, text, images = null) {
     try {
-        const { geminiSessions = [] } = await chrome.storage.local.get(['geminiSessions']);
-        const sessionIndex = geminiSessions.findIndex(s => s.id === sessionId);
+        const geminiSessions = await loadSessions();
+        const sessionIndex = geminiSessions.findIndex((session) => session.id === sessionId);
         
         if (sessionIndex !== -1) {
             const session = geminiSessions[sessionIndex];
@@ -129,15 +132,13 @@ export async function appendUserMessage(sessionId, text, images = null) {
             });
             session.timestamp = Date.now();
             
-            // Move to top
-            geminiSessions.splice(sessionIndex, 1);
-            geminiSessions.unshift(session);
+            const updatedSessions = moveSessionToFront(geminiSessions, sessionIndex);
             
-            await chrome.storage.local.set({ geminiSessions });
+            await saveSessions(updatedSessions);
             
             chrome.runtime.sendMessage({ 
                 action: "SESSIONS_UPDATED", 
-                sessions: geminiSessions 
+                sessions: updatedSessions 
             }).catch(() => {});
             
             return true;

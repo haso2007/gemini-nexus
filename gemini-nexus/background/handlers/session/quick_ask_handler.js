@@ -1,11 +1,13 @@
 
 // background/handlers/session/quick_ask_handler.js
-import { saveToHistory } from '../../managers/history_manager.js';
+import { appendAiMessage, appendUserMessage, saveToHistory } from '../../managers/history_manager.js';
+import { PromptBuilder } from './prompt/builder.js';
 
 export class QuickAskHandler {
-    constructor(sessionManager, imageHandler) {
+    constructor(sessionManager, imageHandler, deps = {}) {
         this.sessionManager = sessionManager;
         this.imageHandler = imageHandler;
+        this.promptBuilder = deps.promptBuilder || new PromptBuilder(deps.controlManager || null, deps.mcpManager || null);
     }
 
     async handleQuickAsk(request, sender) {
@@ -27,18 +29,35 @@ export class QuickAskHandler {
             }
         };
 
-        const result = await this.sessionManager.handleSendPrompt(request, onUpdate);
+        let promptRequest = request;
+        if (this.promptBuilder && request.includePageContext) {
+            const builtPrompt = await this.promptBuilder.build(request);
+            promptRequest = {
+                ...request,
+                text: builtPrompt.userPrompt,
+                systemInstruction: builtPrompt.systemInstruction,
+            };
+        }
+
+        const result = await this.sessionManager.handleSendPrompt(promptRequest, onUpdate);
         
-        let savedSession = null;
+        let sessionId = null;
         if (result && result.status === 'success') {
-            savedSession = await saveToHistory(request.text, result, null);
+            if (request.sessionId) {
+                await appendUserMessage(request.sessionId, request.text, null);
+                await appendAiMessage(request.sessionId, result);
+                sessionId = request.sessionId;
+            } else {
+                const savedSession = await saveToHistory(request.text, result, null);
+                sessionId = savedSession ? savedSession.id : null;
+            }
         }
 
         if (tabId) {
             chrome.tabs.sendMessage(tabId, {
                 action: "GEMINI_STREAM_DONE",
                 result: result,
-                sessionId: savedSession ? savedSession.id : null
+                sessionId: sessionId
             }).catch(() => {});
         }
     }

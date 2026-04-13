@@ -1,6 +1,4 @@
-(function() {
-    window.GeminiStyles = window.GeminiStyles || {};
-    window.GeminiStyles.PanelFooter = `
+export const panelFooterStyles = `
         /* --- Footer Styles --- */
         
         .window-footer {
@@ -100,4 +98,3 @@
             box-shadow: 0 2px 5px rgba(0,0,0,0.15);
         }
     `;
-})();

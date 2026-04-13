@@ -6,6 +6,7 @@ import { ToolExecutor } from './prompt/tool_executor.js';
 
 // Helper to prevent rapid-fire requests that trigger rate limits
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const DEFAULT_MAX_LOOPS = 5;
 
 export class PromptHandler {
     constructor(sessionManager, controlManager, mcpManager) {
@@ -66,9 +67,8 @@ export class PromptHandler {
                 let currentFiles = request.files;
                 
                 let loopCount = 0;
-                // 0 means unlimited (Infinity). Default to 0 if undefined.
-                const reqLoops = request.maxLoops !== undefined ? request.maxLoops : 0;
-                const MAX_LOOPS = reqLoops === 0 ? Infinity : reqLoops;
+                const reqLoops = Number(request.maxLoops);
+                const MAX_LOOPS = Number.isFinite(reqLoops) && reqLoops > 0 ? reqLoops : DEFAULT_MAX_LOOPS;
                 
                 let keepLooping = true;
 

@@ -42,10 +42,8 @@ export class ToolExecutor {
                     output = execResult;
                 }
             } else {
-                // Check if MCP is enabled
-                const servers = Array.isArray(request.mcpServers) ? request.mcpServers : [];
-                const isMultiServer = servers.length > 0;
-                const mcpEnabled = isMultiServer || this.mcpManager.isEnabled(request);
+                const servers = this.mcpManager ? this.mcpManager.getEnabledServers(request) : [];
+                const mcpEnabled = servers.length > 0;
 
                 if (!this.mcpManager || !mcpEnabled) {
                     throw new Error(`Unknown tool '${toolName}'. (External MCP tools are disabled)`);
@@ -54,15 +52,11 @@ export class ToolExecutor {
                 source = "mcp_remote";
                 let remote;
 
-                // Check if this is a multi-server tool ID (format: serverId__toolName)
                 const isMultiServerTool = toolName.includes('__');
 
-                if (isMultiServerTool && isMultiServer) {
-                    // Multi-server mode: route by tool ID
+                if (isMultiServerTool) {
                     remote = await this.mcpManager.callToolById(toolName, toolCommand.args || {}, servers);
-                } else if (isMultiServer) {
-                    // Multi-server but plain tool name - try to find it in any server
-                    // First, check which server has this tool
+                } else {
                     const allTools = await this.mcpManager.listAllActiveTools(servers);
                     const matchingTool = allTools.find(t => t.name === toolName);
 
@@ -80,16 +74,6 @@ export class ToolExecutor {
                     }
 
                     remote = await this.mcpManager.callToolById(matchingTool._toolId, toolCommand.args || {}, servers);
-                } else {
-                    // Legacy single-server mode
-                    if (request && request.mcpToolMode === 'selected') {
-                        const enabled = Array.isArray(request.mcpEnabledTools) ? request.mcpEnabledTools : [];
-                        const enabledSet = new Set(enabled);
-                        if (!enabledSet.has(toolName)) {
-                            throw new Error(`External MCP tool '${toolName}' is disabled (not in selected tools).`);
-                        }
-                    }
-                    remote = await this.mcpManager.callTool(request, toolName, toolCommand.args || {});
                 }
 
                 output = remote.text;

@@ -2,10 +2,10 @@
   "manifest_version": 3,
   "name": "Gemini Nexus",
   "version": "4.2.3",
-  "permissions": ["sidePanel", "storage", "contextMenus", "scripting", "alarms", "debugger", "downloads", "tabs"],
+  "permissions": ["sidePanel", "storage", "contextMenus", "alarms", "debugger", "downloads", "tabs"],
   "host_permissions": [
-    "https://gemini.google.com/*",
-    "<all_urls>"
+    "http://*/*",
+    "https://*/*"
   ],
   "background": {
     "service_worker": "background/index.js",
@@ -38,57 +38,24 @@
   },
   "content_scripts": [
     {
-      "matches": ["<all_urls>"],
-      "js": [
-        "content/overlay.js", 
-        "content/toolbar/icons.js",
-        "content/toolbar/styles/core.js",
-        "content/toolbar/styles/widget.js",
-        "content/toolbar/styles/markdown.js",
-        "content/toolbar/styles/panel/layout.js",
-        "content/toolbar/styles/panel/header.js",
-        "content/toolbar/styles/panel/body.js",
-        "content/toolbar/styles/panel/footer.js",
-        "content/toolbar/styles/panel/index.js",
-        "content/toolbar/styles/index.js",
-        "content/toolbar/bridge.js",
-        "content/toolbar/utils/drag.js",
-        "content/toolbar/i18n.js",
-        "content/toolbar/templates.js",
-        "content/toolbar/view/utils.js",
-        "content/toolbar/view/widget.js",
-        "content/toolbar/view/window.js",
-        "content/toolbar/view/dom.js",
-        "content/toolbar/view/index.js",
-        "content/toolbar/events.js",
-        "content/toolbar/ui/grammar.js",
-        "content/toolbar/ui/renderer.js",
-        "content/toolbar/ui/actions_delegate.js",
-        "content/toolbar/ui/code_copy.js",
-        "content/toolbar/ui/manager.js", 
-        "content/toolbar/actions.js",
-        "content/toolbar/image.js",
-        "content/toolbar/stream.js", 
-        "content/toolbar/utils/input.js",
-        "content/selection.js",
-        "content/toolbar/dispatch.js",
-        "content/toolbar/crop.js",
-        "content/toolbar/controller.js",
-        "content/shortcuts.js",
-        "content/messages.js",
-        "content/index.js"
+      "matches": ["http://*/*", "https://*/*"],
+      "exclude_matches": [
+        "https://chrome.google.com/webstore/*",
+        "https://chromewebstore.google.com/*",
+        "https://accounts.google.com/*"
       ],
+      "js": ["content/index.js"],
       "run_at": "document_end"
     }
   ],
   "web_accessible_resources": [
     {
       "resources": ["logo.png", "sandbox/index.html"],
-      "matches": ["<all_urls>"]
+      "matches": ["http://*/*", "https://*/*"]
     }
   ],
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'",
-    "sandbox": "sandbox allow-scripts allow-forms allow-popups allow-modals; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src https: http: data: blob:; media-src https: http: data: blob:;"
+    "sandbox": "sandbox allow-scripts allow-forms allow-popups allow-modals; script-src 'self' https://cdn.jsdelivr.net; img-src https: http: data: blob:; media-src https: http: data: blob:; object-src 'none';"
   }
 }

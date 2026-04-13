@@ -1,6 +1,7 @@
 
 // background/handlers/session/prompt/builder.js
 import { getActiveTabContent } from '../utils.js';
+import { findSessionById, hasAiResponse, loadSessions } from '../../../managers/session/history_store.js';
 import { BROWSER_CONTROL_PREAMBLE } from './preamble.js';
 
 export class PromptBuilder {
@@ -100,13 +101,11 @@ export class PromptBuilder {
     async _isFirstTurn(sessionId) {
         if (!sessionId) return true; // No session ID implies new/ephemeral request
         try {
-            const { geminiSessions = [] } = await chrome.storage.local.get(['geminiSessions']);
-            const session = geminiSessions.find(s => s.id === sessionId);
+            const geminiSessions = await loadSessions();
+            const session = findSessionById(geminiSessions, sessionId);
             if (!session) return true;
             
-            // If there are no AI responses yet, this is the first turn being processed
-            const hasAiResponse = session.messages.some(m => m.role === 'ai');
-            return !hasAiResponse;
+            return !hasAiResponse(session);
         } catch (e) {
             return true; // Default to true on error to be safe
         }

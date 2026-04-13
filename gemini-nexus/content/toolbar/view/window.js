@@ -1,17 +1,16 @@
 
 // content/toolbar/view/window.js
-(function() {
-    const Utils = window.GeminiViewUtils;
-    const ICONS = window.GeminiToolbarIcons;
+import { toolbarIcons } from '../icons.js';
+import { viewUtils } from './utils.js';
 
-    // Simple helper
-    const isZh = navigator.language.startsWith('zh');
-    const DEFAULT_TITLE = isZh ? "询问" : "Ask";
+// Simple helper
+const isZh = navigator.language.startsWith('zh');
+const DEFAULT_TITLE = isZh ? "询问" : "Ask";
 
-    /**
-     * Sub-controller for the Ask Window
-     */
-    class WindowView {
+/**
+ * Sub-controller for the Ask Window
+ */
+export class WindowView {
         constructor(elements) {
             this.elements = elements;
             this.isPinned = false;
@@ -44,7 +43,7 @@
 
             if (!this.isPinned || !this.elements.askWindow.classList.contains('visible')) {
                  if (resetDrag) resetDrag();
-                 Utils.positionElement(this.elements.askWindow, rect, true, this.isPinned, mousePoint);
+                 viewUtils.positionElement(this.elements.askWindow, rect, true, this.isPinned, mousePoint);
             }
             
             // Reset Content
@@ -135,25 +134,55 @@
                 if (this.elements.footerStop) this.elements.footerStop.classList.add('hidden');
                 if (this.elements.footerActions) this.elements.footerActions.classList.remove('hidden');
                 // Reset Copy Icon
-                if (this.elements.buttons.copy) this.elements.buttons.copy.innerHTML = ICONS.COPY;
+                if (this.elements.buttons.copy) this.elements.buttons.copy.innerHTML = toolbarIcons.COPY;
             }
         }
 
-        showError(text) {
+        showError(text, meta = null) {
              if (!this.elements.askWindow) return;
-             
-             // Render Error UI with Retry hint
-             this.elements.resultText.innerHTML = `
-                <div style="padding: 12px 0; color: #d93025;">
-                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-weight: 600;">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
-                        <span>Error</span>
-                    </div>
-                    <div style="font-size: 14px; line-height: 1.5; color: #1f1f1f;">
-                        ${text}
-                    </div>
-                </div>
-             `;
+
+             // Render error UI without interpreting provider error text as HTML.
+             const container = document.createElement('div');
+             container.style.padding = '12px 0';
+             container.style.color = '#d93025';
+
+             const titleRow = document.createElement('div');
+             Object.assign(titleRow.style, {
+                 display: 'flex',
+                 alignItems: 'center',
+                 gap: '8px',
+                 marginBottom: '8px',
+                 fontWeight: '600'
+             });
+             titleRow.innerHTML = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg><span>Error</span>';
+
+             const body = document.createElement('div');
+             Object.assign(body.style, {
+                 fontSize: '14px',
+                 lineHeight: '1.5',
+                 color: '#1f1f1f'
+             });
+             body.textContent = text;
+
+             container.appendChild(titleRow);
+             container.appendChild(body);
+
+             if (meta && typeof meta.linkUrl === 'string' && meta.linkUrl.startsWith('https://')) {
+                 const link = document.createElement('a');
+                 link.href = meta.linkUrl;
+                 link.target = '_blank';
+                 link.rel = 'noopener noreferrer';
+                 link.textContent = meta.linkText || meta.linkUrl;
+                 Object.assign(link.style, {
+                     display: 'inline-block',
+                     marginTop: '10px',
+                     color: '#1a73e8',
+                     textDecoration: 'underline'
+                 });
+                 container.appendChild(link);
+             }
+
+             this.elements.resultText.replaceChildren(container);
 
              // Show Footer with Actions (Retry is in footer-left)
              if (this.elements.windowFooter) this.elements.windowFooter.classList.remove('hidden');
@@ -163,7 +192,7 @@
         
         toggleCopyIcon(success) {
             if (!this.elements.buttons.copy) return;
-            this.elements.buttons.copy.innerHTML = success ? ICONS.CHECK : ICONS.COPY;
+            this.elements.buttons.copy.innerHTML = success ? toolbarIcons.CHECK : toolbarIcons.COPY;
         }
 
         setInputValue(text) {
@@ -204,7 +233,4 @@
         isHost(target) {
             return (this.elements.askWindow && this.elements.askWindow.contains(target));
         }
-    }
-
-    window.GeminiViewWindow = WindowView;
-})();
+}

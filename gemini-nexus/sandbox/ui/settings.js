@@ -1,6 +1,7 @@
 
 // sandbox/ui/settings.js
-import { saveShortcutsToStorage, saveThemeToStorage, requestThemeFromStorage, saveLanguageToStorage, requestLanguageFromStorage, saveTextSelectionToStorage, requestTextSelectionFromStorage, saveSidebarBehaviorToStorage, saveImageToolsToStorage, requestImageToolsFromStorage, saveAccountIndicesToStorage, requestAccountIndicesFromStorage, saveConnectionSettingsToStorage, requestConnectionSettingsFromStorage, sendToBackground } from '../../lib/messaging.js';
+import { downloadLogsFromParent, saveShortcutsToStorage, saveThemeToStorage, requestThemeFromStorage, saveLanguageToStorage, requestLanguageFromStorage, saveTextSelectionToStorage, requestTextSelectionFromStorage, saveSidebarBehaviorToStorage, saveImageToolsToStorage, requestImageToolsFromStorage, saveAccountIndicesToStorage, requestAccountIndicesFromStorage, saveConnectionSettingsToStorage, requestConnectionSettingsFromStorage, sendToBackground } from '../../lib/messaging.js';
+import { createDefaultMcpServer, normalizeMcpConnection, serializeMcpConnection } from '../../lib/mcp_servers.js';
 import { setLanguagePreference, getLanguagePreference } from '../core/i18n.js';
 import { SettingsView } from './settings/view.js';
 import { DEFAULT_SHORTCUTS } from '../../lib/constants.js';
@@ -20,26 +21,15 @@ export class SettingsController {
         // Connection State
         this.connectionData = {
             provider: 'web',
-            useOfficialApi: false, // Legacy support
             apiKey: "",
             thinkingLevel: "low",
             openaiBaseUrl: "",
             openaiApiKey: "",
             openaiModel: "",
-            // MCP (External Tools)
-            mcpEnabled: false,
-            mcpTransport: "sse",
-            mcpServerUrl: "http://127.0.0.1:3006/sse",
-            mcpServers: [{
-                id: `srv_${Date.now()}`,
-                name: "Local Proxy",
-                transport: "sse",
-                url: "http://127.0.0.1:3006/sse",
-                enabled: true,
-                toolMode: "all",
-                enabledTools: []
-            }],
-            mcpActiveServerId: null
+            ...normalizeMcpConnection({
+                mcpEnabled: false,
+                mcpServers: [createDefaultMcpServer()],
+            }, { includeDefault: true })
         };
 
         // Initialize View
@@ -68,6 +58,7 @@ export class SettingsController {
         
         // Listen for log data
         window.addEventListener('message', (e) => {
+            if (e.source !== window.parent || e.origin !== window.location.origin) return;
             if (e.data.action === 'BACKGROUND_MESSAGE' && e.data.payload && e.data.payload.logs) {
                 this.saveLogFile(e.data.payload.logs);
             }
@@ -126,12 +117,7 @@ export class SettingsController {
             openaiBaseUrl: data.connection.openaiBaseUrl,
             openaiApiKey: data.connection.openaiApiKey,
             openaiModel: data.connection.openaiModel,
-            // MCP
-            mcpEnabled: data.connection.mcpEnabled === true,
-            mcpTransport: data.connection.mcpTransport || "sse",
-            mcpServerUrl: data.connection.mcpServerUrl || "",
-            mcpServers: Array.isArray(data.connection.mcpServers) ? data.connection.mcpServers : [],
-            mcpActiveServerId: data.connection.mcpActiveServerId || null
+            ...serializeMcpConnection(data.connection)
         };
         
         saveConnectionSettingsToStorage(this.connectionData);
@@ -163,14 +149,7 @@ export class SettingsController {
             return `[${time}] [${l.level}] [${l.context}] ${l.message}${dataStr}`;
         }).join('\n');
         
-        // Send to parent to handle download (Sandbox restriction workaround)
-        window.parent.postMessage({
-            action: 'DOWNLOAD_LOGS',
-            payload: {
-                text: text,
-                filename: `gemini-nexus-logs-${Date.now()}.txt`
-            }
-        }, '*');
+        downloadLogsFromParent(text, `gemini-nexus-logs-${Date.now()}.txt`);
     }
 
     // --- State Updates (From View or Storage) ---
@@ -215,13 +194,6 @@ export class SettingsController {
     
     updateConnectionSettings(settings) {
         this.connectionData = { ...this.connectionData, ...settings };
-        
-        // Legacy compat: If provider missing but useOfficialApi is true, set to official
-        if (!this.connectionData.provider) {
-            if (settings.useOfficialApi) this.connectionData.provider = 'official';
-            else this.connectionData.provider = 'web';
-        }
-        
         this.view.setConnectionSettings(this.connectionData);
     }
 

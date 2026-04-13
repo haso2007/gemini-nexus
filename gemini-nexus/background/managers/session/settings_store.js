@@ -1,25 +1,20 @@
 
 // background/managers/session/settings_store.js
+import {
+    CONNECTION_STORAGE_KEYS,
+    readRequestConnectionSettings,
+} from '../../../lib/connection_settings.js';
 
 export async function getConnectionSettings() {
     const stored = await chrome.storage.local.get([
-        'geminiProvider',
-        'geminiUseOfficialApi', 
-        'geminiApiKey', 
-        'geminiThinkingLevel', 
+        ...CONNECTION_STORAGE_KEYS,
         'geminiApiKeyPointer',
-        'geminiOpenaiBaseUrl',
-        'geminiOpenaiApiKey',
-        'geminiOpenaiModel'
     ]);
 
-    // Legacy Migration Logic
-    let provider = stored.geminiProvider;
-    if (!provider) {
-        provider = stored.geminiUseOfficialApi === true ? 'official' : 'web';
-    }
+    const settings = readRequestConnectionSettings(stored);
+    const provider = settings.provider;
 
-    let activeApiKey = stored.geminiApiKey || "";
+    let activeApiKey = settings.apiKey || "";
 
     // Handle API Key Rotation (Comma separated) for Official Gemini
     if (provider === 'official' && activeApiKey.includes(',')) {
@@ -50,10 +45,10 @@ export async function getConnectionSettings() {
         provider: provider,
         // Official
         apiKey: activeApiKey,
-        thinkingLevel: stored.geminiThinkingLevel || "low",
+        thinkingLevel: settings.thinkingLevel,
         // OpenAI
-        openaiBaseUrl: stored.geminiOpenaiBaseUrl,
-        openaiApiKey: stored.geminiOpenaiApiKey,
-        openaiModel: stored.geminiOpenaiModel
+        openaiBaseUrl: settings.openaiBaseUrl,
+        openaiApiKey: settings.openaiApiKey,
+        openaiModel: settings.openaiModel
     };
 }

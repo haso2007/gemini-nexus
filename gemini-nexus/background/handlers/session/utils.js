@@ -95,23 +95,12 @@ export async function getActiveTabContent(specificTabId = null) {
             return null;
         }
 
-        // Strategy 1: Try sending message to existing content script
         try {
             const response = await chrome.tabs.sendMessage(tab.id, { action: "GET_PAGE_CONTENT" });
             return response ? response.content : null;
         } catch (e) {
-            // Strategy 2: Fallback to Scripting Injection
-            console.log("Content script unavailable, attempting fallback injection...");
-            try {
-                const results = await chrome.scripting.executeScript({
-                    target: { tabId: tab.id },
-                    func: () => document.body ? document.body.innerText : ""
-                });
-                return results?.[0]?.result || null;
-            } catch (injErr) {
-                console.error("Fallback injection failed:", injErr);
-                return null;
-            }
+            console.warn("Content script unavailable for page context:", e);
+            return null;
         }
     } catch (e) {
         console.error("Failed to get page context:", e);

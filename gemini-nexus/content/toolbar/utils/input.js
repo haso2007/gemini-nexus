@@ -1,7 +1,6 @@
 
 // content/toolbar/utils/input.js
-(function() {
-    class InputManager {
+export class InputManager {
         constructor() {
             this.sourceInputElement = null;
             this.sourceSelectionRange = null;
@@ -127,7 +126,4 @@
         reset() {
             this._reset();
         }
-    }
-
-    window.GeminiInputManager = InputManager;
-})();
+}

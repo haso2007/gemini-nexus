@@ -4,7 +4,7 @@ import { MessageHandler } from './message_handler.js';
 import { SessionFlowController } from './session_flow.js';
 import { PromptController } from './prompt.js';
 import { t } from '../core/i18n.js';
-import { saveSessionsToStorage, sendToBackground } from '../../lib/messaging.js';
+import { saveModelToStorage, saveSessionsToStorage, sendToBackground } from '../../lib/messaging.js';
 
 export class AppController {
     constructor(sessionManager, uiController, imageManager) {
@@ -120,7 +120,7 @@ export class AppController {
     }
 
     handleModelChange(model) {
-        window.parent.postMessage({ action: 'SAVE_MODEL', payload: model }, '*');
+        saveModelToStorage(model);
     }
 
     handleDeleteSession(sessionId) {

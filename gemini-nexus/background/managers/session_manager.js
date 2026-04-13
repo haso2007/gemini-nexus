@@ -58,10 +58,29 @@ export class GeminiSessionManager {
                 await chrome.storage.local.remove(['geminiContext']);
                 
                 const currentIndex = this.auth.getCurrentIndex();
+                const loginUrl = `https://gemini.google.com/u/${currentIndex}/`;
                 if (isZh) {
-                    errorMessage = `账号 (Index: ${currentIndex}) 未登录或会话已过期。请前往 <a href="https://gemini.google.com/u/${currentIndex}/" target="_blank" style="color: inherit; text-decoration: underline;">gemini.google.com/u/${currentIndex}/</a> 登录。`;
+                    errorMessage = `账号 (Index: ${currentIndex}) 未登录或会话已过期。请前往 Gemini 登录。`;
+                    return {
+                        action: "GEMINI_REPLY",
+                        text: "Error: " + errorMessage,
+                        status: "error",
+                        errorMeta: {
+                            linkText: `打开 Gemini 登录（账号 ${currentIndex}）`,
+                            linkUrl
+                        }
+                    };
                 } else {
-                    errorMessage = `Account (Index: ${currentIndex}) not logged in. Please log in at <a href="https://gemini.google.com/u/${currentIndex}/" target="_blank" style="color: inherit; text-decoration: underline;">gemini.google.com/u/${currentIndex}/</a>.`;
+                    errorMessage = `Account (Index: ${currentIndex}) not logged in. Please open Gemini to sign in.`;
+                    return {
+                        action: "GEMINI_REPLY",
+                        text: "Error: " + errorMessage,
+                        status: "error",
+                        errorMeta: {
+                            linkText: `Open Gemini login (account ${currentIndex})`,
+                            linkUrl
+                        }
+                    };
                 }
             } else if (errorMessage.includes("429") || errorMessage.includes("Too Many Requests")) {
                 errorMessage = isZh ? "请求过于频繁，请稍后再试 (429)" : "Too many requests, please try again later (429)";

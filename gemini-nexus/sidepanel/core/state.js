@@ -1,6 +1,11 @@
 
 // sidepanel/core/state.js
 
+import {
+    CONNECTION_STORAGE_KEYS,
+    normalizeStoredConnectionSettings,
+} from '../../lib/connection_settings.js';
+
 export class StateManager {
     constructor(frameManager) {
         this.frame = frameManager;
@@ -22,18 +27,7 @@ export class StateManager {
             'geminiTextSelectionEnabled',
             'geminiImageToolsEnabled',
             'geminiAccountIndices',
-            'geminiApiKey',
-            'geminiUseOfficialApi',
-            'geminiThinkingLevel',
-            'geminiProvider',
-            'geminiOpenaiBaseUrl',
-            'geminiOpenaiApiKey',
-            'geminiOpenaiModel',
-            'geminiMcpEnabled',
-            'geminiMcpTransport',
-            'geminiMcpServerUrl',
-            'geminiMcpServers',
-            'geminiMcpActiveServerId'
+            ...CONNECTION_STORAGE_KEYS
         ], (result) => {
             this.data = result;
             this.trySendInitData();
@@ -71,21 +65,7 @@ export class StateManager {
         // Settings first to establish model list environment
         this.frame.postMessage({ 
             action: 'RESTORE_CONNECTION_SETTINGS', 
-            payload: { 
-                provider: this.data.geminiProvider || (this.data.geminiUseOfficialApi ? 'official' : 'web'),
-                useOfficialApi: this.data.geminiUseOfficialApi === true, // Legacy
-                apiKey: this.data.geminiApiKey || "",
-                thinkingLevel: this.data.geminiThinkingLevel || "low",
-                openaiBaseUrl: this.data.geminiOpenaiBaseUrl || "",
-                openaiApiKey: this.data.geminiOpenaiApiKey || "",
-                openaiModel: this.data.geminiOpenaiModel || "",
-                // MCP
-                mcpEnabled: this.data.geminiMcpEnabled === true,
-                mcpTransport: this.data.geminiMcpTransport || "sse",
-                mcpServerUrl: this.data.geminiMcpServerUrl || "http://127.0.0.1:3006/sse",
-                mcpServers: Array.isArray(this.data.geminiMcpServers) ? this.data.geminiMcpServers : null,
-                mcpActiveServerId: this.data.geminiMcpActiveServerId || null
-            } 
+            payload: normalizeStoredConnectionSettings(this.data)
         });
 
         this.frame.postMessage({ action: 'RESTORE_SIDEBAR_BEHAVIOR', payload: this.data.geminiSidebarBehavior || 'auto' });
@@ -157,6 +137,16 @@ export class StateManager {
         // Special handling for localStorage items
         if (key === 'geminiTheme') localStorage.setItem('geminiTheme', value);
         if (key === 'geminiLanguage') localStorage.setItem('geminiLanguage', value);
+    }
+
+    remove(keys) {
+        const list = Array.isArray(keys) ? keys : [keys];
+        if (this.data) {
+            for (const key of list) {
+                delete this.data[key];
+            }
+        }
+        chrome.storage.local.remove(list);
     }
 
     // Getters for on-demand requests

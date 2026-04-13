@@ -1,14 +1,15 @@
 
 // content/toolbar/actions.js
+import { toolbarStrings } from './i18n.js';
 
-class ToolbarActions {
+export class ToolbarActions {
     constructor(uiController) {
         this.ui = uiController;
         this.lastRequest = null;
     }
 
     get t() {
-        return window.GeminiToolbarStrings;
+        return toolbarStrings;
     }
 
     /**
@@ -194,6 +195,3 @@ class ToolbarActions {
         });
     }
 }
-
-// Export global for Content Script usage
-window.GeminiToolbarActions = ToolbarActions;

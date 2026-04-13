@@ -1,7 +1,5 @@
 
-(function() {
-    window.GeminiStyles = window.GeminiStyles || {};
-    window.GeminiStyles.Markdown = `
+export const markdownStyles = `
         /* Result Area */
         .result-area {
             flex: 1;
@@ -187,4 +185,3 @@
             margin: 16px 0;
         }
     `;
-})();

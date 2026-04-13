@@ -1,7 +1,6 @@
 
 // content/overlay.js
-
-class SelectionOverlay {
+export class SelectionOverlay {
     constructor() {
         this.overlay = null;
         this.backgroundImg = null;
@@ -207,6 +206,3 @@ class SelectionOverlay {
         e.stopPropagation();
     }
 }
-
-// Attach to window so content.js can access it
-window.GeminiNexusOverlay = SelectionOverlay;

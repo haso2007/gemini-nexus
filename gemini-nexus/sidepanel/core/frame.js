@@ -1,4 +1,3 @@
-
 // sidepanel/core/frame.js
 
 export class FrameManager {
@@ -24,15 +23,27 @@ export class FrameManager {
 
     postMessage(message) {
         if (this.iframe.contentWindow) {
-            this.iframe.contentWindow.postMessage(message, '*');
+            this.iframe.contentWindow.postMessage(message, this.getOrigin() || '*');
         }
     }
 
     getWindow() {
         return this.iframe.contentWindow;
     }
-    
+
+    getOrigin() {
+        try {
+            return new URL(this.iframe.src, window.location.href).origin;
+        } catch {
+            return window.location.origin;
+        }
+    }
+
     isWindow(sourceWindow) {
         return this.iframe.contentWindow && sourceWindow === this.iframe.contentWindow;
+    }
+
+    isOrigin(origin) {
+        return origin === this.getOrigin();
     }
 }

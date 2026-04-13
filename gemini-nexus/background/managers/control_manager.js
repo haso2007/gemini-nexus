@@ -148,8 +148,8 @@ export class BrowserControlManager {
             return false;
         }
 
-        await this.connection.attach(tabId);
-        return true;
+        const attached = await this.connection.attach(tabId);
+        return attached === true && this.connection.attached === true;
     }
 
     async getSnapshot() {

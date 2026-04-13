@@ -1,5 +1,6 @@
 
 // sandbox/ui/viewer.js
+import { downloadImageFromParent } from '../../lib/messaging.js';
 
 export class ViewerController {
     constructor() {
@@ -159,13 +160,6 @@ export class ViewerController {
         const src = this.fullImage.src;
         if (!src) return;
 
-        // Delegate to parent (Sidepanel) to bypass Sandbox restrictions
-        window.parent.postMessage({
-            action: 'DOWNLOAD_IMAGE',
-            payload: {
-                url: src,
-                filename: `gemini-image-${Date.now()}.png`
-            }
-        }, '*');
+        downloadImageFromParent(src, `gemini-image-${Date.now()}.png`);
     }
 }

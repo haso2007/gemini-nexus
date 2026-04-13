@@ -80,7 +80,7 @@ export class BrowserConnection {
 
         // If already attached to the same tab, just ensure domains are enabled
         if (this.attached && this.currentTabId === tabId) {
-            return;
+            return true;
         }
         
         // If attached to a different tab, detach first
@@ -99,7 +99,7 @@ export class BrowserConnection {
                         console.warn("[BrowserConnection] Attach failed:", msg);
                     }
                     // Resolve anyway to allow fallback actions (like navigation) to proceed without debugger
-                    resolve();
+                    resolve(false);
                 } else {
                     this.attached = true;
                     this.currentTabId = tabId;
@@ -131,8 +131,7 @@ export class BrowserConnection {
                     } catch (e) {
                         console.warn("Failed to enable collection domains:", e);
                     }
-
-                    resolve();
+                    resolve(true);
                 }
             });
         });

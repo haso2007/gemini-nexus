@@ -1,5 +1,10 @@
-// content/toolbar/styles/index.js
-(function() {
-    const s = window.GeminiStyles || {};
-    window.GeminiToolbarStyles = (s.Core || '') + (s.Widget || '') + (s.Panel || '') + (s.Markdown || '');
-})();
+import { coreStyles } from './core.js';
+import { markdownStyles } from './markdown.js';
+import { panelStyles } from './panel/index.js';
+import { widgetStyles } from './widget.js';
+
+export const toolbarStyles =
+    coreStyles +
+    widgetStyles +
+    panelStyles +
+    markdownStyles;

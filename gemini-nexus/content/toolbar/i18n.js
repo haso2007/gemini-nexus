@@ -1,11 +1,10 @@
 
 // content/toolbar/i18n.js
 
-(function() {
-    // Simple localization for Content Script
-    const isZh = navigator.language.startsWith('zh');
-    
-    window.GeminiToolbarStrings = {
+// Simple localization for Content Script
+const isZh = navigator.language.startsWith('zh');
+
+export const toolbarStrings = {
         askAi: isZh ? "询问 AI" : "Ask AI",
         copy: isZh ? "复制" : "Copy",
         fixGrammar: isZh ? "语法修正" : "Fix Grammar",
@@ -152,5 +151,4 @@
             summarize: isZh ? '总结' : 'Summarize',
             grammar: isZh ? '语法修正' : 'Fix Grammar'
         }
-    };
-})();
+};
