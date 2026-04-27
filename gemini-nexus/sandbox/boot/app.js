@@ -4,7 +4,7 @@ import { renderLayout } from '../ui/layout.js';
 import { applyTranslations } from '../core/i18n.js';
 import { configureMarkdown } from '../render/config.js';
 import { sendToBackground } from '../../lib/messaging.js';
-import { loadLibs } from './loader.js';
+import { loadLibs, MARKDOWN_READY_EVENT } from './loader.js';
 import { AppMessageBridge } from './messaging.js';
 import { bindAppEvents } from './events.js';
 
@@ -79,10 +79,13 @@ export function initAppMode() {
         // Bind DOM Events
         bindAppEvents(app, ui, (fn) => bridge.setResizeFn(fn));
         
-        // Trigger dependency load in parallel, and re-render if needed when done
-        loadLibs().then(() => {
+        // Re-render restored sessions exactly when Markdown becomes available.
+        window.addEventListener(MARKDOWN_READY_EVENT, () => {
             if (app) app.rerender();
         });
+        
+        // Trigger dependency load in parallel.
+        loadLibs();
 
         // Configure Markdown (Initial pass, might be skipped if marked not loaded yet)
         configureMarkdown();
