@@ -27,6 +27,7 @@
     "noEmit": true
   },
   "exclude": [
-    "chrome-devtools-mcp-main"
+    "chrome-devtools-mcp-main",
+    "dist"
   ]
 }

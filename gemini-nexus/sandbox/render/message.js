@@ -18,6 +18,10 @@ function hasDisplayableThoughts(thoughts) {
     return typeof thoughts === 'string' ? thoughts.trim().length > 0 : Boolean(thoughts);
 }
 
+function hasDisplayableText(text) {
+    return typeof text === 'string' ? text.trim().length > 0 : Boolean(text);
+}
+
 export function appendContextCompressionNotice(container, text, options = {}) {
     const div = document.createElement('div');
     div.className = 'context-compression-notice';
@@ -133,6 +137,7 @@ export function appendMessage(container, text, role, attachment = null, thoughts
         ? options.thoughtsDurationSeconds
         : null;
     let thoughtsExpanded = false;
+    let thoughtsFinished = Boolean(options.isFinal);
     let sourcesDiv = null;
     let editCancel = null;
 
@@ -219,6 +224,7 @@ export function appendMessage(container, text, role, attachment = null, thoughts
 
     const setThoughtsExpanded = (expanded) => {
         if (!thoughtsToggle || !thoughtsContent || !thoughtsDiv) return;
+        expanded = Boolean(expanded);
         thoughtsExpanded = expanded;
         thoughtsDiv.classList.toggle('thoughts-expanded', expanded);
         thoughtsToggle.setAttribute('aria-expanded', expanded ? 'true' : 'false');
@@ -229,6 +235,17 @@ export function appendMessage(container, text, role, attachment = null, thoughts
     const setThoughtsVisible = (visible) => {
         if (!thoughtsDiv) return;
         thoughtsDiv.hidden = !visible;
+    };
+
+    const finishThoughts = () => {
+        if (thoughtsFinished) {
+            return;
+        }
+        thoughtsFinished = true;
+        thoughtsDurationSeconds = thoughtsStartedAt
+            ? (Date.now() - thoughtsStartedAt) / 1000
+            : (thoughtsDurationSeconds ?? 0);
+        setThoughtsExpanded(false);
     };
 
     const updateThoughts = (nextThoughts, state = {}) => {
@@ -243,20 +260,19 @@ export function appendMessage(container, text, role, attachment = null, thoughts
         setThoughtsVisible(hasThoughts);
         if (!hasThoughts) return;
 
-        if (state.isStreaming) {
+        if (state.isFinal || state.hasDisplayableText) {
+            finishThoughts();
+            updateThoughtsStatus(false);
+            return;
+        }
+
+        if (state.isStreaming && !thoughtsFinished) {
             if (!thoughtsStartedAt) {
                 thoughtsStartedAt = Date.now();
             }
             updateThoughtsStatus(true);
             setThoughtsExpanded(true);
             return;
-        }
-
-        if (state.isFinal) {
-            thoughtsDurationSeconds = thoughtsStartedAt
-                ? (Date.now() - thoughtsStartedAt) / 1000
-                : (thoughtsDurationSeconds ?? 0);
-            setThoughtsExpanded(false);
         }
 
         updateThoughtsStatus(false);
@@ -516,7 +532,10 @@ export function appendMessage(container, text, role, attachment = null, thoughts
                 }
             }
             
-            updateThoughts(newThoughts, state);
+            updateThoughts(newThoughts, {
+                ...state,
+                hasDisplayableText: hasDisplayableText(currentText)
+            });
             
             // Note: We removed the auto-scroll-to-bottom logic here.
             // If the user is at the start of the message, we want them to stay there
