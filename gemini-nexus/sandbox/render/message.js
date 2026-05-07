@@ -8,6 +8,143 @@ import { t } from '../core/i18n.js';
 const MAX_VISIBLE_SOURCES = 2;
 const THOUGHTS_REGION_PREFIX = 'thoughts-content';
 
+function getSourceUrlSet(sourceList) {
+    if (!Array.isArray(sourceList)) return new Set();
+    return new Set(sourceList.map(source => normalizeSourceUrl(source?.url)).filter(Boolean));
+}
+
+function getSourceDomain(url) {
+    try {
+        const { hostname } = new URL(url);
+        return hostname.replace(/^www\./, "");
+    } catch (_) {
+        return "";
+    }
+}
+
+function normalizeSourceTitle(source) {
+    const url = source?.url || "";
+    const title = typeof source?.title === 'string' ? source.title.trim() : "";
+    if (title && title !== url) return title;
+    return getSourceDomain(url) || url;
+}
+
+function normalizeSourceUrl(url) {
+    return typeof url === 'string' ? url.trim() : "";
+}
+
+function escapeRegExp(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function createSourceUrlPattern(sourceUrls) {
+    const urls = [...sourceUrls].filter(Boolean).sort((a, b) => b.length - a.length);
+    if (urls.length === 0) return null;
+    return new RegExp(`(?:<)?(${urls.map(escapeRegExp).join('|')})(?:>)?(?=$|[\\s).,，。:：;；>])`);
+}
+
+function hasStructuredSourceUrl(text, sourceUrlPattern) {
+    return Boolean(sourceUrlPattern && sourceUrlPattern.test(text));
+}
+
+function lineHasOnlySourceUrl(line, sourceUrlPattern) {
+    const trimmed = line.trim();
+    if (!trimmed) return false;
+    const listPrefix = String.raw`(?:[-*]\s*)?(?:\d+\.\s*)?`;
+    const urlPattern = sourceUrlPattern?.source || "";
+    if (!urlPattern) return false;
+    return new RegExp(`^${listPrefix}${urlPattern}\\s*[.)，。,:：;；]*$`).test(trimmed);
+}
+
+function lineIsSourceLabel(line) {
+    return /^\s*(?:来源|參考來源|参考来源|资料来源|Sources?|References?)\s*[:：]/i.test(line);
+}
+
+function splitLineAtSourceLabel(line) {
+    const match = line.match(/(来源|參考來源|参考来源|资料来源|Sources?|References?)\s*[:：]/i);
+    if (!match || match.index === undefined) return null;
+
+    return {
+        prefix: line.slice(0, match.index).trimEnd(),
+        sourceText: line.slice(match.index)
+    };
+}
+
+function lineHasOnlySourceLabel(line) {
+    const split = splitLineAtSourceLabel(line);
+    if (!split) return false;
+    return split.prefix.trim() === "" || /^[-*]\s*$/.test(split.prefix.trim());
+}
+
+function cleanupInlineSourceReferences(lines, sourceUrlPattern) {
+    const cleaned = [];
+
+    for (let index = 0; index < lines.length; index++) {
+        const line = lines[index];
+        const split = splitLineAtSourceLabel(line);
+
+        if (!split) {
+            cleaned.push(line);
+            continue;
+        }
+
+        const nextLine = lines[index + 1] || "";
+        const sourceHasUrl = hasStructuredSourceUrl(split.sourceText, sourceUrlPattern);
+        const nextLineHasOnlySourceUrl = lineHasOnlySourceUrl(nextLine, sourceUrlPattern);
+
+        if (!sourceHasUrl && !nextLineHasOnlySourceUrl) {
+            cleaned.push(line);
+            continue;
+        }
+
+        if (split.prefix.trim()) {
+            cleaned.push(split.prefix);
+        } else if (!lineHasOnlySourceLabel(line)) {
+            cleaned.push(line);
+        }
+
+        if (nextLineHasOnlySourceUrl) {
+            index++;
+        }
+    }
+
+    return cleaned;
+}
+
+function cleanupStructuredSourceText(text, sourceList) {
+    if (typeof text !== 'string' || !Array.isArray(sourceList) || sourceList.length === 0) {
+        return text;
+    }
+
+    let lines = text.split('\n');
+    let end = lines.length - 1;
+    while (end >= 0 && lines[end].trim() === "") end--;
+
+    let start = end;
+    const sourceUrls = getSourceUrlSet(sourceList);
+    if (sourceUrls.size === 0) return text;
+    const sourceUrlPattern = createSourceUrlPattern(sourceUrls);
+    if (!sourceUrlPattern) return text;
+
+    lines = cleanupInlineSourceReferences(lines, sourceUrlPattern);
+    end = lines.length - 1;
+    while (end >= 0 && lines[end].trim() === "") end--;
+    start = end;
+
+    while (start >= 0 && (lines[start].trim() === "" || lineHasOnlySourceUrl(lines[start], sourceUrlPattern))) {
+        start--;
+    }
+
+    const removedUrlLines = end - start;
+    if (removedUrlLines <= 0) return lines.join('\n');
+
+    if (start >= 0 && lineIsSourceLabel(lines[start])) {
+        return lines.slice(0, start).join('\n').trimEnd();
+    }
+
+    return lines.slice(0, start + 1).join('\n').trimEnd();
+}
+
 function formatThoughtDuration(seconds) {
     if (!Number.isFinite(seconds)) return null;
     if (seconds > 0 && seconds < 1) return '1';
@@ -20,6 +157,16 @@ function hasDisplayableThoughts(thoughts) {
 
 function hasDisplayableText(text) {
     return typeof text === 'string' ? text.trim().length > 0 : Boolean(text);
+}
+
+function getThoughtsStartedAtFromOptions(options) {
+    if (Number.isFinite(options.thoughtsStartedAt)) {
+        return options.thoughtsStartedAt;
+    }
+    if (Number.isFinite(options.thoughtsElapsedSeconds)) {
+        return Date.now() - (Math.max(0, options.thoughtsElapsedSeconds) * 1000);
+    }
+    return null;
 }
 
 export function appendContextCompressionNotice(container, text, options = {}) {
@@ -69,6 +216,9 @@ export function appendContextCompressionNotice(container, text, options = {}) {
         update: (nextText) => {
             textSpan.textContent = nextText;
             div.classList.add('context-compression-complete');
+        },
+        dispose: () => {
+            div.remove();
         }
     };
 }
@@ -132,14 +282,24 @@ export function appendMessage(container, text, role, attachment = null, thoughts
     let thoughtsToggle = null;
     let thoughtsStatus = null;
     let thoughtsContent = null;
-    let thoughtsStartedAt = null;
+    let thoughtsStartedAt = getThoughtsStartedAtFromOptions(options);
     let thoughtsDurationSeconds = Number.isFinite(options.thoughtsDurationSeconds)
         ? options.thoughtsDurationSeconds
         : null;
     let thoughtsExpanded = false;
     let thoughtsFinished = Boolean(options.isFinal);
+    let thoughtsStatusTimer = null;
     let sourcesDiv = null;
     let editCancel = null;
+    let currentSources = Array.isArray(sources) ? sources : [];
+
+    const renderMessageContent = () => {
+        if (!contentDiv) return;
+        const displayText = role === 'ai'
+            ? cleanupStructuredSourceText(currentText, currentSources)
+            : currentText;
+        renderContent(contentDiv, displayText, role);
+    };
 
     const buildSourcesElement = (sourceList) => {
         if (role !== 'ai' || !Array.isArray(sourceList) || sourceList.length === 0) {
@@ -159,18 +319,43 @@ export function appendMessage(container, text, role, attachment = null, thoughts
 
         let renderedCount = 0;
 
-        sourceList.forEach((source, index) => {
+        sourceList.forEach((source) => {
             if (!source || !source.url) return;
 
+            const sourceIndex = renderedCount + 1;
+            const domain = getSourceDomain(source.url);
+            const title = normalizeSourceTitle(source);
             const link = document.createElement('a');
             link.className = 'source-link';
-            if (index >= MAX_VISIBLE_SOURCES) {
+            if (renderedCount >= MAX_VISIBLE_SOURCES) {
                 link.classList.add('source-link-hidden');
             }
             link.href = source.url;
             link.target = '_blank';
             link.rel = 'noopener noreferrer';
-            link.textContent = source.title || source.url;
+
+            const number = document.createElement('span');
+            number.className = 'source-index';
+            number.textContent = String(sourceIndex);
+
+            const textWrap = document.createElement('span');
+            textWrap.className = 'source-text';
+
+            const titleSpan = document.createElement('span');
+            titleSpan.className = 'source-title';
+            titleSpan.textContent = title;
+
+            textWrap.appendChild(titleSpan);
+            if (domain && domain !== title) {
+                const domainSpan = document.createElement('span');
+                domainSpan.className = 'source-domain';
+                domainSpan.textContent = domain;
+                textWrap.appendChild(domainSpan);
+            }
+
+            link.title = source.url;
+            link.appendChild(number);
+            link.appendChild(textWrap);
             list.appendChild(link);
             renderedCount++;
         });
@@ -217,9 +402,32 @@ export function appendMessage(container, text, role, attachment = null, thoughts
         return t('thoughtsComplete');
     };
 
+    const getThoughtsStreamingLabel = () => {
+        if (!thoughtsStartedAt) return t('thoughtsStreaming');
+        const elapsedSeconds = (Date.now() - thoughtsStartedAt) / 1000;
+        return t('thoughtsCompleteWithDuration').replace('{seconds}', formatThoughtDuration(elapsedSeconds));
+    };
+
     const updateThoughtsStatus = (isStreaming) => {
         if (!thoughtsStatus) return;
-        thoughtsStatus.textContent = isStreaming ? t('thoughtsStreaming') : getThoughtsCompleteLabel();
+        thoughtsStatus.textContent = isStreaming ? getThoughtsStreamingLabel() : getThoughtsCompleteLabel();
+    };
+
+    const stopThoughtsStatusTimer = () => {
+        if (!thoughtsStatusTimer) return;
+        clearInterval(thoughtsStatusTimer);
+        thoughtsStatusTimer = null;
+    };
+
+    const startThoughtsStatusTimer = () => {
+        if (thoughtsStatusTimer) return;
+        thoughtsStatusTimer = setInterval(() => {
+            if (thoughtsFinished) {
+                stopThoughtsStatusTimer();
+                return;
+            }
+            updateThoughtsStatus(true);
+        }, 1000);
     };
 
     const setThoughtsExpanded = (expanded) => {
@@ -245,6 +453,7 @@ export function appendMessage(container, text, role, attachment = null, thoughts
         thoughtsDurationSeconds = thoughtsStartedAt
             ? (Date.now() - thoughtsStartedAt) / 1000
             : (thoughtsDurationSeconds ?? 0);
+        stopThoughtsStatusTimer();
         setThoughtsExpanded(false);
     };
 
@@ -258,7 +467,10 @@ export function appendMessage(container, text, role, attachment = null, thoughts
 
         const hasThoughts = hasDisplayableThoughts(currentThoughts);
         setThoughtsVisible(hasThoughts);
-        if (!hasThoughts) return;
+        if (!hasThoughts) {
+            stopThoughtsStatusTimer();
+            return;
+        }
 
         if (state.isFinal || state.hasDisplayableText) {
             finishThoughts();
@@ -268,13 +480,15 @@ export function appendMessage(container, text, role, attachment = null, thoughts
 
         if (state.isStreaming && !thoughtsFinished) {
             if (!thoughtsStartedAt) {
-                thoughtsStartedAt = Date.now();
+                thoughtsStartedAt = getThoughtsStartedAtFromOptions(state) || Date.now();
             }
             updateThoughtsStatus(true);
+            startThoughtsStatusTimer();
             setThoughtsExpanded(true);
             return;
         }
 
+        stopThoughtsStatusTimer();
         updateThoughtsStatus(false);
     };
 
@@ -324,7 +538,7 @@ export function appendMessage(container, text, role, attachment = null, thoughts
 
         contentDiv = document.createElement('div');
         contentDiv.className = 'msg-content';
-        renderContent(contentDiv, currentText, role);
+        renderMessageContent();
         div.appendChild(contentDiv);
 
         if (role === 'ai' && Array.isArray(sources) && sources.length > 0) {
@@ -527,9 +741,7 @@ export function appendMessage(container, text, role, attachment = null, thoughts
         update: (newText, newThoughts, state = {}) => {
             if (newText !== undefined) {
                 currentText = newText;
-                if (contentDiv) {
-                    renderContent(contentDiv, currentText, role);
-                }
+                renderMessageContent();
             }
             
             updateThoughts(newThoughts, {
@@ -541,14 +753,19 @@ export function appendMessage(container, text, role, attachment = null, thoughts
             // If the user is at the start of the message, we want them to stay there
             // as the content expands downwards.
         },
-        finalize: (newText, newThoughts) => {
+        finalize: (newText, newThoughts, state = {}) => {
             if (newText !== undefined) {
                 currentText = newText;
-                if (contentDiv) {
-                    renderContent(contentDiv, currentText, role);
-                }
+                renderMessageContent();
+            }
+            if (Number.isFinite(state.thoughtsDurationSeconds)) {
+                thoughtsDurationSeconds = state.thoughtsDurationSeconds;
             }
             updateThoughts(newThoughts, { isFinal: true });
+        },
+        getThoughtsDurationSeconds: () => thoughtsDurationSeconds,
+        dispose: () => {
+            stopThoughtsStatusTimer();
         },
         // Function to update images if they arrive late (though mostly synchronous in final reply)
         addImages: (images) => {
@@ -567,6 +784,8 @@ export function appendMessage(container, text, role, attachment = null, thoughts
         },
         addSources: (sourceList) => {
             if (sourcesDiv || !Array.isArray(sourceList) || sourceList.length === 0) return;
+            currentSources = sourceList;
+            renderMessageContent();
 
             const builtSources = buildSourcesElement(sourceList);
             if (!builtSources) return;

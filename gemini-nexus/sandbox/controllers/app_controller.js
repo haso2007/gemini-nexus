@@ -14,6 +14,7 @@ export class AppController {
         
         this.captureMode = 'snip'; 
         this.isGenerating = false; 
+        this.generatingSessionId = null;
         this.pageContextActive = false;
         this.browserControlActive = false;
         this.sidePanelScope = 'remembered_tabs';

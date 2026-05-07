@@ -37,8 +37,4 @@ export const ShortcutsSettingsTemplate = `
         </div>
     </div>
 
-    <div class="settings-actions">
-        <button id="reset-shortcuts" class="btn-secondary" data-i18n="resetDefault">Reset Default</button>
-        <button id="save-shortcuts" class="btn-primary" data-i18n="saveChanges">Save Changes</button>
-    </div>
 </div>`;

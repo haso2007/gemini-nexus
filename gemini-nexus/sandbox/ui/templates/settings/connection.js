@@ -65,6 +65,16 @@ export const ConnectionSettingsTemplate = `
                     <option value="high">High</option>
                 </select>
             </div>
+            <div style="display: flex; flex-direction: column; gap: 8px;">
+                <label style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="openai-use-responses-api" />
+                    <span data-i18n="openaiUseResponsesApi">Use Responses API</span>
+                </label>
+                <label style="display: flex; align-items: center; gap: 8px;">
+                    <input type="checkbox" id="openai-web-search-enabled" />
+                    <span data-i18n="openaiWebSearch">Enable OpenAI API web search</span>
+                </label>
+            </div>
         </div>
     </div>
 

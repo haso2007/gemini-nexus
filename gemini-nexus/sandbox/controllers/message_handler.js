@@ -5,6 +5,10 @@ import { cropImage } from '../../lib/crop_utils.js';
 import { t } from '../core/i18n.js';
 import { WatermarkRemover } from '../../lib/watermark_remover.js';
 
+function hasDisplayableThoughts(thoughts) {
+    return typeof thoughts === 'string' ? thoughts.trim().length > 0 : Boolean(thoughts);
+}
+
 export class MessageHandler {
     constructor(sessionManager, uiController, imageManager, appController) {
         this.sessionManager = sessionManager;
@@ -13,6 +17,7 @@ export class MessageHandler {
         this.app = appController; // Reference back to app for state like captureMode
         this.streamingBubble = null;
         this.contextCompressionNotice = null;
+        this.streamStates = new Map();
     }
 
     async handle(request) {
@@ -96,17 +101,110 @@ export class MessageHandler {
         return currentSessionId !== null && messageSessionId === currentSessionId;
     }
 
+    isGeneratingSessionMessage(request) {
+        const generatingSessionId = this.app.generatingSessionId || null;
+        const messageSessionId = request.sessionId || null;
+        return generatingSessionId !== null && messageSessionId === generatingSessionId;
+    }
+
+    hasPersistedAiReply(session, request) {
+        if (!session || !Array.isArray(session.messages) || session.messages.length === 0) {
+            return false;
+        }
+
+        const lastMessage = session.messages[session.messages.length - 1];
+        if (!lastMessage || lastMessage.role !== 'ai') return false;
+
+        const expectedText = request.text || "";
+        const actualText = lastMessage.text || "";
+        const textMatches = expectedText
+            ? actualText === expectedText || actualText.startsWith(expectedText)
+            : actualText.length > 0;
+        if (!textMatches) return false;
+
+        if (request.thoughts) {
+            const actualThoughts = lastMessage.thoughts || "";
+            return actualThoughts === request.thoughts || actualThoughts.startsWith(request.thoughts);
+        }
+
+        return true;
+    }
+
+    getRequestSessionId(request) {
+        return request?.sessionId || null;
+    }
+
+    cacheStreamState(request) {
+        const sessionId = this.getRequestSessionId(request);
+        if (!sessionId) return null;
+
+        const previous = this.streamStates.get(sessionId) || {};
+        const next = {
+            ...previous,
+            sessionId
+        };
+
+        if (request.text !== undefined) {
+            next.text = request.text || "";
+        }
+        if (request.thoughts !== undefined) {
+            next.thoughts = request.thoughts || "";
+        }
+        if (hasDisplayableThoughts(next.thoughts)) {
+            if (!Number.isFinite(next.thoughtsStartedAt)) {
+                const elapsedSeconds = Number.isFinite(next.thoughtsElapsedSeconds)
+                    ? next.thoughtsElapsedSeconds
+                    : 0;
+                next.thoughtsStartedAt = Date.now() - (elapsedSeconds * 1000);
+            }
+            next.thoughtsElapsedSeconds = Math.max(0, (Date.now() - next.thoughtsStartedAt) / 1000);
+        }
+        if (request.contextState !== undefined) {
+            next.contextState = request.contextState || null;
+        }
+
+        this.streamStates.set(sessionId, next);
+        return next;
+    }
+
+    clearStreamState(sessionId = null) {
+        if (sessionId) {
+            this.streamStates.delete(sessionId);
+            return;
+        }
+        this.streamStates.clear();
+    }
+
+    createStreamingBubble(state = {}) {
+        const bubble = appendMessage(this.ui.historyDiv, "", 'ai', null, "", null, {
+            isStreaming: true,
+            thoughtsStartedAt: state.thoughtsStartedAt,
+            thoughtsElapsedSeconds: state.thoughtsElapsedSeconds
+        });
+
+        bubble.update(state.text || "", state.thoughts || "", {
+            isStreaming: true,
+            thoughtsStartedAt: state.thoughtsStartedAt,
+            thoughtsElapsedSeconds: state.thoughtsElapsedSeconds
+        });
+        this.streamingBubble = bubble;
+    }
+
     handleStreamUpdate(request) {
-        if (!this.isCurrentSessionMessage(request)) return;
+        if (!this.isGeneratingSessionMessage(request)) return;
+        const state = this.cacheStreamState(request);
 
         // Prevent race condition: Ignore stream updates arriving shortly after user cancelled
-        if (this.app.prompt.isCancellationRecent()) return;
+        if (this.app.prompt.isCancellationRecent()) {
+            this.clearStreamState(this.getRequestSessionId(request));
+            return;
+        }
+
+        if (!this.isCurrentSessionMessage(request)) return;
 
         // If we don't have a bubble yet, create one
         if (!this.streamingBubble) {
-            this.streamingBubble = appendMessage(this.ui.historyDiv, "", 'ai', null, "", null, {
-                isStreaming: true
-            });
+            this.createStreamingBubble(state);
         }
         
         // Update content if text or thoughts exist
@@ -120,9 +218,17 @@ export class MessageHandler {
     }
 
     handleContextStatus(request) {
+        if (!this.isGeneratingSessionMessage(request)) return;
+        const state = this.cacheStreamState({
+            ...request,
+            contextState: request.state === 'compressing' ? request.state : null
+        });
         if (!this.isCurrentSessionMessage(request)) return;
 
         if (request.state === 'compressing') {
+            if (this.contextCompressionNotice) {
+                this.contextCompressionNotice.dispose?.();
+            }
             this.contextCompressionNotice = appendContextCompressionNotice(
                 this.ui.historyDiv,
                 t('contextCompressing')
@@ -130,27 +236,35 @@ export class MessageHandler {
             return;
         }
 
-        if (!this.contextCompressionNotice) {
-            this.contextCompressionNotice = appendContextCompressionNotice(this.ui.historyDiv, "");
-        }
+        if (!this.contextCompressionNotice) return;
 
         if (request.state === 'compressed') {
             this.contextCompressionNotice.update(t('contextCompressed'));
             this.contextCompressionNotice = null;
+            if (state) state.contextState = null;
             return;
         }
 
         if (request.state === 'compression_failed') {
             this.contextCompressionNotice.update(t('contextCompressionFallback'));
             this.contextCompressionNotice = null;
+            if (state) state.contextState = null;
         }
     }
 
     handleGeminiReply(request) {
-        if (!this.isCurrentSessionMessage(request)) return;
+        if (!this.isGeneratingSessionMessage(request)) return;
 
         this.app.isGenerating = false;
+        this.app.generatingSessionId = null;
         this.ui.setLoading(false);
+        this.app.sessionFlow.refreshHistoryUI();
+        this.clearStreamState(this.getRequestSessionId(request));
+
+        if (!this.isCurrentSessionMessage(request)) {
+            this.resetStream();
+            return;
+        }
         
         const session = this.sessionManager.getCurrentSession();
         if (session) {
@@ -168,7 +282,9 @@ export class MessageHandler {
             // Update UI
             if (this.streamingBubble) {
                 // Finalize the streaming bubble with complete text and thoughts
-                this.streamingBubble.finalize(request.text, request.thoughts);
+                this.streamingBubble.finalize(request.text, request.thoughts, {
+                    thoughtsDurationSeconds: request.thoughtsDurationSeconds
+                });
                 
                 // Inject images if any
                 if (request.images && request.images.length > 0) {
@@ -185,11 +301,11 @@ export class MessageHandler {
                 
                 // Clear reference
                 this.streamingBubble = null;
-            } else {
+            } else if (!this.hasPersistedAiReply(session, request)) {
                 // Fallback if no stream occurred (or single short response)
                 appendMessage(this.ui.historyDiv, request.text, 'ai', request.images, request.thoughts, request.sources, {
                     isFinal: true,
-                    thoughtsDurationSeconds: request.thoughts ? 0 : null
+                    thoughtsDurationSeconds: request.thoughtsDurationSeconds
                 });
             }
         }
@@ -272,9 +388,46 @@ export class MessageHandler {
     }
 
     // Called by AppController on cancel/switch
-    resetStream() {
+    resetStream(options = {}) {
         if (this.streamingBubble) {
-             this.streamingBubble = null;
+            if (typeof this.streamingBubble.dispose === 'function') {
+                this.streamingBubble.dispose();
+            }
+            if (options.remove === true && this.streamingBubble.div) {
+                this.streamingBubble.div.remove();
+            }
+            this.streamingBubble = null;
         }
+        if (this.contextCompressionNotice && options.remove === true) {
+            this.contextCompressionNotice.dispose?.();
+        }
+        this.contextCompressionNotice = null;
+    }
+
+    clearActiveStream() {
+        const activeSessionId = this.app.generatingSessionId || this.sessionManager.currentSessionId || null;
+        this.clearStreamState(activeSessionId);
+        this.resetStream({ remove: true });
+    }
+
+    restoreStreamForSession(sessionId) {
+        if (!sessionId || sessionId !== this.app.generatingSessionId) return;
+        const state = this.streamStates.get(sessionId);
+        if (!state) return;
+        const session = this.sessionManager.getCurrentSession();
+        if (this.hasPersistedAiReply(session, state)) {
+            this.clearStreamState(sessionId);
+            return;
+        }
+
+        this.resetStream();
+        if (state.contextState === 'compressing') {
+            this.contextCompressionNotice = appendContextCompressionNotice(
+                this.ui.historyDiv,
+                t('contextCompressing')
+            );
+        }
+        this.createStreamingBubble(state);
+        this.ui.setLoading(true);
     }
 }

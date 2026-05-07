@@ -21,6 +21,17 @@ export class GeminiSessionManager {
         
         this.abortController = new AbortController();
         const signal = this.abortController.signal;
+        let thoughtsStartedAt = null;
+        let thoughtsDurationSeconds = null;
+        const trackedOnUpdate = (partialText, partialThoughts) => {
+            if (typeof partialThoughts === 'string' && partialThoughts.trim()) {
+                if (!thoughtsStartedAt) {
+                    thoughtsStartedAt = Date.now();
+                }
+                thoughtsDurationSeconds = (Date.now() - thoughtsStartedAt) / 1000;
+            }
+            onUpdate(partialText, partialThoughts);
+        };
 
         try {
             const settings = await getConnectionSettings();
@@ -42,7 +53,13 @@ export class GeminiSessionManager {
                 await this.ensureInitialized();
             }
 
-            return await this.dispatcher.dispatch(request, settings, files, onUpdate, signal);
+            const result = await this.dispatcher.dispatch(request, settings, files, trackedOnUpdate, signal);
+            if (result?.thoughts) {
+                result.thoughtsDurationSeconds = thoughtsStartedAt
+                    ? (Date.now() - thoughtsStartedAt) / 1000
+                    : (thoughtsDurationSeconds ?? 0);
+            }
+            return result;
 
         } catch (error) {
             if (error.name === 'AbortError') return null;

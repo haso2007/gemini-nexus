@@ -5,6 +5,25 @@ import { setLanguagePreference, getLanguagePreference } from '../core/i18n.js';
 import { SettingsView } from './settings/view.js';
 import { DEFAULT_SHORTCUTS } from '../../lib/constants.js';
 
+const OPENAI_WEB_SEARCH_MODES = new Set(['off', 'responses', 'chat']);
+
+function normalizeOpenAISettings(data) {
+    const hasUseResponsesSetting = typeof data.openaiUseResponsesApi === 'boolean';
+    const hasWebSearchSetting = typeof data.openaiWebSearch === 'boolean';
+
+    if (!hasUseResponsesSetting && OPENAI_WEB_SEARCH_MODES.has(data.openaiWebSearchMode)) {
+        return {
+            useResponsesApi: data.openaiWebSearchMode === 'responses',
+            webSearch: data.openaiWebSearchMode === 'responses' || data.openaiWebSearchMode === 'chat'
+        };
+    }
+
+    return {
+        useResponsesApi: data.openaiUseResponsesApi === true,
+        webSearch: hasWebSearchSetting ? data.openaiWebSearch === true : false
+    };
+}
+
 export class SettingsController {
     constructor(callbacks) {
         this.callbacks = callbacks || {};
@@ -36,6 +55,8 @@ export class SettingsController {
             openaiApiKey: "",
             openaiModel: "",
             openaiThinkingLevel: "low",
+            openaiUseResponsesApi: false,
+            openaiWebSearch: false,
             // MCP (External Tools)
             mcpEnabled: false,
             mcpTransport: "sse",
@@ -147,6 +168,8 @@ export class SettingsController {
         };
         saveContextSettingsToStorage(this.contextSettings);
         
+        const openaiSettings = normalizeOpenAISettings(data.connection);
+
         // Connection
         this.connectionData = {
             provider: data.connection.provider,
@@ -159,6 +182,8 @@ export class SettingsController {
             openaiApiKey: data.connection.openaiApiKey,
             openaiModel: data.connection.openaiModel,
             openaiThinkingLevel: data.connection.openaiThinkingLevel || "low",
+            openaiUseResponsesApi: openaiSettings.useResponsesApi,
+            openaiWebSearch: openaiSettings.webSearch,
             // MCP
             mcpEnabled: data.connection.mcpEnabled === true,
             mcpTransport: data.connection.mcpTransport || "sse",

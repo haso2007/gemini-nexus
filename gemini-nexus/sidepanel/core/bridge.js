@@ -2,6 +2,27 @@
 // sidepanel/core/bridge.js
 import { downloadFile, downloadText } from '../utils/download.js';
 
+const OPENAI_WEB_SEARCH_MODES = new Set(['off', 'responses', 'chat']);
+
+function normalizeOpenAISettings(data) {
+    const legacyMode = data.geminiOpenaiWebSearchMode ?? data.openaiWebSearchMode;
+    const hasUseResponsesSetting = typeof data.geminiOpenaiUseResponsesApi === 'boolean' || typeof data.openaiUseResponsesApi === 'boolean';
+    const hasWebSearchSetting = typeof data.geminiOpenaiWebSearch === 'boolean' || typeof data.openaiWebSearch === 'boolean';
+    const legacyEnabled = data.geminiOpenaiWebSearch === true || data.openaiWebSearch === true;
+
+    if (!hasUseResponsesSetting && OPENAI_WEB_SEARCH_MODES.has(legacyMode)) {
+        return {
+            useResponsesApi: legacyMode === 'responses',
+            webSearch: legacyMode === 'responses' || legacyMode === 'chat'
+        };
+    }
+
+    return {
+        useResponsesApi: data.geminiOpenaiUseResponsesApi === true || data.openaiUseResponsesApi === true,
+        webSearch: hasWebSearchSetting ? legacyEnabled : false
+    };
+}
+
 export class MessageBridge {
     constructor(frameManager, stateManager) {
         this.frame = frameManager;
@@ -122,12 +143,16 @@ export class MessageBridge {
                 'geminiOpenaiApiKey',
                 'geminiOpenaiModel',
                 'geminiOpenaiThinkingLevel',
+                'geminiOpenaiUseResponsesApi',
+                'geminiOpenaiWebSearchMode',
+                'geminiOpenaiWebSearch',
                 'geminiMcpEnabled',
                 'geminiMcpTransport',
                 'geminiMcpServerUrl',
                 'geminiMcpServers',
                 'geminiMcpActiveServerId'
             ], (res) => {
+                const openaiSettings = normalizeOpenAISettings(res);
                 this.frame.postMessage({ 
                     action: 'RESTORE_CONNECTION_SETTINGS', 
                     payload: { 
@@ -142,6 +167,8 @@ export class MessageBridge {
                         openaiApiKey: res.geminiOpenaiApiKey || "",
                         openaiModel: res.geminiOpenaiModel || "",
                         openaiThinkingLevel: res.geminiOpenaiThinkingLevel || "low",
+                        openaiUseResponsesApi: openaiSettings.useResponsesApi,
+                        openaiWebSearch: openaiSettings.webSearch,
                         // MCP
                         mcpEnabled: res.geminiMcpEnabled === true,
                         mcpTransport: res.geminiMcpTransport || "sse",
@@ -199,6 +226,8 @@ export class MessageBridge {
             this.state.save('geminiOpenaiApiKey', payload.openaiApiKey);
             this.state.save('geminiOpenaiModel', payload.openaiModel);
             this.state.save('geminiOpenaiThinkingLevel', payload.openaiThinkingLevel || "low");
+            this.state.save('geminiOpenaiUseResponsesApi', payload.openaiUseResponsesApi === true);
+            this.state.save('geminiOpenaiWebSearch', payload.openaiWebSearch === true);
             // MCP
             this.state.save('geminiMcpEnabled', payload.mcpEnabled === true);
             this.state.save('geminiMcpTransport', payload.mcpTransport || "sse");

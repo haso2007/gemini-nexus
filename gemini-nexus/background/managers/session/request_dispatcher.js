@@ -42,6 +42,19 @@ function omitCurrentUserMessage(history, request) {
     return isCurrentUserMessage(lastMessage, request) ? history.slice(0, -1) : history;
 }
 
+function assertOpenAIWebSearchSupported(model, reasoningEffort) {
+    const normalizedModel = String(model || '').trim().toLowerCase();
+    const normalizedReasoning = String(reasoningEffort || '').trim().toLowerCase();
+
+    if (normalizedModel === 'gpt-4.1-nano' || normalizedModel.startsWith('gpt-4.1-nano-')) {
+        throw new Error("OpenAI web search is not supported for gpt-4.1-nano. Disable OpenAI web search or choose another model.");
+    }
+
+    if ((normalizedModel === 'gpt-5' || normalizedModel.startsWith('gpt-5-')) && normalizedReasoning === 'minimal') {
+        throw new Error("OpenAI web search is not supported for gpt-5 with minimal reasoning. Choose low/medium/high reasoning or disable OpenAI web search.");
+    }
+}
+
 async function resolveRequestHistory(request) {
     const overrideHistory = getRequestHistory(request);
     if (overrideHistory) return overrideHistory;
@@ -126,8 +139,14 @@ export class RequestDispatcher {
             baseUrl: settings.openaiBaseUrl,
             apiKey: settings.openaiApiKey,
             model: targetModel,
-            reasoningEffort: settings.openaiThinkingLevel
+            reasoningEffort: settings.openaiThinkingLevel,
+            useResponsesApi: settings.openaiUseResponsesApi === true,
+            webSearch: settings.openaiWebSearch === true
         };
+
+        if (config.webSearch) {
+            assertOpenAIWebSearchSupported(config.model, config.reasoningEffort);
+        }
 
         const history = await resolveRequestHistory(request);
         const context = await prepareManagedContext(request, settings, history, signal, createContextStatusSender(request, settings));
@@ -147,7 +166,7 @@ export class RequestDispatcher {
             sessionId: request.sessionId || null,
             text: response.text,
             thoughts: response.thoughts,
-            sources: [],
+            sources: response.sources || [],
             images: response.images,
             status: "success",
             context: null

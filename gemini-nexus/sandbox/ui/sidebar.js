@@ -19,6 +19,7 @@ export class SidebarController {
         this.allSessions = [];
         this.currentSessionId = null;
         this.itemCallbacks = null;
+        this.renderState = { isGenerating: false, generatingSessionId: null };
         this.fuse = null;
 
         this.initListeners();
@@ -90,13 +91,17 @@ export class SidebarController {
         this._renderDOM(displayList);
     }
 
-    renderList(sessions, currentId, itemCallbacks) {
+    renderList(sessions, currentId, itemCallbacks, renderState = {}) {
         if (!this.listEl) return;
         
         // Cache data for searching
         this.allSessions = sessions;
         this.currentSessionId = currentId;
         this.itemCallbacks = itemCallbacks;
+        this.renderState = {
+            isGenerating: renderState.isGenerating === true,
+            generatingSessionId: renderState.generatingSessionId || null
+        };
         
         // Reset Fuse index as data changed
         this.fuse = null;
@@ -125,6 +130,8 @@ export class SidebarController {
         }
 
         sessions.forEach(s => {
+            const isGeneratingSession = this.renderState.isGenerating
+                && this.renderState.generatingSessionId === s.id;
             const item = document.createElement('div');
             item.className = `history-item ${s.id === this.currentSessionId ? 'active' : ''}`;
             item.onclick = () => {
@@ -139,6 +146,11 @@ export class SidebarController {
             const titleSpan = document.createElement('span');
             titleSpan.className = 'history-title';
             titleSpan.textContent = s.title;
+
+            const spinner = document.createElement('span');
+            spinner.className = 'history-generating-spinner';
+            spinner.title = t('generating');
+            spinner.setAttribute('aria-label', t('generating'));
             
             const delBtn = document.createElement('span');
             delBtn.className = 'history-delete';
@@ -152,6 +164,9 @@ export class SidebarController {
             };
 
             item.appendChild(titleSpan);
+            if (isGeneratingSession) {
+                item.appendChild(spinner);
+            }
             item.appendChild(delBtn);
             this.listEl.appendChild(item);
         });

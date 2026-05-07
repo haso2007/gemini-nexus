@@ -154,8 +154,8 @@ export class UIController {
     // Sidebar
     toggleSidebar() { this.sidebar.toggle(); }
     closeSidebar() { this.sidebar.close(); }
-    renderHistoryList(sessions, currentId, callbacks) {
-        this.sidebar.renderList(sessions, currentId, callbacks);
+    renderHistoryList(sessions, currentId, callbacks, renderState) {
+        this.sidebar.renderList(sessions, currentId, callbacks, renderState);
     }
 
     // Settings

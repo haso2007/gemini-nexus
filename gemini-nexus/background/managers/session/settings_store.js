@@ -1,6 +1,27 @@
 
 // background/managers/session/settings_store.js
 
+const OPENAI_WEB_SEARCH_MODES = new Set(['off', 'responses', 'chat']);
+
+function normalizeOpenAISettings(stored) {
+    const legacyMode = stored.geminiOpenaiWebSearchMode;
+    const legacyEnabled = stored.geminiOpenaiWebSearch === true;
+    const hasUseResponsesSetting = typeof stored.geminiOpenaiUseResponsesApi === 'boolean';
+    const hasWebSearchSetting = typeof stored.geminiOpenaiWebSearch === 'boolean';
+
+    if (!hasUseResponsesSetting && OPENAI_WEB_SEARCH_MODES.has(legacyMode)) {
+        return {
+            useResponsesApi: legacyMode === 'responses',
+            webSearch: legacyMode === 'responses' || legacyMode === 'chat'
+        };
+    }
+
+    return {
+        useResponsesApi: stored.geminiOpenaiUseResponsesApi === true,
+        webSearch: hasWebSearchSetting ? legacyEnabled : false
+    };
+}
+
 export async function getConnectionSettings() {
     const stored = await chrome.storage.local.get([
         'geminiProvider',
@@ -15,6 +36,9 @@ export async function getConnectionSettings() {
         'geminiOpenaiApiKey',
         'geminiOpenaiModel',
         'geminiOpenaiThinkingLevel',
+        'geminiOpenaiUseResponsesApi',
+        'geminiOpenaiWebSearchMode',
+        'geminiOpenaiWebSearch',
         'geminiContextMode',
         'geminiContextRecentTurns'
     ]);
@@ -52,6 +76,8 @@ export async function getConnectionSettings() {
         activeApiKey = activeApiKey.trim();
     }
 
+    const openaiSettings = normalizeOpenAISettings(stored);
+
     return {
         provider: provider,
         // Official
@@ -65,6 +91,8 @@ export async function getConnectionSettings() {
         openaiApiKey: stored.geminiOpenaiApiKey,
         openaiModel: stored.geminiOpenaiModel,
         openaiThinkingLevel: stored.geminiOpenaiThinkingLevel || "low",
+        openaiUseResponsesApi: openaiSettings.useResponsesApi,
+        openaiWebSearch: openaiSettings.webSearch,
         // Context management
         contextMode: stored.geminiContextMode || "summary",
         contextRecentTurns: stored.geminiContextRecentTurns || 12

@@ -12,8 +12,6 @@ export class SessionFlowController {
     }
 
     handleNewChat() {
-        if (this.app.isGenerating) this.app.prompt.cancel();
-        
         this.app.messageHandler.resetStream();
         
         const s = this.sessionManager.createSession();
@@ -22,8 +20,6 @@ export class SessionFlowController {
     }
 
     switchToSession(sessionId) {
-        if (this.app.isGenerating) this.app.prompt.cancel();
-
         this.app.messageHandler.resetStream();
         this.sessionManager.setCurrentId(sessionId);
         
@@ -42,6 +38,7 @@ export class SessionFlowController {
             if (msg.role === 'ai') attachment = msg.generatedImages;
             // Pass msg.thoughts to appendMessage
             appendMessage(this.ui.historyDiv, msg.text, msg.role, attachment, msg.thoughts, msg.sources, {
+                thoughtsDurationSeconds: msg.thoughtsDurationSeconds,
                 onEdit: msg.role === 'user'
                     ? this.app.prompt.getMessageEditOptions(index).onEdit
                     : null
@@ -50,6 +47,7 @@ export class SessionFlowController {
         if (compressionNoticeIndex === session.messages.length) {
             this.appendRestoredCompressionNotice();
         }
+        this.app.messageHandler.restoreStreamForSession(sessionId);
         this.ui.scrollToBottom();
 
         this.app.boundSessionId = sessionId;
@@ -76,6 +74,10 @@ export class SessionFlowController {
             {
                 onSwitch: (id) => this.switchToSession(id),
                 onDelete: (id) => this.handleDeleteSession(id)
+            },
+            {
+                isGenerating: this.app.isGenerating,
+                generatingSessionId: this.app.generatingSessionId
             }
         );
     }

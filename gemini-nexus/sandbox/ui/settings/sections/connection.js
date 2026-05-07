@@ -2,6 +2,25 @@
 // sandbox/ui/settings/sections/connection.js
 import { sendToBackground } from '../../../../lib/messaging.js';
 
+const OPENAI_WEB_SEARCH_MODES = new Set(['off', 'responses', 'chat']);
+
+function normalizeOpenAISettings(data) {
+    const hasUseResponsesSetting = typeof data.openaiUseResponsesApi === 'boolean';
+    const hasWebSearchSetting = typeof data.openaiWebSearch === 'boolean';
+
+    if (!hasUseResponsesSetting && OPENAI_WEB_SEARCH_MODES.has(data.openaiWebSearchMode)) {
+        return {
+            useResponsesApi: data.openaiWebSearchMode === 'responses',
+            webSearch: data.openaiWebSearchMode === 'responses' || data.openaiWebSearchMode === 'chat'
+        };
+    }
+
+    return {
+        useResponsesApi: data.openaiUseResponsesApi === true,
+        webSearch: hasWebSearchSetting ? data.openaiWebSearch === true : false
+    };
+}
+
 export class ConnectionSection {
     constructor() {
         this.elements = {};
@@ -56,6 +75,8 @@ export class ConnectionSection {
             openaiApiKey: get('openai-api-key'),
             openaiModel: get('openai-model'),
             openaiThinkingLevelSelect: get('openai-thinking-level-select'),
+            openaiUseResponsesApi: get('openai-use-responses-api'),
+            openaiWebSearch: get('openai-web-search-enabled'),
 
             // MCP Fields
             mcpEnabled: get('mcp-enabled'),
@@ -258,7 +279,7 @@ export class ConnectionSection {
     setData(data) {
         const { 
             providerSelect, officialBaseUrl, apiKeyInput, officialModel, thinkingLevelSelect, officialWebSearchEnabled,
-            openaiBaseUrl, openaiApiKey, openaiModel, openaiThinkingLevelSelect,
+            openaiBaseUrl, openaiApiKey, openaiModel, openaiThinkingLevelSelect, openaiUseResponsesApi, openaiWebSearch,
             mcpEnabled
         } = this.elements;
 
@@ -280,6 +301,9 @@ export class ConnectionSection {
         if (openaiApiKey) openaiApiKey.value = data.openaiApiKey || "";
         if (openaiModel) openaiModel.value = data.openaiModel || "";
         if (openaiThinkingLevelSelect) openaiThinkingLevelSelect.value = data.openaiThinkingLevel || "low";
+        const openaiSettings = normalizeOpenAISettings(data);
+        if (openaiUseResponsesApi) openaiUseResponsesApi.checked = openaiSettings.useResponsesApi;
+        if (openaiWebSearch) openaiWebSearch.checked = openaiSettings.webSearch;
 
         // MCP
         if (mcpEnabled) {
@@ -322,7 +346,7 @@ export class ConnectionSection {
     getData() {
         const {
             providerSelect, officialBaseUrl, apiKeyInput, officialModel, thinkingLevelSelect, officialWebSearchEnabled,
-            openaiBaseUrl, openaiApiKey, openaiModel, openaiThinkingLevelSelect,
+            openaiBaseUrl, openaiApiKey, openaiModel, openaiThinkingLevelSelect, openaiUseResponsesApi, openaiWebSearch,
             mcpEnabled
         } = this.elements;
 
@@ -344,6 +368,8 @@ export class ConnectionSection {
             openaiApiKey: openaiApiKey ? openaiApiKey.value.trim() : "",
             openaiModel: openaiModel ? openaiModel.value.trim() : "",
             openaiThinkingLevel: openaiThinkingLevelSelect ? openaiThinkingLevelSelect.value : "low",
+            openaiUseResponsesApi: openaiUseResponsesApi ? openaiUseResponsesApi.checked === true : false,
+            openaiWebSearch: openaiWebSearch ? openaiWebSearch.checked === true : false,
 
             // MCP - Multi-server mode: all enabled servers will be used
             mcpEnabled: mcpEnabled ? mcpEnabled.checked === true : false,

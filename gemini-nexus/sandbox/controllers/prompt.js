@@ -80,9 +80,11 @@ export class PromptController {
         };
     }
 
-    setGeneratingState(isGenerating) {
+    setGeneratingState(isGenerating, sessionId = null) {
         this.app.isGenerating = isGenerating;
+        this.app.generatingSessionId = isGenerating ? sessionId : null;
         this.ui.setLoading(isGenerating);
+        this.app.sessionFlow.refreshHistoryUI();
     }
 
     normalizeMessageImages(image) {
@@ -155,7 +157,7 @@ export class PromptController {
         this.ui.resetInput();
         this.imageManager.clearFile();
         
-        this.setGeneratingState(true);
+        this.setGeneratingState(true, currentId);
 
         sendToBackground(this.buildRequestPayload(text, files, currentId));
     }
@@ -191,7 +193,7 @@ export class PromptController {
         const files = this.buildFilesFromImages(images);
         this.imageManager.clearFile();
         this.ui.resetInput();
-        this.setGeneratingState(true);
+        this.setGeneratingState(true, currentId);
 
         sendToBackground(this.buildRequestPayload(nextText, files, currentId, {
             historyOverride: editResult.previousMessages,
@@ -207,10 +209,12 @@ export class PromptController {
         this.cancellationTimestamp = Date.now();
         
         sendToBackground({ action: "CANCEL_PROMPT" });
-        this.app.messageHandler.resetStream();
+        this.app.messageHandler.clearActiveStream();
         
         this.app.isGenerating = false;
+        this.app.generatingSessionId = null;
         this.ui.setLoading(false);
+        this.app.sessionFlow.refreshHistoryUI();
         this.ui.updateStatus(t('cancelled'));
     }
 

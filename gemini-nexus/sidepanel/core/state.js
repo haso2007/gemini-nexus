@@ -1,6 +1,26 @@
 
 // sidepanel/core/state.js
 
+const OPENAI_WEB_SEARCH_MODES = new Set(['off', 'responses', 'chat']);
+
+function normalizeOpenAISettings(data) {
+    const legacyMode = data.geminiOpenaiWebSearchMode;
+    const hasUseResponsesSetting = typeof data.geminiOpenaiUseResponsesApi === 'boolean';
+    const hasWebSearchSetting = typeof data.geminiOpenaiWebSearch === 'boolean';
+
+    if (!hasUseResponsesSetting && OPENAI_WEB_SEARCH_MODES.has(legacyMode)) {
+        return {
+            useResponsesApi: legacyMode === 'responses',
+            webSearch: legacyMode === 'responses' || legacyMode === 'chat'
+        };
+    }
+
+    return {
+        useResponsesApi: data.geminiOpenaiUseResponsesApi === true,
+        webSearch: hasWebSearchSetting ? data.geminiOpenaiWebSearch === true : false
+    };
+}
+
 export class StateManager {
     constructor(frameManager) {
         this.frame = frameManager;
@@ -36,6 +56,9 @@ export class StateManager {
             'geminiOpenaiApiKey',
             'geminiOpenaiModel',
             'geminiOpenaiThinkingLevel',
+            'geminiOpenaiUseResponsesApi',
+            'geminiOpenaiWebSearchMode',
+            'geminiOpenaiWebSearch',
             'geminiContextMode',
             'geminiContextRecentTurns',
             'geminiMcpEnabled',
@@ -109,6 +132,7 @@ export class StateManager {
         if (!win) return;
 
         // --- Push Data ---
+        const openaiSettings = normalizeOpenAISettings(this.data);
         
         // 1. Preferences
         
@@ -127,6 +151,8 @@ export class StateManager {
                 openaiApiKey: this.data.geminiOpenaiApiKey || "",
                 openaiModel: this.data.geminiOpenaiModel || "",
                 openaiThinkingLevel: this.data.geminiOpenaiThinkingLevel || "low",
+                openaiUseResponsesApi: openaiSettings.useResponsesApi,
+                openaiWebSearch: openaiSettings.webSearch,
                 // MCP
                 mcpEnabled: this.data.geminiMcpEnabled === true,
                 mcpTransport: this.data.geminiMcpTransport || "sse",
