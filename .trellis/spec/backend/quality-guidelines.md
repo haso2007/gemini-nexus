@@ -50,6 +50,15 @@ Questions to answer:
 
 (To be filled by the team)
 
+## Release Changelog Requirements
+
+- Before preparing a release commit, generate the release changelog from the complete difference between the remote target branch and the local release candidate.
+- For the default release target, run `git fetch origin main --tags` and inspect `git log --oneline --reverse origin/main..HEAD`.
+- The changelog entry must summarize every product, test, and spec change in that range, not only the current task or latest fix.
+- Exclude the version-only release commit itself when deriving user-facing changes.
+- Include `CHANGELOG.md` in the release commit before pushing `origin main`.
+- Push order is strict: push `origin main`, confirm the release commit is still current `HEAD`, then create and push the release tag.
+
 ## Scenario: Managed Conversation Context
 
 ### 1. Scope / Trigger
