@@ -152,4 +152,25 @@ describe('AppController session restore behavior', () => {
         expect(app.currentTabId).toBe(123);
         expect(sessionManager.currentSessionId).toBe('real');
     });
+
+    it('rerenders the current chat when storage updates add an AI reply', async () => {
+        const { app, sessionManager, ui } = createAppHarness();
+        const markRendered = vi.spyOn(app.messageHandler, 'markSessionRenderedFromStorage');
+        app.sidePanelScope = 'remembered_tabs';
+        sessionManager.setSessions([realSession()]);
+        sessionManager.setCurrentId('real');
+
+        await app.handleIncomingMessage(restoreEvent([
+            realSession({
+                messages: [
+                    { role: 'user', text: 'Hello' },
+                    { role: 'ai', text: 'Hi there' }
+                ]
+            })
+        ]));
+
+        expect(sessionManager.currentSessionId).toBe('real');
+        expect(ui.clearChatHistory).toHaveBeenCalled();
+        expect(markRendered).toHaveBeenCalledWith('real', 2);
+    });
 });

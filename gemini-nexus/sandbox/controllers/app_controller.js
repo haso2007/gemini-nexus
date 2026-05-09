@@ -173,6 +173,25 @@ export class AppController {
         this.sessionFlow.enterDraft();
     }
 
+    getMessageCount(session) {
+        return Array.isArray(session?.messages) ? session.messages.length : 0;
+    }
+
+    hasNewAiMessage(session, previousMessageCount) {
+        const messages = Array.isArray(session?.messages) ? session.messages : [];
+        if (messages.length <= previousMessageCount) return false;
+        return messages.slice(previousMessageCount).some(message => message?.role === 'ai');
+    }
+
+    syncCurrentSessionFromStorage(sessionId, previousMessageCount) {
+        const session = this.sessionManager.getSessionById(sessionId);
+        if (!this.hasNewAiMessage(session, previousMessageCount)) return false;
+
+        this.switchToSession(sessionId);
+        this.messageHandler.markSessionRenderedFromStorage(sessionId, this.getMessageCount(session));
+        return true;
+    }
+
     // --- Event Handling ---
 
     async handleIncomingMessage(event) {
@@ -205,11 +224,19 @@ export class AppController {
         // Restore Sessions
         if (action === 'RESTORE_SESSIONS') {
             const restoredSessions = Array.isArray(payload) ? payload : [];
+            const previousCurrentId = this.sessionManager.currentSessionId;
+            const previousCurrentSession = this.sessionManager.getCurrentSession();
+            const previousMessageCount = this.getMessageCount(previousCurrentSession);
+
             this.sessionManager.setSessions(restoredSessions);
             this.sessionsRestored = true;
             this.sessionFlow.refreshHistoryUI();
             if (this.sessionManager.sessions.length !== restoredSessions.length) {
                 saveSessionsToStorage(this.sessionManager.getPersistableSessions());
+            }
+
+            if (previousCurrentId && previousCurrentSession) {
+                this.syncCurrentSessionFromStorage(previousCurrentId, previousMessageCount);
             }
 
             const currentId = this.sessionManager.currentSessionId;

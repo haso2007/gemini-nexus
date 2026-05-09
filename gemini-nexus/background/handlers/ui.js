@@ -1,6 +1,7 @@
 
 // background/handlers/ui.js
 import { getActiveTabContent } from './session/utils.js';
+import { getPanelPathForTab } from '../managers/sidepanel_scope_manager.js';
 
 export class UIMessageHandler {
     constructor(imageHandler, controlManager, mcpManager, sidePanelScopeManager) {
@@ -344,7 +345,7 @@ export class UIMessageHandler {
                     chrome.sidePanel.setOptions({
                         tabId: sender.tab.id,
                         enabled: true,
-                        path: 'sidepanel/index.html'
+                        path: getPanelPathForTab(sender.tab.id)
                     }).catch(() => {});
                     openPromise = chrome.sidePanel.open({ tabId: sender.tab.id, windowId: sender.tab.windowId });
                 }
@@ -415,7 +416,7 @@ export class UIMessageHandler {
                 
                 // Re-enable it quickly so it can be opened again later
                 setTimeout(() => {
-                    chrome.sidePanel.setOptions({ tabId, enabled: true, path: 'sidepanel/index.html' });
+                    chrome.sidePanel.setOptions({ tabId, enabled: true, path: getPanelPathForTab(tabId) });
                 }, 250); 
             } catch (e) {
                 console.error("Failed to toggle side panel close:", e);

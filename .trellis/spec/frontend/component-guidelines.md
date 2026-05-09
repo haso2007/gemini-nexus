@@ -150,3 +150,125 @@ const step = loopCount;
 const callIndex = index + 1;
 meta.textContent = `Raw tool: ${toolName} · Step ${step} · Call ${callIndex}/${callCount}`;
 ```
+
+## Scenario: Storage-Driven Current Session Refresh
+
+### 1. Scope / Trigger
+
+- Trigger: Any change that saves chat messages in background storage and broadcasts updated sessions back to the sandbox UI.
+- This is a cross-layer UI freshness contract: background history persistence emits `SESSIONS_UPDATED`, sidepanel bridge forwards `RESTORE_SESSIONS`, and sandbox controllers must keep both the session list and the currently visible transcript in sync.
+
+### 2. Signatures
+
+- Background runtime message: `{ action: "SESSIONS_UPDATED", sessions }`.
+- Sidepanel iframe message: `{ action: "RESTORE_SESSIONS", payload: sessions }`.
+- Current-session refresh helper: `syncCurrentSessionFromStorage(sessionId, previousMessageCount)`.
+- Duplicate-render guard: `markSessionRenderedFromStorage(sessionId, messageCount)`.
+
+### 3. Contracts
+
+- `RESTORE_SESSIONS` must update `SessionManager` from the provided session list and refresh the sidebar history list.
+- If the current session still exists and storage added a new AI message, the sandbox must rerender that current session immediately. Users must not need to manually switch sessions to see the final reply.
+- A storage-driven rerender must mark the session/message count as already rendered so the later `GEMINI_REPLY` fallback path does not append the same final reply again.
+- Do not rerender draft state or unrelated sessions just because storage changed.
+- Streaming UI remains authoritative while streaming updates are arriving; storage refresh is the fallback that guarantees the final persisted transcript becomes visible.
+
+### 4. Validation & Error Matrix
+
+- `RESTORE_SESSIONS` adds an AI message to the current session -> rerender current transcript and mark it storage-rendered.
+- `RESTORE_SESSIONS` only changes unrelated sessions -> refresh sidebar only.
+- Current session was removed or filtered as blank -> apply normal restore/draft behavior.
+- `GEMINI_REPLY` arrives after the same AI reply was storage-rendered -> update session context/state, but do not append duplicate UI content.
+
+### 5. Good/Base/Bad Cases
+
+- Good: User sends from draft, background persists the final AI reply, `SESSIONS_UPDATED` arrives, and the current chat shows the reply without manual session switching.
+- Base: A sidebar-only update for another session updates the history list without disrupting the visible transcript.
+- Bad: Final reply exists in storage but visible chat stays stale until manual switch, or storage refresh rerenders and `GEMINI_REPLY` appends a duplicate reply.
+
+### 6. Tests Required
+
+- Assert current chat rerenders when `RESTORE_SESSIONS` adds an AI reply to the current session.
+- Assert storage-rendered final replies are not appended again by `handleGeminiReply`.
+- Assert unrelated session updates do not force a current transcript rerender.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```javascript
+this.sessionManager.setSessions(restoredSessions);
+this.sessionFlow.refreshHistoryUI();
+```
+
+#### Correct
+
+```javascript
+const previousCurrentId = this.sessionManager.currentSessionId;
+const previousMessageCount = this.getMessageCount(this.sessionManager.getCurrentSession());
+
+this.sessionManager.setSessions(restoredSessions);
+this.sessionFlow.refreshHistoryUI();
+this.syncCurrentSessionFromStorage(previousCurrentId, previousMessageCount);
+```
+
+## Scenario: Side Panel Tab Ownership
+
+### 1. Scope / Trigger
+
+- Trigger: Any change that opens the Chrome side panel, forwards sandbox messages to the background, filters runtime messages by tab, or binds a side panel to a session.
+- This is a cross-layer ownership contract: background side panel options define the owner tab, sidepanel state holds that owner tab, bridge messages attach `sidePanelTabId`, and sandbox session bindings use that tab id.
+
+### 2. Signatures
+
+- Tab-scoped panel path: `sidepanel/index.html?tabId=<positive integer>`.
+- Sidepanel current-tab context: `{ action: "RESTORE_SIDE_PANEL_TAB_CONTEXT", payload: { tabId, sessionId } }`.
+- Background forwarding field: `{ sidePanelTabId }`.
+- Runtime message filter field: `{ tabId }`.
+
+### 3. Contracts
+
+- A tab-scoped side panel must use the tab id from its own URL as the fixed owner tab. It must not follow `chrome.tabs.onActivated` once an owner tab exists.
+- Background code that enables or opens a tab-specific side panel must call the shared path builder so the page receives `?tabId=...`.
+- `sidePanelTabId` must represent the side panel owner tab, not the globally active tab at send time.
+- Runtime messages containing `tabId` must be matched against the side panel owner tab. Messages without `tabId` remain broadcast messages.
+- The active-tab fallback is only for unscoped side panel pages such as the full-page sidepanel URL.
+
+### 4. Validation & Error Matrix
+
+- Multiple tabs each have an open side panel -> each side panel keeps its own owner tab after tab activation changes.
+- User sends a message from a non-active tab's side panel -> forwarded background request carries that side panel's owner tab id.
+- Background replies with `{ tabId: ownerTabId }` -> only the matching side panel processes the message.
+- Background broadcasts `SESSIONS_UPDATED` without `tabId` -> all side panels receive storage refresh and their sandbox refresh logic decides whether the current transcript changed.
+- Legacy or full-page sidepanel URL without `tabId` -> continue using active-tab tracking.
+
+### 5. Good/Base/Bad Cases
+
+- Good: Tab A and Tab B both have side panels. Activating Tab B does not change Tab A's `currentTabId`; sending from Tab A still uses Tab A's id and refreshes Tab A's chat.
+- Base: A full-page sidepanel opened from `OPEN_FULL_PAGE` has no owner tab and follows the active tab as before.
+- Bad: Every open side panel rewrites its context to the latest active tab, causing messages or final replies to be filtered into the wrong side panel.
+
+### 6. Tests Required
+
+- Assert the side panel path builder emits `sidepanel/index.html?tabId=<id>` for positive tab ids.
+- Assert tab-scoped side panels ignore `chrome.tabs.onActivated` and keep the URL owner tab id.
+- Assert unscoped side panel pages still use active-tab tracking.
+
+### 7. Wrong vs Correct
+
+#### Wrong
+
+```javascript
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+    this.currentTabId = tabId;
+});
+```
+
+#### Correct
+
+```javascript
+chrome.tabs.onActivated.addListener(({ tabId }) => {
+    if (this.hasFixedTabContext()) return;
+    this.currentTabId = tabId || null;
+});
+```

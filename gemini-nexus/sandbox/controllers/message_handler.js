@@ -192,6 +192,7 @@ export class MessageHandler {
         this.streamingBubble = null;
         this.contextCompressionNotice = null;
         this.streamStates = new Map();
+        this.storageRenderedMessageCounts = new Map();
     }
 
     async handle(request) {
@@ -312,6 +313,19 @@ export class MessageHandler {
         }
 
         return true;
+    }
+
+    markSessionRenderedFromStorage(sessionId, messageCount) {
+        if (!sessionId || !Number.isInteger(messageCount)) return;
+        this.storageRenderedMessageCounts.set(sessionId, messageCount);
+    }
+
+    hasStorageRenderedAiReply(session, request) {
+        if (!session || !session.id) return false;
+        const renderedCount = this.storageRenderedMessageCounts.get(session.id);
+        if (!Number.isInteger(renderedCount)) return false;
+        if (!Array.isArray(session.messages) || renderedCount < session.messages.length) return false;
+        return this.hasPersistedAiReply(session, request);
     }
 
     getRequestSessionId(request) {
@@ -494,6 +508,9 @@ export class MessageHandler {
                 this.streamingBubble = null;
             } else {
                 // Fallback if no stream occurred (or single short response)
+                if (this.hasStorageRenderedAiReply(session, request)) {
+                    return;
+                }
                 appendMessage(this.ui.historyDiv, request.text, 'ai', request.images, request.thoughts, request.sources, {
                     isFinal: true,
                     thoughtsDurationSeconds: request.thoughtsDurationSeconds

@@ -97,6 +97,25 @@ describe('MessageHandler.handleGeminiReply', () => {
         );
     });
 
+    it('does not append a duplicate final reply after storage already rendered it', () => {
+        const { handler, sessionManager } = createMessageHandlerHarness();
+        sessionManager.getCurrentSession().messages[1].thoughts = 'Done thinking';
+        handler.markSessionRenderedFromStorage('session-1', 2);
+
+        handler.handleGeminiReply({
+            action: 'GEMINI_REPLY',
+            sessionId: 'session-1',
+            status: 'success',
+            text: 'Persisted reply',
+            thoughts: 'Done thinking',
+            thoughtsDurationSeconds: 2,
+            context: ['conversation', 'response', 'choice']
+        });
+
+        expect(sessionManager.getCurrentSession().context).toEqual(['conversation', 'response', 'choice']);
+        expect(appendMessage).not.toHaveBeenCalled();
+    });
+
     it('ignores replies for non-generating sessions', () => {
         const { handler } = createMessageHandlerHarness();
 

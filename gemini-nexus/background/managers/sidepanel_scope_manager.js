@@ -3,6 +3,15 @@
 const DEFAULT_PANEL_PATH = 'sidepanel/index.html';
 const DEFAULT_SCOPE = 'remembered_tabs';
 
+export function getPanelPathForTab(tabId) {
+    const normalizedTabId = Number(tabId);
+    if (!Number.isInteger(normalizedTabId) || normalizedTabId <= 0) {
+        return DEFAULT_PANEL_PATH;
+    }
+
+    return `${DEFAULT_PANEL_PATH}?tabId=${normalizedTabId}`;
+}
+
 export class SidePanelScopeManager {
     constructor() {
         this.scope = DEFAULT_SCOPE;
@@ -122,7 +131,7 @@ export class SidePanelScopeManager {
         const enabled = this.isEnabledForTab(tabId);
         await chrome.sidePanel.setOptions({
             tabId,
-            path: DEFAULT_PANEL_PATH,
+            path: getPanelPathForTab(tabId),
             enabled
         });
     }
@@ -138,7 +147,7 @@ export class SidePanelScopeManager {
 
             const enableTabPromise = chrome.sidePanel.setOptions({
                 tabId,
-                path: DEFAULT_PANEL_PATH,
+                path: getPanelPathForTab(tabId),
                 enabled: true
             }).catch((error) => {
                 console.warn('[SidePanelScopeManager] Failed to enable remembered side panel:', error);
@@ -153,7 +162,14 @@ export class SidePanelScopeManager {
 
             await Promise.all([disableDefaultPromise, enableTabPromise, openPromise]);
         } else {
-            const defaultOptionsPromise = this.refreshDefaultOptions();
+            const defaultOptionsPromise = Promise.all([
+                this.refreshDefaultOptions(),
+                chrome.sidePanel.setOptions({
+                    tabId,
+                    path: getPanelPathForTab(tabId),
+                    enabled: true
+                })
+            ]);
             const openPromise = chrome.sidePanel.open({ tabId, windowId });
             await Promise.all([defaultOptionsPromise, openPromise]);
         }

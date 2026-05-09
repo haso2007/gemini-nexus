@@ -4,6 +4,16 @@ import { DEFAULT_CONTEXT_RECENT_TURNS } from '../../lib/constants.js';
 
 const OPENAI_WEB_SEARCH_MODES = new Set(['off', 'responses', 'chat']);
 
+export function getOwnerTabIdFromLocation(locationLike = window.location) {
+    try {
+        const url = new URL(locationLike.href);
+        const tabId = Number.parseInt(url.searchParams.get('tabId'), 10);
+        return Number.isInteger(tabId) && tabId > 0 ? tabId : null;
+    } catch {
+        return null;
+    }
+}
+
 function normalizeOpenAISettings(data) {
     const legacyMode = data.geminiOpenaiWebSearchMode;
     const hasUseResponsesSetting = typeof data.geminiOpenaiUseResponsesApi === 'boolean';
@@ -27,7 +37,8 @@ export class StateManager {
         this.frame = frameManager;
         this.data = null; // Pre-fetched data cache
         this.sessionData = null;
-        this.currentTabId = undefined;
+        this.ownerTabId = getOwnerTabIdFromLocation();
+        this.currentTabId = this.ownerTabId ?? undefined;
         this.uiIsReady = false;
         this.hasInitialized = false;
     }
@@ -77,10 +88,14 @@ export class StateManager {
             this.trySendInitData();
         });
 
-        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            this.currentTabId = tabs && tabs[0] ? tabs[0].id : null;
+        if (this.hasFixedTabContext()) {
             this.trySendInitData();
-        });
+        } else {
+            chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                this.currentTabId = tabs && tabs[0] ? tabs[0].id : null;
+                this.trySendInitData();
+            });
+        }
 
         chrome.storage.onChanged.addListener((changes, areaName) => {
             if (areaName !== 'session' || !changes.geminiSidePanelSessionBindings) return;
@@ -92,12 +107,22 @@ export class StateManager {
         });
 
         chrome.tabs.onActivated.addListener(({ tabId }) => {
+            if (this.hasFixedTabContext()) return;
+
             this.currentTabId = tabId || null;
             this.postCurrentTabContext();
         });
 
         chrome.tabs.onRemoved.addListener((tabId) => {
             this.removeSessionBinding(tabId);
+
+            if (this.ownerTabId === tabId) {
+                this.currentTabId = null;
+                this.postCurrentTabContext();
+                return;
+            }
+
+            if (this.hasFixedTabContext()) return;
 
             if (this.currentTabId === tabId) {
                 chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -257,6 +282,10 @@ export class StateManager {
 
     getCurrentTabId() {
         return this.currentTabId;
+    }
+
+    hasFixedTabContext() {
+        return Number.isInteger(this.ownerTabId) && this.ownerTabId > 0;
     }
 
     getSessionBindings() {
