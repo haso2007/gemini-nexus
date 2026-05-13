@@ -40,7 +40,7 @@ describe('SidePanelScopeManager tab-scoped paths', () => {
         expect(chrome.sidePanel.open).toHaveBeenCalledWith({ tabId: 123, windowId: 456 });
     });
 
-    it('enables remembered-tab panels before opening them', async () => {
+    it('starts opening remembered-tab panels without waiting for async setup', async () => {
         const calls = [];
         let resolveSetOptions;
         chrome.sidePanel.setOptions.mockImplementation((options) => {
@@ -66,11 +66,11 @@ describe('SidePanelScopeManager tab-scoped paths', () => {
         const opening = manager.openForTab(123, 456);
 
         await Promise.resolve();
-        expect(calls).toEqual(['disableDefault', 'enableTab:start']);
+        expect(calls).toEqual(['disableDefault', 'enableTab:start', 'open']);
 
         resolveSetOptions();
         await opening;
 
-        expect(calls).toEqual(['disableDefault', 'enableTab:start', 'enableTab:done', 'open']);
+        expect(calls).toEqual(['disableDefault', 'enableTab:start', 'open', 'enableTab:done']);
     });
 });

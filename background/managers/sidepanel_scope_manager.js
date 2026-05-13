@@ -173,13 +173,19 @@ export class SidePanelScopeManager {
                     throw error;
                 });
 
+            let persistPromise = Promise.resolve();
             if (!this.enabledTabs[tabId]) {
                 this.enabledTabs[tabId] = true;
-                await this.persistEnabledTabs();
+                persistPromise = this.persistEnabledTabs();
             }
 
-            await Promise.all([disableDefaultPromise, enableTabPromise]);
-            await chrome.sidePanel.open({ tabId, windowId });
+            const openPromise = chrome.sidePanel.open({ tabId, windowId });
+            await Promise.all([
+                disableDefaultPromise,
+                enableTabPromise,
+                persistPromise,
+                openPromise,
+            ]);
         } else {
             const defaultOptionsPromise = Promise.all([
                 this.refreshDefaultOptions(),
