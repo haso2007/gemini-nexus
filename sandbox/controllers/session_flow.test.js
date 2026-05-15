@@ -169,6 +169,77 @@ describe('SessionFlowController', () => {
         );
     });
 
+    it('restores image-only AI messages from generated image history', () => {
+        const { controller, sessionManager, ui } = createSessionFlowHarness();
+        const generatedImages = [
+            { url: 'https://lh3.googleusercontent.com/generated-1', alt: 'Generated Image' },
+            { url: 'https://lh3.googleusercontent.com/generated-2', alt: 'Generated Image' },
+        ];
+
+        sessionManager.setSessions([
+            realSession({
+                messages: [
+                    { role: 'user', text: '生成两张图' },
+                    {
+                        role: 'ai',
+                        text: '',
+                        generatedImages,
+                    },
+                ],
+            }),
+        ]);
+
+        controller.switchToSession('session-1');
+
+        expect(appendMessage).toHaveBeenCalledTimes(2);
+        expect(appendMessage).toHaveBeenNthCalledWith(
+            2,
+            ui.historyDiv,
+            '',
+            'ai',
+            generatedImages,
+            undefined,
+            undefined,
+            expect.objectContaining({ autoScroll: false })
+        );
+    });
+
+    it('restores full user attachment metadata when present', () => {
+        const { controller, sessionManager, ui } = createSessionFlowHarness();
+        const attachments = [
+            {
+                base64: 'data:application/pdf;base64,BBBB',
+                type: 'application/pdf',
+                name: 'spec.pdf',
+            },
+        ];
+
+        sessionManager.setSessions([
+            realSession({
+                messages: [
+                    {
+                        role: 'user',
+                        text: 'Review this file',
+                        image: ['data:application/pdf;base64,BBBB'],
+                        attachments,
+                    },
+                ],
+            }),
+        ]);
+
+        controller.switchToSession('session-1');
+
+        expect(appendMessage).toHaveBeenCalledWith(
+            ui.historyDiv,
+            'Review this file',
+            'user',
+            attachments,
+            undefined,
+            undefined,
+            expect.objectContaining({ autoScroll: false })
+        );
+    });
+
     it('restores a supplied scroll state after rebuilding a session', () => {
         const { app, controller, sessionManager, ui } = createSessionFlowHarness();
         const scrollState = { scrollTop: 320, isNearBottom: false };

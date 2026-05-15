@@ -39,15 +39,35 @@ describe('message media helpers', () => {
         expect(createUserImagesGrid([{ url: 'not-for-user-grid' }])).toBeNull();
     });
 
-    it('creates a generated image grid from the first generated image object', () => {
+    it('renders non-image user attachments as file cards without image tags', () => {
+        const grid = createUserImagesGrid([
+            {
+                base64: 'data:application/pdf;base64,AAAA',
+                type: 'application/pdf',
+                name: '<report>.pdf',
+            },
+        ]);
+
+        expect(grid.className).toBe('user-images-grid');
+        expect(grid.querySelectorAll('img')).toHaveLength(0);
+
+        const card = grid.querySelector('.chat-file-card');
+        expect(card).toBeTruthy();
+        expect(card.querySelector('.chat-file-name').textContent).toBe('<report>.pdf');
+        expect(card.querySelector('.chat-file-type').textContent).toBe('application/pdf');
+    });
+
+    it('creates a generated image grid from every generated image object', () => {
         const grid = createGeneratedImagesGrid([
             { url: 'first.png', alt: 'first' },
             { url: 'second.png', alt: 'second' },
         ]);
 
         expect(grid.className).toBe('generated-images-grid');
-        expect(grid.querySelectorAll('img')).toHaveLength(1);
-        expect(grid.querySelector('img')?.dataset.generatedUrl).toBe('first.png');
+        expect([...grid.querySelectorAll('img')].map((img) => img.dataset.generatedUrl)).toEqual([
+            'first.png',
+            'second.png',
+        ]);
     });
 
     it('returns null for generated images without object attachments', () => {

@@ -151,7 +151,7 @@
         getSelectedModel() {
             return this.elements.askModelSelect
                 ? this.elements.askModelSelect.value
-                : 'gemini-2.5-flash';
+                : 'gemini-3-flash';
         }
 
         setSelectedModel(model) {

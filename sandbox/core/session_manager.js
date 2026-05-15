@@ -1,5 +1,6 @@
 // sandbox/core/session_manager.js
 import { generateUUID } from '../../shared/utils/index.js';
+import { getImageAttachmentDataUrls, normalizeUserAttachments } from '../../shared/attachments.js';
 
 export class SessionManager {
     constructor() {
@@ -97,11 +98,15 @@ export class SessionManager {
             }
 
             // Handle attachments based on role
-            if (role === 'user' && typeof attachment === 'string') {
-                // Backward compatibility: user attachment is usually a single base64 string
-                msg.image = attachment;
-            } else if (role === 'user' && Array.isArray(attachment) && attachment.length > 0) {
-                msg.image = attachment;
+            if (role === 'user') {
+                const attachments = normalizeUserAttachments(attachment);
+                if (attachments.length > 0) {
+                    msg.attachments = attachments;
+                    const images = getImageAttachmentDataUrls(attachments);
+                    if (images.length > 0) {
+                        msg.image = images;
+                    }
+                }
             } else if (role === 'ai' && Array.isArray(attachment) && attachment.length > 0) {
                 // AI generated images
                 msg.generatedImages = attachment;

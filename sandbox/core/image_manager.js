@@ -249,7 +249,7 @@ export class ImageManager {
             // Remove Button
             const removeBtn = document.createElement('button');
             removeBtn.className = 'preview-remove-btn';
-            removeBtn.innerHTML = '✕';
+            removeBtn.textContent = '✕';
             removeBtn.onclick = (e) => {
                 e.stopPropagation();
                 this.removeFile(index);
@@ -264,10 +264,30 @@ export class ImageManager {
             } else {
                 const card = document.createElement('div');
                 card.className = 'file-item-card';
-                card.innerHTML = `
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-                    <span>${file.name}</span>
-                `;
+
+                const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                Object.entries({
+                    viewBox: '0 0 24 24',
+                    fill: 'none',
+                    stroke: 'currentColor',
+                    'stroke-width': '2',
+                    'stroke-linecap': 'round',
+                    'stroke-linejoin': 'round',
+                }).forEach(([key, value]) => icon.setAttribute(key, value));
+
+                const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                path.setAttribute(
+                    'd',
+                    'M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z'
+                );
+                const fold = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+                fold.setAttribute('points', '14 2 14 8 20 8');
+                icon.append(path, fold);
+
+                const name = document.createElement('span');
+                name.textContent = file.name || 'attachment';
+
+                card.append(icon, name);
                 item.appendChild(card);
             }
 

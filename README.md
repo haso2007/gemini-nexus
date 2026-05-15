@@ -19,8 +19,6 @@
     <img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="License">
   </p>
 
-  <img src="./assets/readme-hero.png" alt="Gemini Nexus browser assistant preview" width="900">
-
 ---
 
 </div>

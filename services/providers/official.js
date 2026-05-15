@@ -4,6 +4,7 @@ import {
     DEFAULT_OFFICIAL_MODEL,
     DEFAULT_THINKING_LEVEL,
 } from '../../shared/config/constants.js';
+import { attachmentToInlineData, normalizeUserAttachments } from '../../shared/attachments.js';
 import { readSseJson } from './sse.js';
 
 function extractGroundingSources(groundingMetadata) {
@@ -79,6 +80,15 @@ function normalizeFunctionCall(part, partIndex) {
     };
 }
 
+function addAttachmentParts(parts, attachments) {
+    normalizeUserAttachments(attachments).forEach((attachment) => {
+        const inlineData = attachmentToInlineData(attachment);
+        if (inlineData) {
+            parts.push({ inlineData });
+        }
+    });
+}
+
 function buildMessageContent(msg, targetModel) {
     void targetModel;
     const fallbackRole = msg?.role === 'ai' ? 'model' : 'user';
@@ -115,19 +125,10 @@ function buildMessageContent(msg, targetModel) {
         // User turn
         if (msg.text) parts.push({ text: msg.text });
 
-        // Add images if present
-        if (msg.image && Array.isArray(msg.image)) {
-            msg.image.forEach((img) => {
-                // img is base64 string "data:image/png;base64,..."
-                const p = img.split(',');
-                if (p.length === 2) {
-                    const mimeMatch = p[0].match(/:(.*?);/);
-                    const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
-                    parts.push({
-                        inlineData: { mimeType, data: p[1] },
-                    });
-                }
-            });
+        if (Array.isArray(msg.attachments) && msg.attachments.length > 0) {
+            addAttachmentParts(parts, msg.attachments);
+        } else if (msg.image && Array.isArray(msg.image)) {
+            addAttachmentParts(parts, msg.image);
         }
     }
 
@@ -255,17 +256,7 @@ export async function sendOfficialMessage(
     if (configuredCurrentParts.length === 0 && prompt) currentParts.push({ text: prompt });
 
     if (configuredCurrentParts.length === 0 && files && files.length > 0) {
-        files.forEach((f) => {
-            const parts = f.base64.split(',');
-            const base64Data = parts[1];
-            const mime = f.type || 'image/png';
-            currentParts.push({
-                inlineData: {
-                    mimeType: mime,
-                    data: base64Data,
-                },
-            });
-        });
+        addAttachmentParts(currentParts, files);
     }
 
     if (currentParts.length > 0) {

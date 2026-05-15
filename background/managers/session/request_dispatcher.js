@@ -6,6 +6,7 @@ import {
     DEFAULT_CONTEXT_MODE,
     DEFAULT_CONTEXT_RECENT_TURNS,
 } from '../../../shared/config/constants.js';
+import { countUserAttachmentsByType, getAttachmentDataUrls } from '../../../shared/attachments.js';
 import { getHistory } from './history_store.js';
 import { prepareManagedContext } from './context_manager.js';
 
@@ -18,7 +19,7 @@ function getRequestHistory(request) {
 
 function getFileImages(files) {
     if (!Array.isArray(files)) return [];
-    return files.map((file) => file?.base64).filter(Boolean);
+    return getAttachmentDataUrls(files);
 }
 
 function normalizeMessageImages(image) {
@@ -26,20 +27,27 @@ function normalizeMessageImages(image) {
     return Array.isArray(image) ? image.filter(Boolean) : [image];
 }
 
+function getMessageAttachmentDataUrls(message) {
+    if (Array.isArray(message?.attachments) && message.attachments.length > 0) {
+        return getAttachmentDataUrls(message.attachments);
+    }
+    return normalizeMessageImages(message?.image);
+}
+
 function arraysEqual(left, right) {
     if (left.length !== right.length) return false;
     return left.every((value, index) => value === right[index]);
 }
 
-function isCurrentUserMessage(message, request) {
+function isCurrentUserMessage(message, request, files) {
     if (!message || message.role !== 'user') return false;
     const expectedText = request.historyPromptText ?? request.text ?? '';
     const actualText = message.text ?? '';
     if (actualText !== expectedText) return false;
-    return arraysEqual(normalizeMessageImages(message.image), getFileImages(request.files));
+    return arraysEqual(getMessageAttachmentDataUrls(message), getFileImages(files));
 }
 
-function omitCurrentUserMessage(history, request) {
+function omitCurrentUserMessage(history, request, files) {
     if (!Array.isArray(history) || history.length === 0) return history || [];
     let end = history.length;
     const currentBatchId = request.officialFunctionResponseBatchId;
@@ -52,7 +60,7 @@ function omitCurrentUserMessage(history, request) {
 
     const trimmed = end === history.length ? history : history.slice(0, end);
     const lastMessage = trimmed[trimmed.length - 1];
-    return isCurrentUserMessage(lastMessage, request) ? trimmed.slice(0, -1) : trimmed;
+    return isCurrentUserMessage(lastMessage, request, files) ? trimmed.slice(0, -1) : trimmed;
 }
 
 function assertOpenAIWebSearchSupported(model, reasoningEffort) {
@@ -79,11 +87,11 @@ function assertOpenAIWebSearchSupported(model, reasoningEffort) {
     }
 }
 
-async function resolveRequestHistory(request) {
+async function resolveRequestHistory(request, files = request.files) {
     const overrideHistory = getRequestHistory(request);
     if (overrideHistory) return overrideHistory;
     const storedHistory = await getHistory(request.sessionId);
-    return omitCurrentUserMessage(storedHistory, request);
+    return omitCurrentUserMessage(storedHistory, request, files);
 }
 
 function createContextStatusSender(request, settings) {
@@ -101,6 +109,93 @@ function createContextStatusSender(request, settings) {
             })
             .catch(() => {});
     };
+}
+
+function createSuccessReply(request, response, overrides = {}) {
+    return {
+        action: 'GEMINI_REPLY',
+        sessionId: request.sessionId || null,
+        text: response.text,
+        thoughts: response.thoughts,
+        sources: response.sources || [],
+        images: response.images,
+        status: 'success',
+        ...overrides,
+    };
+}
+
+function compactWebHistoryText(text) {
+    return String(text || '').trim();
+}
+
+function describeWebHistoryAttachments(message) {
+    const markers = [];
+    const userAttachmentCounts = countUserAttachmentsByType(message?.attachments);
+    const legacyImages =
+        userAttachmentCounts.images === 0 && userAttachmentCounts.files === 0
+            ? normalizeMessageImages(message?.image).length
+            : 0;
+    const imageCount = userAttachmentCounts.images + legacyImages;
+    if (imageCount > 0) {
+        markers.push(`[${imageCount} image attachment(s)]`);
+    }
+    if (userAttachmentCounts.files > 0) {
+        markers.push(`[${userAttachmentCounts.files} file attachment(s)]`);
+    }
+    if (Array.isArray(message?.generatedImages) && message.generatedImages.length > 0) {
+        markers.push(`[${message.generatedImages.length} generated image(s)]`);
+    }
+    if (Array.isArray(message?.sources) && message.sources.length > 0) {
+        markers.push(`[${message.sources.length} source link(s)]`);
+    }
+    return markers.join(' ');
+}
+
+function formatWebHistoryMessage(message) {
+    const role = message?.role === 'ai' ? 'Assistant' : 'User';
+    const text = compactWebHistoryText(message?.text);
+    const attachments = describeWebHistoryAttachments(message);
+    if (!text && !attachments) return null;
+    return `${role}: ${[text, attachments].filter(Boolean).join(' ')}`;
+}
+
+function buildWebPromptWithHistory(currentText, history) {
+    const historyLines = (Array.isArray(history) ? history : [])
+        .map(formatWebHistoryMessage)
+        .filter(Boolean);
+
+    if (historyLines.length === 0) return currentText;
+
+    return [
+        'Conversation history:',
+        historyLines.join('\n\n'),
+        '',
+        'Current user message:',
+        currentText,
+    ].join('\n');
+}
+
+function stripNativeWebContextIds(context = {}) {
+    const { contextIds, ...authContext } = context;
+    return authContext;
+}
+
+function isRefreshableWebAuthError(message = '') {
+    return (
+        message.includes('401') ||
+        message.includes('403') ||
+        message.includes('Missing Gemini Web upload tokens')
+    );
+}
+
+function isUnavailableWebAuthError(message = '') {
+    return (
+        message.includes('未登录') ||
+        message.includes('Not logged in') ||
+        message.includes('Sign in') ||
+        message.includes('Missing Gemini Web auth token: blValue') ||
+        message.includes('Missing Gemini Web auth token: fSid')
+    );
 }
 
 export class RequestDispatcher {
@@ -122,7 +217,7 @@ export class RequestDispatcher {
         if (!settings.apiKey) throw new Error('API Key is missing. Please check settings.');
 
         // Fetch History
-        const history = await resolveRequestHistory(request);
+        const history = await resolveRequestHistory(request, files);
         const context = await prepareManagedContext(
             request,
             settings,
@@ -149,19 +244,12 @@ export class RequestDispatcher {
             onUpdate
         );
 
-        return {
-            action: 'GEMINI_REPLY',
-            sessionId: request.sessionId || null,
-            text: response.text,
-            thoughts: response.thoughts,
-            sources: response.sources || [],
-            images: response.images,
-            status: 'success',
+        return createSuccessReply(request, response, {
             context: null, // Official API is stateless
             thoughtSignature: response.thoughtSignature,
             officialContent: response.officialContent || null,
             functionCalls: Array.isArray(response.functionCalls) ? response.functionCalls : [],
-        };
+        });
     }
 
     async _handleOpenAIRequest(request, settings, files, onUpdate, signal) {
@@ -186,7 +274,7 @@ export class RequestDispatcher {
             assertOpenAIWebSearchSupported(config.model, config.reasoningEffort);
         }
 
-        const history = await resolveRequestHistory(request);
+        const history = await resolveRequestHistory(request, files);
         const context = await prepareManagedContext(
             request,
             settings,
@@ -205,16 +293,9 @@ export class RequestDispatcher {
             onUpdate
         );
 
-        return {
-            action: 'GEMINI_REPLY',
-            sessionId: request.sessionId || null,
-            text: response.text,
-            thoughts: response.thoughts,
-            sources: response.sources || [],
-            images: response.images,
-            status: 'success',
+        return createSuccessReply(request, response, {
             context: null,
-        };
+        });
     }
 
     async _handleWebRequest(request, files, onUpdate, signal) {
@@ -227,22 +308,25 @@ export class RequestDispatcher {
             throw new Error('History editing is not supported for Gemini Web Client.');
         }
 
+        const history = await resolveRequestHistory(request, files);
+
         // Concatenate System Instruction for Web Client
         let fullText = request.text;
         if (request.systemInstruction) {
             fullText = request.systemInstruction + '\n\nQuestion: ' + fullText;
         }
+        fullText = buildWebPromptWithHistory(fullText, history);
 
         while (attemptCount < maxAttempts) {
             attemptCount++;
 
             try {
-                this.auth.checkModelChange(request.model);
                 const context = await this.auth.getOrFetchContext();
+                const requestContext = stripNativeWebContextIds(context);
 
                 const response = await sendWebMessage(
                     fullText,
-                    context,
+                    requestContext,
                     request.model,
                     files,
                     signal,
@@ -252,32 +336,24 @@ export class RequestDispatcher {
                 // Success! Update auth state
                 await this.auth.updateContext(response.newContext, request.model);
 
-                return {
-                    action: 'GEMINI_REPLY',
-                    sessionId: request.sessionId || null,
-                    text: response.text,
-                    thoughts: response.thoughts,
+                return createSuccessReply(request, response, {
                     sources: [],
-                    images: response.images,
-                    status: 'success',
-                    context: response.newContext,
-                };
+                    context: null,
+                });
             } catch (err) {
-                const isLoginError =
-                    err.message &&
-                    (err.message.includes('未登录') ||
-                        err.message.includes('Not logged in') ||
-                        err.message.includes('Sign in') ||
-                        err.message.includes('401') ||
-                        err.message.includes('403'));
+                const message = err.message || '';
+                if (isUnavailableWebAuthError(message)) {
+                    throw err;
+                }
+
+                const isLoginError = isRefreshableWebAuthError(message);
 
                 const isNetworkGlitch =
-                    err.message &&
-                    (err.message.includes('No valid response found') ||
-                        err.message.includes('Network Error') ||
-                        err.message.includes('Failed to fetch') ||
-                        err.message.includes('Check network') ||
-                        err.message.includes('429'));
+                    message.includes('No valid response found') ||
+                    message.includes('Network Error') ||
+                    message.includes('Failed to fetch') ||
+                    message.includes('Check network') ||
+                    message.includes('429');
 
                 if ((isLoginError || isNetworkGlitch) && attemptCount < maxAttempts) {
                     const type = isLoginError ? 'Auth' : 'Network';

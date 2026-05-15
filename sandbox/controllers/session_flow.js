@@ -42,7 +42,7 @@ export class SessionFlowController {
             }
 
             let attachment = null;
-            if (msg.role === 'user') attachment = msg.image;
+            if (msg.role === 'user') attachment = msg.attachments || msg.image;
             if (msg.role === 'ai') attachment = msg.generatedImages;
             // Pass msg.thoughts to appendMessage
             appendMessage(
@@ -123,7 +123,10 @@ export class SessionFlowController {
     hasDisplayableRestoredContent(message) {
         const text = typeof message.text === 'string' ? message.text : '';
         const thoughts = typeof message.thoughts === 'string' ? message.thoughts : '';
-        return Boolean(text.trim() || thoughts.trim());
+        const hasGeneratedImages =
+            Array.isArray(message.generatedImages) && message.generatedImages.length > 0;
+        const hasSources = Array.isArray(message.sources) && message.sources.length > 0;
+        return Boolean(text.trim() || thoughts.trim() || hasGeneratedImages || hasSources);
     }
 
     getMessageKind(message) {

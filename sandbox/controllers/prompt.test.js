@@ -98,4 +98,48 @@ describe('PromptController.send', () => {
         expect(saveSessionsToStorage).not.toHaveBeenCalled();
         expect(sendToBackground).not.toHaveBeenCalled();
     });
+
+    it('renders and persists full metadata for mixed user attachments', async () => {
+        const files = [
+            {
+                base64: 'data:image/png;base64,AAAA',
+                type: 'image/png',
+                name: 'diagram.png',
+            },
+            {
+                base64: 'data:application/pdf;base64,BBBB',
+                type: 'application/pdf',
+                name: 'spec.pdf',
+            },
+        ];
+        const { controller, sessionManager, ui } = createPromptHarness({
+            text: 'Review these',
+            files,
+        });
+
+        await controller.send();
+
+        const session = sessionManager.getCurrentSession();
+        expect(appendMessage).toHaveBeenCalledWith(
+            ui.historyDiv,
+            'Review these',
+            'user',
+            files,
+            null,
+            null,
+            expect.objectContaining({ onEdit: expect.any(Function) })
+        );
+        expect(session.messages[0]).toEqual({
+            role: 'user',
+            text: 'Review these',
+            image: ['data:image/png;base64,AAAA'],
+            attachments: files,
+        });
+        expect(sendToBackground).toHaveBeenLastCalledWith(
+            expect.objectContaining({
+                action: 'SEND_PROMPT',
+                files,
+            })
+        );
+    });
 });

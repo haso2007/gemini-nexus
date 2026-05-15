@@ -23,6 +23,11 @@ describe('GeminiSessionManager cancellation', () => {
             i18n: {
                 getUILanguage: vi.fn(() => 'en'),
             },
+            storage: {
+                local: {
+                    remove: vi.fn(async () => {}),
+                },
+            },
         };
     });
 
@@ -98,5 +103,37 @@ describe('GeminiSessionManager cancellation', () => {
             }
             await secondPromise;
         }
+    });
+
+    it('clears stale Web auth context and prompts login when request tokens are unavailable', async () => {
+        getConnectionSettings.mockResolvedValue({ provider: 'web' });
+        const manager = new GeminiSessionManager();
+        manager.ensureInitialized = vi.fn(async () => {});
+        manager.auth = {
+            forceContextRefresh: vi.fn(),
+            getCurrentIndex: vi.fn(() => '0'),
+        };
+        manager.dispatcher = {
+            dispatch: vi.fn(async () => {
+                throw new Error('Missing Gemini Web auth token: blValue');
+            }),
+        };
+
+        const result = await manager.handleSendPrompt(
+            { text: 'hello', sessionId: 'session-web' },
+            vi.fn()
+        );
+
+        expect(manager.auth.forceContextRefresh).toHaveBeenCalledTimes(1);
+        expect(chrome.storage.local.remove).toHaveBeenCalledWith(['geminiContext']);
+        expect(result).toEqual(
+            expect.objectContaining({
+                action: 'GEMINI_REPLY',
+                sessionId: 'session-web',
+                status: 'error',
+                text: expect.stringContaining('Please log in'),
+            })
+        );
+        expect(result.text).toContain('gemini.google.com/u/0/');
     });
 });

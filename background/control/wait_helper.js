@@ -73,41 +73,27 @@ export class WaitForHelper {
     }
 
     _waitForNavigationStart() {
-        return new Promise((resolve) => {
-            let timer = null;
-
-            const listener = (method, params) => {
-                if (
-                    method === 'Page.frameStartedNavigating' ||
-                    method === 'Page.navigatedWithinDocument'
-                ) {
-                    cleanup();
-                    resolve(true);
-                }
-            };
-
-            const cleanup = () => {
-                this.connection.removeListener(listener);
-                if (timer) clearTimeout(timer);
-            };
-
-            this.connection.addListener(listener);
-
-            // If no navigation happens within the expected window, resolve false
-            timer = setTimeout(() => {
-                cleanup();
-                resolve(false);
-            }, this.timeouts.expectNavigationIn);
-        });
+        return this._waitForEvent(
+            (method) =>
+                method === 'Page.frameStartedNavigating' ||
+                method === 'Page.navigatedWithinDocument',
+            this.timeouts.expectNavigationIn
+        );
     }
 
     _waitForLoadEvent() {
+        return this._waitForEvent(
+            (method) => method === 'Page.loadEventFired',
+            this.timeouts.navigation
+        );
+    }
+
+    _waitForEvent(matchesEvent, timeout) {
         return new Promise((resolve) => {
             let timer = null;
 
             const listener = (method, params) => {
-                // Wait for load event (lifecycle complete)
-                if (method === 'Page.loadEventFired') {
+                if (matchesEvent(method, params)) {
                     cleanup();
                     resolve(true);
                 }
@@ -120,11 +106,10 @@ export class WaitForHelper {
 
             this.connection.addListener(listener);
 
-            // Max wait for navigation to complete
             timer = setTimeout(() => {
                 cleanup();
-                resolve(false); // Timed out, but proceed to DOM stability check anyway
-            }, this.timeouts.navigation);
+                resolve(false);
+            }, timeout);
         });
     }
 

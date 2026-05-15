@@ -13,7 +13,7 @@ describe('connection settings helpers', () => {
         expect(createConnectionSettingsPayload({})).toEqual({
             provider: 'web',
             useOfficialApi: false,
-            selectedModel: 'gemini-2.5-flash',
+            selectedModel: 'gemini-3-flash',
             openaiSelectedModel: '',
             officialBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
             apiKey: '',
@@ -57,7 +57,7 @@ describe('connection settings helpers', () => {
         expect(getConnectionProvider({ geminiUseOfficialApi: true })).toBe('official');
         expect(getConnectionProvider({})).toBe('web');
         expect(getSelectedModelForProvider({}, 'openai')).toBe('openai_custom');
-        expect(getSelectedModelForProvider({}, 'web')).toBe('gemini-2.5-flash');
+        expect(getSelectedModelForProvider({}, 'web')).toBe('gemini-3-flash');
     });
 
     it('declares the storage keys needed for connection restore', () => {

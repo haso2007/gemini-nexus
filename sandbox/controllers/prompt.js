@@ -2,6 +2,7 @@
 import { appendMessage } from '../render/message.js';
 import { sendToBackground, saveSessionsToStorage } from '../../shared/messaging/index.js';
 import { t } from '../core/i18n.js';
+import { normalizeUserAttachments } from '../../shared/attachments.js';
 
 export class PromptController {
     constructor(sessionManager, uiController, imageManager, appController) {
@@ -98,6 +99,12 @@ export class PromptController {
         return Array.isArray(image) ? image.filter(Boolean) : [image];
     }
 
+    getMessageFiles(message) {
+        const attachments = normalizeUserAttachments(message?.attachments);
+        if (attachments.length > 0) return attachments;
+        return this.buildFilesFromImages(this.normalizeMessageImages(message?.image));
+    }
+
     buildFilesFromImages(images) {
         return images.map((base64, index) => {
             const mimeMatch = typeof base64 === 'string' ? base64.match(/^data:([^;]+);/) : null;
@@ -134,7 +141,7 @@ export class PromptController {
         }
 
         // Render User Message
-        const displayAttachments = files.map((f) => f.base64);
+        const displayAttachments = files.length > 0 ? files : null;
 
         const messageIndex = session.messages.length;
 
@@ -142,18 +149,13 @@ export class PromptController {
             this.ui.historyDiv,
             text,
             'user',
-            displayAttachments.length > 0 ? displayAttachments : null,
+            displayAttachments,
             null,
             null,
             this.getMessageEditOptions(messageIndex)
         );
 
-        this.sessionManager.addMessage(
-            currentId,
-            'user',
-            text,
-            displayAttachments.length > 0 ? displayAttachments : null
-        );
+        this.sessionManager.addMessage(currentId, 'user', text, displayAttachments);
 
         saveSessionsToStorage(this.sessionManager.getPersistableSessions());
         this.app.sessionFlow.switchToSession(currentId);
@@ -189,9 +191,9 @@ export class PromptController {
         if (!session || !Array.isArray(session.messages)) return false;
 
         const target = session.messages[messageIndex];
-        const images = this.normalizeMessageImages(target?.image);
+        const files = this.getMessageFiles(target);
         const nextText = (editedText || '').trim();
-        if (!target || target.role !== 'user' || (!nextText && images.length === 0)) {
+        if (!target || target.role !== 'user' || (!nextText && files.length === 0)) {
             return false;
         }
 
@@ -206,7 +208,6 @@ export class PromptController {
         this.app.sessionFlow.refreshHistoryUI();
         this.app.rerender();
 
-        const files = this.buildFilesFromImages(images);
         this.imageManager.clearFile();
         this.ui.resetInput();
         this.setGeneratingState(true, currentId);

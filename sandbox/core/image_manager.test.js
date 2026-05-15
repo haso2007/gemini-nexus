@@ -1,0 +1,40 @@
+// @vitest-environment jsdom
+
+import { describe, expect, it, vi } from 'vitest';
+import { ImageManager } from './image_manager.js';
+
+function createHarness() {
+    document.body.innerHTML = `
+        <input id="image-input" type="file">
+        <div id="image-preview"></div>
+        <div id="input-wrapper"></div>
+        <textarea id="prompt"></textarea>
+    `;
+
+    const manager = new ImageManager({
+        imageInput: document.getElementById('image-input'),
+        imagePreview: document.getElementById('image-preview'),
+        inputWrapper: document.getElementById('input-wrapper'),
+        inputFn: document.getElementById('prompt'),
+    });
+
+    vi.spyOn(manager.inputFn, 'focus').mockImplementation(() => {});
+    return manager;
+}
+
+describe('ImageManager', () => {
+    it('renders non-image file names as text, not HTML', () => {
+        const manager = createHarness();
+
+        manager.addFile(
+            'data:application/pdf;base64,AAAA',
+            'application/pdf',
+            '<img src=x onerror=alert(1)>spec.pdf'
+        );
+
+        const card = document.querySelector('.file-item-card');
+        expect(card).toBeTruthy();
+        expect(card.querySelector('img')).toBeNull();
+        expect(card.querySelector('span').textContent).toBe('<img src=x onerror=alert(1)>spec.pdf');
+    });
+});

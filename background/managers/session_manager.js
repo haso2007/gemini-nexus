@@ -5,6 +5,16 @@ import { RequestDispatcher } from './session/request_dispatcher.js';
 
 const REQUEST_CANCELLED_TEXT = 'Request cancelled.';
 
+function isUnavailableWebAuthError(message = '') {
+    return (
+        message.includes('未登录') ||
+        message.includes('Not logged in') ||
+        message.includes('Sign in') ||
+        message.includes('Missing Gemini Web auth token: blValue') ||
+        message.includes('Missing Gemini Web auth token: fSid')
+    );
+}
+
 export class GeminiSessionManager {
     constructor() {
         this.auth = new AuthManager();
@@ -86,15 +96,15 @@ export class GeminiSessionManager {
             const isZh = chrome.i18n.getUILanguage().startsWith('zh');
 
             // Handle common user-facing errors
-            if (errorMessage.includes('未登录') || errorMessage.includes('Not logged in')) {
+            if (isUnavailableWebAuthError(errorMessage)) {
                 this.auth.forceContextRefresh();
                 await chrome.storage.local.remove(['geminiContext']);
 
                 const currentIndex = this.auth.getCurrentIndex();
                 if (isZh) {
-                    errorMessage = `账号 (Index: ${currentIndex}) 未登录或会话已过期。请前往 <a href="https://gemini.google.com/u/${currentIndex}/" target="_blank" style="color: inherit; text-decoration: underline;">gemini.google.com/u/${currentIndex}/</a> 登录。`;
+                    errorMessage = `账号 (Index: ${currentIndex}) 未登录、会话已过期或 Gemini Web 请求参数不可用。请前往 <a href="https://gemini.google.com/u/${currentIndex}/" target="_blank" style="color: inherit; text-decoration: underline;">gemini.google.com/u/${currentIndex}/</a> 登录或刷新 Gemini 页面。`;
                 } else {
-                    errorMessage = `Account (Index: ${currentIndex}) not logged in. Please log in at <a href="https://gemini.google.com/u/${currentIndex}/" target="_blank" style="color: inherit; text-decoration: underline;">gemini.google.com/u/${currentIndex}/</a>.`;
+                    errorMessage = `Account (Index: ${currentIndex}) is not logged in, the session expired, or Gemini Web request parameters are unavailable. Please log in at <a href="https://gemini.google.com/u/${currentIndex}/" target="_blank" style="color: inherit; text-decoration: underline;">gemini.google.com/u/${currentIndex}/</a> or refresh Gemini.`;
                 }
             } else if (errorMessage.includes('429') || errorMessage.includes('Too Many Requests')) {
                 errorMessage = isZh

@@ -1,34 +1,87 @@
 // services/upload.js
 import { dataUrlToBlob } from '../shared/utils/index.js';
 
-// Upload file to Google's content-push service using standard multipart/form-data
-// This aligns with the 'gemini-webapi' Python implementation
-export async function uploadFile(fileObj, signal) {
-    // 1. Prepare Blob
-    const blob = await dataUrlToBlob(fileObj.base64);
+const CURRENT_UPLOAD_ENDPOINT = 'https://push.clients6.google.com/upload/';
 
-    // 2. Prepare FormData
-    const formData = new FormData();
-    // The key must be 'file'. Content-Type is auto-set by browser with boundary.
-    formData.append('file', blob, fileObj.name);
+function buildUploadRequest(uploadContext = {}) {
+    if (uploadContext.uploadPushId && uploadContext.uploadClientPctx) {
+        return {
+            endpoint: CURRENT_UPLOAD_ENDPOINT,
+            headers: {
+                'Push-ID': uploadContext.uploadPushId,
+                'X-Tenant-Id': 'bard-storage',
+                'X-Client-Pctx': uploadContext.uploadClientPctx,
+            },
+            credentials: 'include',
+        };
+    }
 
-    // 3. Execute Upload
-    // Endpoint: https://content-push.googleapis.com/upload
-    // Header: Push-ID required
-    const response = await fetch('https://content-push.googleapis.com/upload', {
+    throw new Error('Missing Gemini Web upload tokens. Refresh Gemini Web authentication.');
+}
+
+function readHeader(response, headerName) {
+    if (!response?.headers) return null;
+    if (typeof response.headers.get === 'function') {
+        return response.headers.get(headerName);
+    }
+
+    return response.headers[headerName] || response.headers[headerName.toLowerCase()] || null;
+}
+
+async function startResumableUpload(fileName, uploadRequest, signal) {
+    const response = await fetch(uploadRequest.endpoint, {
         method: 'POST',
-        signal: signal,
+        signal,
         headers: {
-            'Push-ID': 'feeds/mcudyrk2a4khkz',
+            ...uploadRequest.headers,
+            'X-Goog-Upload-Protocol': 'resumable',
+            'X-Goog-Upload-Command': 'start',
         },
-        body: formData,
+        ...(uploadRequest.credentials ? { credentials: uploadRequest.credentials } : {}),
+        body: `File name: ${fileName}`,
+    });
+
+    if (!response.ok) {
+        throw new Error(`Upload start failed: ${response.status}`);
+    }
+
+    const uploadUrl = readHeader(response, 'X-Goog-Upload-URL');
+    if (!uploadUrl) {
+        throw new Error('Upload start failed: missing X-Goog-Upload-URL');
+    }
+
+    return uploadUrl;
+}
+
+async function finalizeResumableUpload(uploadUrl, blob, uploadRequest, signal) {
+    const response = await fetch(uploadUrl, {
+        method: 'POST',
+        signal,
+        headers: {
+            ...uploadRequest.headers,
+            'X-Goog-Upload-Command': 'upload, finalize',
+            'X-Goog-Upload-Offset': '0',
+        },
+        ...(uploadRequest.credentials ? { credentials: uploadRequest.credentials } : {}),
+        body: blob,
     });
 
     if (!response.ok) {
         throw new Error(`Upload failed: ${response.status}`);
     }
 
-    const responseText = await response.text();
+    return response.text();
+}
+
+// Upload file to the endpoint used by the current Gemini Web client.
+export async function uploadFile(fileObj, signal, uploadContext = {}) {
+    // 1. Prepare Blob
+    const blob = await dataUrlToBlob(fileObj.base64);
+
+    // 2. Execute current Gemini Web resumable upload flow.
+    const request = buildUploadRequest(uploadContext);
+    const uploadUrl = await startResumableUpload(fileObj.name, request, signal);
+    const responseText = await finalizeResumableUpload(uploadUrl, blob, request, signal);
 
     // Returns the identifier (e.g. /contrib_service/ttl_1d/...)
     return responseText;

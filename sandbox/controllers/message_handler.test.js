@@ -127,6 +127,30 @@ describe('MessageHandler.handleGeminiReply', () => {
         expect(appendMessage).not.toHaveBeenCalled();
     });
 
+    it('does not append a duplicate image-only reply after storage already rendered it', () => {
+        const { handler, sessionManager } = createMessageHandlerHarness();
+        const generatedImages = [
+            { url: 'https://lh3.googleusercontent.com/generated-1' },
+            { url: 'https://lh3.googleusercontent.com/generated-2' },
+        ];
+        sessionManager.getCurrentSession().messages[1] = {
+            role: 'ai',
+            text: '',
+            generatedImages,
+        };
+        handler.markSessionRenderedFromStorage('session-1', 2);
+
+        handler.handleGeminiReply({
+            action: 'GEMINI_REPLY',
+            sessionId: 'session-1',
+            status: 'success',
+            text: '',
+            images: generatedImages,
+        });
+
+        expect(appendMessage).not.toHaveBeenCalled();
+    });
+
     it('ignores replies for non-generating sessions', () => {
         const { handler } = createMessageHandlerHarness();
 

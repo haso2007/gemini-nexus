@@ -17,7 +17,7 @@ class ToolbarActions {
      * @param {string} mode - 'ocr' | 'translate' | 'snip' | 'analyze' | 'upscale' | 'expand' | 'remove_text' | 'remove_bg' | 'remove_watermark'
      * @param {string} model - Model Name
      */
-    async handleImagePrompt(imgBase64, rect, mode, model = 'gemini-2.5-flash') {
+    async handleImagePrompt(imgBase64, rect, mode, model = 'gemini-3-flash') {
         const t = this.t;
         let title, prompt, loadingMsg, inputVal;
 
@@ -83,11 +83,19 @@ class ToolbarActions {
         this.ui.showLoading(loadingMsg);
         this.ui.setInputValue(inputVal);
 
+        const targetModel =
+            window.GeminiWebModels?.resolveImagePromptModel?.({
+                provider: this.ui.provider || 'web',
+                mode,
+                model,
+            }) || model;
+
         const msg = {
             action: 'QUICK_ASK_IMAGE',
             url: imgBase64,
             text: prompt,
-            model: model,
+            model: targetModel,
+            imageMode: mode,
         };
 
         this.lastRequest = msg;
@@ -98,7 +106,7 @@ class ToolbarActions {
         actionType,
         selection,
         rect,
-        model = 'gemini-2.5-flash',
+        model = 'gemini-3-flash',
         mousePoint = null
     ) {
         const t = this.t;
@@ -148,7 +156,7 @@ class ToolbarActions {
         chrome.runtime.sendMessage(msg);
     }
 
-    handleSubmitAsk(question, context, sessionId = null, model = 'gemini-2.5-flash') {
+    handleSubmitAsk(question, context, sessionId = null, model = 'gemini-3-flash') {
         this.ui.showLoading();
 
         let prompt = question;
@@ -179,13 +187,22 @@ class ToolbarActions {
         if (!this.lastRequest) return;
 
         const currentModel = this.ui.getSelectedModel();
+        const retryRequest = { ...this.lastRequest };
         if (currentModel) {
-            this.lastRequest.model = currentModel;
+            retryRequest.model =
+                retryRequest.action === 'QUICK_ASK_IMAGE'
+                    ? window.GeminiWebModels?.resolveImagePromptModel?.({
+                          provider: this.ui.provider || 'web',
+                          mode: retryRequest.imageMode,
+                          model: currentModel,
+                      }) || currentModel
+                    : currentModel;
         }
 
+        this.lastRequest = retryRequest;
         const loadingMsg = this.t.loading.regenerate;
         this.ui.showLoading(loadingMsg);
-        chrome.runtime.sendMessage(this.lastRequest);
+        chrome.runtime.sendMessage(retryRequest);
     }
 
     handleCancel() {

@@ -215,7 +215,7 @@
         // --- Model Selection ---
 
         getSelectedModel() {
-            return this.view ? this.view.getSelectedModel() : 'gemini-2.5-flash';
+            return this.view ? this.view.getSelectedModel() : 'gemini-3-flash';
         }
 
         getProvider() {
@@ -256,10 +256,10 @@
                     opts = models.map((m) => ({ val: m, txt: m }));
                 }
             } else {
-                opts = [
+                opts = window.GeminiWebModels?.createOptions?.() || [
                     { val: 'gemini-3-flash', txt: 'Fast' },
                     { val: 'gemini-3-flash-thinking', txt: 'Thinking' },
-                    { val: 'gemini-3-pro', txt: '3 Pro' },
+                    { val: 'gemini-3-pro', txt: '3.1 Pro' },
                 ];
             }
 

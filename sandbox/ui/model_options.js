@@ -3,6 +3,7 @@ import {
     DEFAULT_OPENAI_MODEL,
     DEFAULT_PROVIDER,
 } from '../../shared/config/constants.js';
+import { createWebModelOptions } from '../../shared/models/web_models.js';
 
 export function getModelProvider(settings) {
     return settings.provider || (settings.useOfficialApi === true ? 'official' : DEFAULT_PROVIDER);
@@ -32,11 +33,7 @@ export function createModelOptions(settings) {
             : [{ val: DEFAULT_OPENAI_MODEL, txt: 'Custom Model' }];
     }
 
-    return [
-        { val: 'gemini-3-flash', txt: 'Fast' },
-        { val: 'gemini-3-flash-thinking', txt: 'Thinking' },
-        { val: 'gemini-3-pro', txt: '3 Pro' },
-    ];
+    return createWebModelOptions();
 }
 
 export function getPreferredModel(settings, currentValue) {

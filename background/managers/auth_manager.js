@@ -1,10 +1,28 @@
 // background/managers/auth_manager.js
 import { fetchRequestParams } from '../../services/auth.js';
 
+function hasUploadTokenFields(context) {
+    return (
+        Object.prototype.hasOwnProperty.call(context, 'uploadPushId') &&
+        Object.prototype.hasOwnProperty.call(context, 'uploadClientPctx')
+    );
+}
+
+function createAuthContext(context = {}) {
+    return {
+        atValue: context.atValue,
+        blValue: context.blValue,
+        fSid: context.fSid,
+        locale: context.locale,
+        authUser: context.authUser,
+        uploadPushId: context.uploadPushId,
+        uploadClientPctx: context.uploadClientPctx,
+    };
+}
+
 export class AuthManager {
     constructor() {
         this.currentContext = null;
-        this.lastModel = null;
         this.accountIndices = ['0'];
         this.currentAccountPointer = 0;
         this.isInitialized = false;
@@ -16,16 +34,12 @@ export class AuthManager {
         try {
             const stored = await chrome.storage.local.get([
                 'geminiContext',
-                'geminiModel',
                 'geminiAccountIndices',
                 'geminiAccountPointer',
             ]);
 
             if (stored.geminiContext) {
                 this.currentContext = stored.geminiContext;
-            }
-            if (stored.geminiModel) {
-                this.lastModel = stored.geminiModel;
             }
 
             // Load indices
@@ -74,17 +88,29 @@ export class AuthManager {
      * If context is null, it fetches fresh tokens.
      */
     async getOrFetchContext() {
-        if (this.currentContext) return this.currentContext;
+        if (
+            this.currentContext?.atValue &&
+            this.currentContext?.blValue &&
+            this.currentContext?.fSid &&
+            this.currentContext?.locale &&
+            hasUploadTokenFields(this.currentContext)
+        ) {
+            this.currentContext = createAuthContext(this.currentContext);
+            return this.currentContext;
+        }
 
         const targetIndex = this.accountIndices[this.currentAccountPointer] || '0';
         try {
             const params = await fetchRequestParams(targetIndex);
-            this.currentContext = {
+            this.currentContext = createAuthContext({
                 atValue: params.atValue,
                 blValue: params.blValue,
+                fSid: params.fSid,
+                locale: params.locale,
                 authUser: params.authUserIndex || targetIndex,
-                contextIds: ['', '', ''],
-            };
+                uploadPushId: params.uploadPushId,
+                uploadClientPctx: params.uploadClientPctx,
+            });
             return this.currentContext;
         } catch (e) {
             console.warn(`Failed to fetch context for account ${targetIndex}:`, e);
@@ -96,26 +122,16 @@ export class AuthManager {
         return this.accountIndices[this.currentAccountPointer] || '0';
     }
 
-    checkModelChange(newModel) {
-        // Reset context if model changed (forces re-init)
-        if (this.lastModel && this.lastModel !== newModel) {
-            this.currentContext = null;
-        }
-    }
-
-    async updateContext(newContext, model) {
-        this.currentContext = newContext;
-        this.lastModel = model;
+    async updateContext(newContext) {
+        this.currentContext = createAuthContext(newContext);
 
         await chrome.storage.local.set({
             geminiContext: this.currentContext,
-            geminiModel: this.lastModel,
         });
     }
 
     async resetContext() {
         this.currentContext = null;
-        this.lastModel = null;
         // Do not remove geminiModel to preserve user preference in UI
         await chrome.storage.local.remove(['geminiContext']);
 

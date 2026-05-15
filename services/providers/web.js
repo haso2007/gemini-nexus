@@ -2,23 +2,21 @@
 import { fetchRequestParams } from '../auth.js';
 import { uploadFile } from '../upload.js';
 import { parseGeminiLine } from '../parser.js';
+import { generateUUID } from '../../shared/utils/index.js';
+import {
+    getSupportedWebModelValues,
+    getWebModelHeaderConfig,
+} from '../../shared/models/web_models.js';
 
-// Configuration for supported models (Web Client specific)
-const MODEL_HEADERS = {
-    'gemini-3-flash': '[1,null,null,null,"9ec249fc9ad08861",null,null,0,[4]]', // Fast
-    'gemini-3-flash-thinking': '[1,null,null,null,"4af6c7f5da75d65d",null,null,0,[4]]', // Thinking
-    'gemini-3-pro': '[1,null,null,null,"9d8ca3786ebdfbea",null,null,0,[4]]', // Pro
-};
-
-const DEFAULT_MODEL = 'gemini-3-flash';
-
-async function handleFileUploads(files, signal) {
+async function handleFileUploads(files, signal, uploadContext) {
     if (!files || files.length === 0) return [];
 
     console.debug(`[Gemini Web] Uploading ${files.length} files...`);
     // Upload in parallel
     const fileList = await Promise.all(
-        files.map((file) => uploadFile(file, signal).then((url) => [[url], file.name]))
+        files.map((file) =>
+            uploadFile(file, signal, uploadContext).then((url) => [[url], file.name])
+        )
     );
     console.debug('[Gemini Web] Files uploaded successfully');
     return fileList;
@@ -36,6 +34,57 @@ function constructPayload(prompt, fileList, contextIds) {
 
     // The API expects: f.req = JSON.stringify([null, JSON.stringify(data)])
     return JSON.stringify([null, JSON.stringify(data)]);
+}
+
+function stripNativeContextIds(context = {}) {
+    const { contextIds, ...authContext } = context;
+    return authContext;
+}
+
+function buildModelHeader(model, requestId) {
+    const config = getWebModelHeaderConfig(model);
+    if (!config) {
+        throw new Error(
+            `Unsupported Gemini Web model: ${model}. Supported models: ${getSupportedWebModelValues().join(', ')}`
+        );
+    }
+
+    return JSON.stringify([
+        1,
+        null,
+        null,
+        null,
+        config.hash,
+        null,
+        null,
+        0,
+        [4],
+        null,
+        null,
+        config.mode,
+        null,
+        null,
+        config.featureMode,
+        null,
+        requestId,
+    ]);
+}
+
+function buildEndpoint(authUser, queryParams) {
+    const accountPrefix = authUser && authUser !== '0' ? `/u/${authUser}` : '';
+    return `https://gemini.google.com${accountPrefix}/_/BardChatUi/data/assistant.lamda.BardFrontendService/StreamGenerate?${queryParams.toString()}`;
+}
+
+function assertAuthToken(context, fieldName) {
+    if (!context?.[fieldName]) {
+        throw new Error(`Missing Gemini Web auth token: ${fieldName}`);
+    }
+}
+
+function assertRequiredAuthTokens(context) {
+    assertAuthToken(context, 'atValue');
+    assertAuthToken(context, 'blValue');
+    assertAuthToken(context, 'fSid');
 }
 
 async function fetchStream(endpoint, atValue, fReq, headers, signal) {
@@ -67,6 +116,8 @@ async function fetchStream(endpoint, atValue, fReq, headers, signal) {
  */
 export async function sendWebMessage(prompt, context, model, files, signal, onUpdate) {
     console.debug(`[Gemini Web] Requesting model: ${model}`);
+    const requestId = generateUUID();
+    const modelHeader = buildModelHeader(model, requestId);
 
     // 1. Ensure Auth (Context)
     if (!context || !context.atValue) {
@@ -77,33 +128,45 @@ export async function sendWebMessage(prompt, context, model, files, signal, onUp
         context = {
             atValue: params.atValue,
             blValue: params.blValue,
+            fSid: params.fSid,
+            locale: params.locale,
             authUser: params.authUserIndex || '0',
-            contextIds: ['', '', ''],
+            uploadPushId: params.uploadPushId,
+            uploadClientPctx: params.uploadClientPctx,
         };
     }
 
+    assertRequiredAuthTokens(context);
+
     // 2. Prepare Uploads
-    const fileList = await handleFileUploads(files, signal);
+    const fileList = await handleFileUploads(files, signal, context);
 
     // 3. Construct Payload
-    const fReq = constructPayload(prompt, fileList, context.contextIds);
+    // Current Gemini Web rejects the legacy three-id continuation payload without
+    // the extra UI-only context token, so Web continuity is handled by the caller.
+    const fReq = constructPayload(prompt, fileList, ['', '', '']);
 
     const queryParams = new URLSearchParams({
-        bl: context.blValue || 'boq_assistant-bard-web-server_20230713.13_p0',
-        _reqid: Math.floor(Math.random() * 900000) + 100000,
+        bl: context.blValue,
+        'f.sid': context.fSid,
+        hl: context.locale || 'en-US',
+        _reqid: String(Math.floor(Math.random() * 900000) + 100000),
         rt: 'c',
     });
-
-    const modelHeader = MODEL_HEADERS[model] || MODEL_HEADERS[DEFAULT_MODEL];
 
     const headers = {
         'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
         'X-Same-Domain': '1',
-        'X-Goog-AuthUser': context.authUser,
         'x-goog-ext-525001261-jspb': modelHeader,
+        'x-goog-ext-525005358-jspb': JSON.stringify([requestId, 1]),
+        'x-goog-ext-73010989-jspb': '[0]',
+        'x-goog-ext-73010990-jspb': '[0,0,0]',
     };
+    if (context.authUser && context.authUser !== '0') {
+        headers['X-Goog-AuthUser'] = context.authUser;
+    }
 
-    const endpoint = `https://gemini.google.com/u/${context.authUser}/_/BardChatUi/data/assistant.lamda.BardFrontendService/StreamGenerate?${queryParams.toString()}`;
+    const endpoint = buildEndpoint(context.authUser, queryParams);
 
     // 4. Execute Request
     console.debug(`[Gemini Web] Sending request to ${endpoint}`);
@@ -171,14 +234,12 @@ export async function sendWebMessage(prompt, context, model, files, signal, onUp
     }
 
     // 6. Return Result with Updated Context
-    context.contextIds = finalResult.ids;
-
     console.debug('[Gemini Web] Request completed successfully');
 
     return {
         text: finalResult.text,
         thoughts: finalResult.thoughts,
         images: finalResult.images || [],
-        newContext: context,
+        newContext: stripNativeContextIds(context),
     };
 }

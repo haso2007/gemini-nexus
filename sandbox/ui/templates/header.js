@@ -1,3 +1,5 @@
+import { createWebModelOptionMarkup } from '../../../shared/models/web_models.js';
+
 export const HeaderTemplate = `
     <!-- HEADER -->
     <div class="header">
@@ -8,9 +10,7 @@ export const HeaderTemplate = `
 
             <div class="model-select-wrapper">
                 <select id="model-select" data-i18n-title="modelSelectTooltip" title="Select Model (Tab to cycle)">
-                    <option value="gemini-3-flash">Fast</option>
-                    <option value="gemini-3-flash-thinking">Thinking</option>
-                    <option value="gemini-3-pro">3 Pro</option>
+                    ${createWebModelOptionMarkup()}
                 </select>
             </div>
         </div>

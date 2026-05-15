@@ -4,6 +4,14 @@ import { transformMarkdown } from '../render/pipeline.js';
 import { WatermarkRemover } from '../../shared/media/watermark_remover.js';
 import { getHighResImageUrl } from '../../shared/utils/index.js';
 
+function escapeAttribute(value) {
+    return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
 export function initRendererMode() {
     document.body.innerHTML = ''; // Clear UI
 
@@ -47,15 +55,20 @@ export function initRendererMode() {
                 const fetchTasks = [];
                 if (images && Array.isArray(images) && images.length > 0) {
                     let imageHtml = '<div class="generated-images-grid">';
-                    // Only display the first generated image for floating UI
-                    const displayImages = [images[0]];
+                    const displayImages = images.filter(
+                        (imgData) =>
+                            imgData &&
+                            typeof imgData === 'object' &&
+                            typeof imgData.url === 'string'
+                    );
 
                     displayImages.forEach((imgData) => {
                         const imgReqId =
                             'gen_img_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
                         const targetUrl = getHighResImageUrl(imgData.url);
+                        const alt = escapeAttribute(imgData.alt || 'Generated Image');
 
-                        imageHtml += `<img class="generated-image loading" alt="${imgData.alt || 'Generated Image'}" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxIDEiPjwvc3ZnPg==" data-req-id="${imgReqId}">`;
+                        imageHtml += `<img class="generated-image loading" alt="${alt}" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxIDEiPjwvc3ZnPg==" data-req-id="${imgReqId}">`;
 
                         fetchTasks.push({ reqId: imgReqId, url: targetUrl });
                     });

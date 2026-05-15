@@ -4,6 +4,9 @@
     const t = window.GeminiToolbarStrings || {};
     // Combine modular styles (loaded previously)
     const STYLES = window.GeminiToolbarStyles || '';
+    const WEB_MODEL_OPTIONS =
+        window.GeminiWebModels?.createOptionMarkup?.() ||
+        '<option value="gemini-3-flash">Fast</option><option value="gemini-3-flash-thinking">Thinking</option><option value="gemini-3-pro">3.1 Pro</option>';
 
     const toolbarHTML = `
         <!-- Quick Actions Toolbar (Dark Theme) -->
@@ -58,9 +61,7 @@
                 <span class="window-title" id="window-title">${t.windowTitle}</span>
                 <div class="header-actions">
                     <select id="ask-model-select" class="ask-model-select">
-                        <option value="gemini-3-flash">Fast</option>
-                        <option value="gemini-3-flash-thinking">Thinking</option>
-                        <option value="gemini-3-pro">3 Pro</option>
+                        ${WEB_MODEL_OPTIONS}
                     </select>
                     <button class="icon-btn" id="btn-header-close" title="${t.close}">${ICONS.CLOSE}</button>
                 </div>

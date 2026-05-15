@@ -1,5 +1,6 @@
 // background/managers/history_manager.js
 import { generateUUID } from '../../shared/utils/index.js';
+import { getImageAttachmentDataUrls, normalizeUserAttachments } from '../../shared/attachments.js';
 
 async function saveSessionsAndNotify(geminiSessions) {
     await chrome.storage.local.set({ geminiSessions });
@@ -18,6 +19,25 @@ async function moveSessionToTopAndSave(geminiSessions, sessionIndex, session) {
     await saveSessionsAndNotify(geminiSessions);
 }
 
+function normalizeStoredAttachments(filesObj = null) {
+    const attachments = normalizeUserAttachments(filesObj);
+    return attachments.length > 0 ? attachments : null;
+}
+
+function createAiHistoryMessage(result) {
+    return {
+        role: 'ai',
+        text: result.text,
+        thoughts: result.thoughts,
+        thoughtsDurationSeconds: result.thoughtsDurationSeconds,
+        sources: result.sources || null,
+        generatedImages: result.images,
+        thoughtSignature: result.thoughtSignature, // Save context signature for Gemini 3
+        officialContent: result.officialContent || null,
+        suppressCopy: result.suppressCopy === true,
+    };
+}
+
 /**
  * Saves a completed interaction to the chat history in local storage.
  * @param {string} text - The user's prompt.
@@ -32,15 +52,11 @@ export async function saveToHistory(text, result, filesObj = null) {
         const sessionId = generateUUID();
         const title = text.length > 30 ? text.substring(0, 30) + '...' : text;
 
-        // Normalize image data to array of base64 strings
-        let storedImages = null;
-        if (filesObj) {
-            if (Array.isArray(filesObj)) {
-                storedImages = filesObj.map((f) => f.base64);
-            } else if (filesObj.base64) {
-                storedImages = [filesObj.base64];
-            }
-        }
+        const storedAttachments = normalizeStoredAttachments(filesObj);
+        const imageDataUrls = storedAttachments
+            ? getImageAttachmentDataUrls(storedAttachments)
+            : [];
+        const storedImages = imageDataUrls.length > 0 ? imageDataUrls : null;
 
         const newSession = {
             id: sessionId,
@@ -50,19 +66,10 @@ export async function saveToHistory(text, result, filesObj = null) {
                 {
                     role: 'user',
                     text: text,
-                    image: storedImages, // Now stores array of base64 strings
+                    image: storedImages,
+                    attachments: storedAttachments,
                 },
-                {
-                    role: 'ai',
-                    text: result.text,
-                    thoughts: result.thoughts, // Save thoughts if present
-                    thoughtsDurationSeconds: result.thoughtsDurationSeconds,
-                    sources: result.sources || null,
-                    generatedImages: result.images, // Save generated images
-                    thoughtSignature: result.thoughtSignature, // Save context signature for Gemini 3
-                    officialContent: result.officialContent || null,
-                    suppressCopy: result.suppressCopy === true,
-                },
+                createAiHistoryMessage(result),
             ],
             context: result.context,
         };
@@ -91,17 +98,7 @@ export async function appendAiMessage(sessionId, result) {
         if (sessionIndex !== -1) {
             const session = geminiSessions[sessionIndex];
 
-            session.messages.push({
-                role: 'ai',
-                text: result.text,
-                thoughts: result.thoughts,
-                thoughtsDurationSeconds: result.thoughtsDurationSeconds,
-                sources: result.sources || null,
-                generatedImages: result.images,
-                thoughtSignature: result.thoughtSignature, // Save context signature for Gemini 3
-                officialContent: result.officialContent || null,
-                suppressCopy: result.suppressCopy === true,
-            });
+            session.messages.push(createAiHistoryMessage(result));
             session.context = result.context; // Update context
             session.timestamp = Date.now();
 
@@ -113,6 +110,36 @@ export async function appendAiMessage(sessionId, result) {
     } catch (e) {
         console.error('Error appending history:', e);
         return false;
+    }
+}
+
+export async function appendTurnToHistory(sessionId, text, result, filesObj = null) {
+    try {
+        if (!sessionId || !result || result.status !== 'success') return null;
+
+        const { geminiSessions = [] } = await chrome.storage.local.get(['geminiSessions']);
+        const sessionIndex = geminiSessions.findIndex((s) => s.id === sessionId);
+        if (sessionIndex === -1) return null;
+
+        const session = geminiSessions[sessionIndex];
+        const attachments = normalizeStoredAttachments(filesObj);
+        const imageDataUrls = attachments ? getImageAttachmentDataUrls(attachments) : [];
+        session.messages.push({
+            role: 'user',
+            text,
+            image: imageDataUrls.length > 0 ? imageDataUrls : null,
+            attachments,
+        });
+        session.messages.push(createAiHistoryMessage(result));
+        session.context = result.context;
+        session.timestamp = Date.now();
+
+        await moveSessionToTopAndSave(geminiSessions, sessionIndex, session);
+
+        return session;
+    } catch (e) {
+        console.error('Error appending turn history:', e);
+        return null;
     }
 }
 
@@ -149,8 +176,10 @@ export async function appendAiMessageIfDisplayable(sessionId, result) {
     const hasThoughts = thoughts.trim().length > 0;
     const hasThoughtSignature =
         typeof result?.thoughtSignature === 'string' && result.thoughtSignature.trim().length > 0;
+    const hasImages = Array.isArray(result?.images) && result.images.length > 0;
+    const hasSources = Array.isArray(result?.sources) && result.sources.length > 0;
 
-    if (!hasText && !hasThoughts && !hasThoughtSignature) {
+    if (!hasText && !hasThoughts && !hasThoughtSignature && !hasImages && !hasSources) {
         return false;
     }
 
@@ -177,11 +206,15 @@ export async function appendUserMessage(sessionId, text, images = null, metadata
         if (sessionIndex !== -1) {
             const session = geminiSessions[sessionIndex];
 
+            const attachments = normalizeUserAttachments(images);
             const message = {
                 role: 'user',
                 text: text,
                 image: images, // Store image array if present
             };
+            if (attachments.length > 0) {
+                message.attachments = attachments;
+            }
 
             if (metadata && typeof metadata === 'object') {
                 Object.entries(metadata).forEach(([key, value]) => {

@@ -13,6 +13,35 @@ function hasDisplayableText(text) {
     return typeof text === 'string' ? text.trim().length > 0 : Boolean(text);
 }
 
+function normalizeListValue(value) {
+    if (typeof value === 'string') return value;
+    if (value && typeof value === 'object') {
+        return value.url || value.title || JSON.stringify(value);
+    }
+    return '';
+}
+
+function normalizeList(values) {
+    return Array.isArray(values) ? values.map(normalizeListValue).filter(Boolean) : [];
+}
+
+function listsMatch(expectedValues, actualValues) {
+    const expected = normalizeList(expectedValues);
+    if (expected.length === 0) return false;
+    const actual = normalizeList(actualValues);
+    return (
+        expected.length === actual.length &&
+        expected.every((value, index) => value === actual[index])
+    );
+}
+
+function hasMatchingReplyMedia(lastMessage, request) {
+    return (
+        listsMatch(request.images, lastMessage.generatedImages) ||
+        listsMatch(request.sources, lastMessage.sources)
+    );
+}
+
 export class MessageHandler {
     constructor(sessionManager, uiController, imageManager, appController) {
         this.sessionManager = sessionManager;
@@ -140,9 +169,10 @@ export class MessageHandler {
 
         const expectedText = request.text || '';
         const actualText = lastMessage.text || '';
+        const mediaMatches = hasMatchingReplyMedia(lastMessage, request);
         const textMatches = expectedText
             ? actualText === expectedText || actualText.startsWith(expectedText)
-            : actualText.length > 0;
+            : actualText.length > 0 || mediaMatches;
         if (!textMatches) return false;
 
         if (request.thoughts) {

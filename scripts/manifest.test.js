@@ -23,12 +23,17 @@ async function listJavaScriptFiles(directory) {
     return files.flat().sort();
 }
 
+const classicContentSupportFiles = ['shared/dom/crop_core.js'];
+
 describe('manifest content scripts', () => {
     it('lists every runtime content script file exactly once', async () => {
         const manifest = JSON.parse(await readFile('manifest.json', 'utf8'));
         const listedFiles = manifest.content_scripts.flatMap((entry) => entry.js ?? []);
         const uniqueListedFiles = [...new Set(listedFiles)].sort();
-        const runtimeContentFiles = await listJavaScriptFiles('content');
+        const runtimeContentFiles = [
+            ...(await listJavaScriptFiles('content')),
+            ...classicContentSupportFiles,
+        ].sort();
 
         expect(listedFiles).toHaveLength(uniqueListedFiles.length);
         expect(uniqueListedFiles).toEqual(runtimeContentFiles);

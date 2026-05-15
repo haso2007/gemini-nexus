@@ -7,6 +7,52 @@
     const isZh = navigator.language.startsWith('zh');
     const DEFAULT_TITLE = isZh ? '询问' : 'Ask';
 
+    function isAllowedErrorLink(href) {
+        try {
+            const url = new URL(href);
+            return url.protocol === 'https:' && url.hostname === 'gemini.google.com';
+        } catch (_) {
+            return false;
+        }
+    }
+
+    function appendSanitizedErrorNode(target, node) {
+        if (node.nodeType === 3) {
+            target.appendChild(document.createTextNode(node.textContent || ''));
+            return;
+        }
+        if (node.nodeType !== 1) return;
+
+        if (node.tagName.toLowerCase() === 'a') {
+            const href = node.getAttribute('href') || '';
+            if (isAllowedErrorLink(href)) {
+                const link = document.createElement('a');
+                link.href = href;
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                link.style.color = 'inherit';
+                link.style.textDecoration = 'underline';
+                link.textContent = node.textContent || href;
+                target.appendChild(link);
+                return;
+            }
+        }
+
+        node.childNodes.forEach((child) => appendSanitizedErrorNode(target, child));
+    }
+
+    function appendErrorText(target, text) {
+        const raw = String(text || '');
+        if (!/<a\b/i.test(raw)) {
+            target.textContent = raw;
+            return;
+        }
+
+        const template = document.createElement('template');
+        template.innerHTML = raw;
+        template.content.childNodes.forEach((node) => appendSanitizedErrorNode(target, node));
+    }
+
     /**
      * Sub-controller for the Ask Window
      */
@@ -79,7 +125,13 @@
             if (!this.elements.askWindow) return;
 
             if (msg) {
-                this.elements.resultText.innerHTML = `<div style="color: #888; font-style: italic; margin-top: 10px;">${msg}</div>`;
+                this.elements.resultText.innerHTML = '';
+                const loading = document.createElement('div');
+                loading.style.color = '#888';
+                loading.style.fontStyle = 'italic';
+                loading.style.marginTop = '10px';
+                loading.textContent = msg;
+                this.elements.resultText.appendChild(loading);
             } else {
                 this.elements.resultText.innerHTML = '';
             }
@@ -157,11 +209,10 @@
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
                         <span>Error</span>
                     </div>
-                    <div style="font-size: 14px; line-height: 1.5; color: #1f1f1f;">
-                        ${text}
-                    </div>
+                    <div class="gemini-error-text" style="font-size: 14px; line-height: 1.5; color: #1f1f1f;"></div>
                 </div>
              `;
+            appendErrorText(this.elements.resultText.querySelector('.gemini-error-text'), text);
 
             // Show Footer with Actions (Retry is in footer-left)
             if (this.elements.windowFooter) this.elements.windowFooter.classList.remove('hidden');

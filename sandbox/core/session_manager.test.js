@@ -57,4 +57,40 @@ describe('SessionManager draft and persistence state', () => {
         expect(manager.currentSessionId).toBeNull();
         expect(manager.getPersistableSessions()).toEqual([]);
     });
+
+    it('stores full user attachment metadata while keeping image compatibility fields', () => {
+        const manager = new SessionManager();
+        const session = manager.createSession();
+
+        manager.addMessage(session.id, 'user', 'Review files', [
+            {
+                base64: 'data:image/png;base64,AAAA',
+                type: 'image/png',
+                name: 'diagram.png',
+            },
+            {
+                base64: 'data:application/pdf;base64,BBBB',
+                type: 'application/pdf',
+                name: 'spec.pdf',
+            },
+        ]);
+
+        expect(session.messages[0]).toEqual({
+            role: 'user',
+            text: 'Review files',
+            image: ['data:image/png;base64,AAAA'],
+            attachments: [
+                {
+                    base64: 'data:image/png;base64,AAAA',
+                    type: 'image/png',
+                    name: 'diagram.png',
+                },
+                {
+                    base64: 'data:application/pdf;base64,BBBB',
+                    type: 'application/pdf',
+                    name: 'spec.pdf',
+                },
+            ],
+        });
+    });
 });

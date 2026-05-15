@@ -5,6 +5,7 @@ import {
     DEFAULT_CONTEXT_MODE,
     DEFAULT_CONTEXT_RECENT_TURNS,
 } from '../../../shared/config/constants.js';
+import { countUserAttachmentsByType } from '../../../shared/attachments.js';
 import { getSessionContextSummary, updateSessionContextSummary } from '../history_manager.js';
 
 const MIN_RECENT_TURNS = 1;
@@ -117,8 +118,19 @@ function compactText(text) {
 
 function describeAttachments(message) {
     const markers = [];
-    if (Array.isArray(message?.image) && message.image.length > 0) {
-        markers.push(`[${message.image.length} image attachment(s)]`);
+    const userAttachmentCounts = countUserAttachmentsByType(message?.attachments);
+    const legacyImages =
+        userAttachmentCounts.images === 0 && userAttachmentCounts.files === 0
+            ? Array.isArray(message?.image)
+                ? message.image.length
+                : 0
+            : 0;
+    const imageCount = userAttachmentCounts.images + legacyImages;
+    if (imageCount > 0) {
+        markers.push(`[${imageCount} image attachment(s)]`);
+    }
+    if (userAttachmentCounts.files > 0) {
+        markers.push(`[${userAttachmentCounts.files} file attachment(s)]`);
     }
     if (Array.isArray(message?.generatedImages) && message.generatedImages.length > 0) {
         markers.push(`[${message.generatedImages.length} generated image(s)]`);

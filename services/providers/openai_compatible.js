@@ -1,18 +1,48 @@
 // services/providers/openai_compatible.js
+import {
+    countUserAttachmentsByType,
+    getImageAttachmentDataUrls,
+    normalizeUserAttachments,
+} from '../../shared/attachments.js';
 import { readSseJson } from './sse.js';
 
 function normalizeBaseUrl(baseUrl) {
     return String(baseUrl || '').replace(/\/$/, '');
 }
 
-function getFileBase64(files) {
-    if (!Array.isArray(files)) return [];
-    return files.map((file) => file?.base64).filter(Boolean);
+function getMessageAttachments(message) {
+    if (message?.role !== 'user') return [];
+    const attachments = normalizeUserAttachments(message?.attachments);
+    if (attachments.length > 0) return attachments;
+    return normalizeUserAttachments(message?.image);
 }
 
-function normalizeMessageImages(message) {
-    if (!message?.image || message.role !== 'user') return [];
-    return Array.isArray(message.image) ? message.image.filter(Boolean) : [message.image];
+function getUnsupportedFileAttachments(attachments) {
+    return normalizeUserAttachments(attachments).filter(
+        (attachment) => !attachment.type.startsWith('image/')
+    );
+}
+
+function assertCurrentAttachmentsSupported(files) {
+    const counts = countUserAttachmentsByType(files);
+    if (counts.files === 0) return;
+
+    throw new Error(
+        'OpenAI Compatible API supports image attachments only. Remove non-image files or switch to Gemini Official/Web.'
+    );
+}
+
+function textWithUnsupportedFileNotice(text, attachments) {
+    const unsupported = getUnsupportedFileAttachments(attachments);
+    if (unsupported.length === 0) return text || '';
+
+    const names = unsupported
+        .map((attachment) => attachment.name)
+        .filter(Boolean)
+        .join(', ');
+    const suffix = names ? `: ${names}` : '';
+    const marker = `[${unsupported.length} unsupported file attachment(s) omitted${suffix}]`;
+    return [text, marker].filter(Boolean).join('\n');
 }
 
 function buildOpenAIContent(text, images) {
@@ -37,6 +67,14 @@ function buildOpenAIContent(text, images) {
     return content;
 }
 
+function buildOpenAIUserContent(text, attachments) {
+    const normalizedAttachments = normalizeUserAttachments(attachments);
+    return buildOpenAIContent(
+        textWithUnsupportedFileNotice(text, normalizedAttachments),
+        getImageAttachmentDataUrls(normalizedAttachments)
+    );
+}
+
 function buildResponsesContent(text, images) {
     if (!images || images.length === 0) {
         return text || '';
@@ -57,6 +95,14 @@ function buildResponsesContent(text, images) {
     return content;
 }
 
+function buildResponsesUserContent(text, attachments) {
+    const normalizedAttachments = normalizeUserAttachments(attachments);
+    return buildResponsesContent(
+        textWithUnsupportedFileNotice(text, normalizedAttachments),
+        getImageAttachmentDataUrls(normalizedAttachments)
+    );
+}
+
 function buildChatMessages(prompt, systemInstruction, history, files) {
     const messages = [];
 
@@ -66,16 +112,20 @@ function buildChatMessages(prompt, systemInstruction, history, files) {
 
     if (Array.isArray(history)) {
         history.forEach((msg) => {
+            const attachments = getMessageAttachments(msg);
             messages.push({
                 role: msg.role === 'ai' ? 'assistant' : 'user',
-                content: buildOpenAIContent(msg.text, normalizeMessageImages(msg)),
+                content:
+                    msg.role === 'user'
+                        ? buildOpenAIUserContent(msg.text, attachments)
+                        : buildOpenAIContent(msg.text, []),
             });
         });
     }
 
     messages.push({
         role: 'user',
-        content: buildOpenAIContent(prompt, getFileBase64(files)),
+        content: buildOpenAIUserContent(prompt, files),
     });
 
     return messages;
@@ -86,16 +136,20 @@ function buildResponsesInput(prompt, history, files) {
 
     if (Array.isArray(history)) {
         history.forEach((msg) => {
+            const attachments = getMessageAttachments(msg);
             input.push({
                 role: msg.role === 'ai' ? 'assistant' : 'user',
-                content: buildResponsesContent(msg.text, normalizeMessageImages(msg)),
+                content:
+                    msg.role === 'user'
+                        ? buildResponsesUserContent(msg.text, attachments)
+                        : buildResponsesContent(msg.text, []),
             });
         });
     }
 
     input.push({
         role: 'user',
-        content: buildResponsesContent(prompt, getFileBase64(files)),
+        content: buildResponsesUserContent(prompt, files),
     });
 
     return input;
@@ -193,6 +247,7 @@ export async function sendOpenAIMessage(
     baseUrl = normalizeBaseUrl(baseUrl);
     const useResponsesApi = config?.useResponsesApi === true;
     const webSearch = config?.webSearch === true;
+    assertCurrentAttachmentsSupported(files);
     if (useResponsesApi) {
         return sendOpenAIResponsesMessage(
             prompt,

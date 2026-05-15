@@ -18,6 +18,10 @@ export async function fetchRequestParams(userIndex = '0') {
 
     const atValue = extractFromHTML('SNlM0e', html);
     const blValue = extractFromHTML('cfb2h', html);
+    const fSid = extractFromHTML('FdrFJe', html);
+    const uploadPushId = extractFromHTML('qKIAYe', html);
+    const uploadClientPctx = extractFromHTML('Ylro7b', html);
+    const locale = html.match(/<html[^>]*\slang="([^"]+)"/)?.[1] || 'en-US';
 
     // Try to find the user index (authuser) to support multiple accounts
     // Usually found in the URL or implied, but scraping data-index is safer if available
@@ -34,5 +38,13 @@ export async function fetchRequestParams(userIndex = '0') {
         );
     }
 
-    return { atValue, blValue, authUserIndex };
+    return {
+        atValue,
+        blValue,
+        fSid,
+        locale,
+        authUserIndex,
+        uploadPushId: uploadPushId || null,
+        uploadClientPctx: uploadClientPctx || null,
+    };
 }
