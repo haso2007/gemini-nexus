@@ -2,6 +2,7 @@
 (function () {
     const Utils = window.GeminiViewUtils;
     const ICONS = window.GeminiToolbarIcons;
+    const WINDOW_SIZE_STORAGE_KEY = 'gemini_nexus_window_size';
 
     function getDefaultTitle() {
         return window.GeminiToolbarStrings?.ask || 'Ask Gemini';
@@ -53,6 +54,18 @@
         template.content.childNodes.forEach((node) => appendSanitizedErrorNode(target, node));
     }
 
+    async function getSavedWindowSize() {
+        const storage = globalThis.chrome?.storage?.local;
+        if (!storage || typeof storage.get !== 'function') return null;
+
+        try {
+            const stored = await storage.get(WINDOW_SIZE_STORAGE_KEY);
+            return stored?.[WINDOW_SIZE_STORAGE_KEY] || null;
+        } catch (_) {
+            return null;
+        }
+    }
+
     /**
      * Sub-controller for the Ask Window
      */
@@ -64,10 +77,9 @@
         async show(rect, contextText, title, resetDrag = null, mousePoint = null) {
             if (!this.elements.askWindow) return;
 
-            // Load and apply saved dimensions
-            const stored = await chrome.storage.local.get('gemini_nexus_window_size');
-            if (stored.gemini_nexus_window_size) {
-                let { w, h } = stored.gemini_nexus_window_size;
+            const savedSize = await getSavedWindowSize();
+            if (savedSize) {
+                let { w, h } = savedSize;
                 const maxW = window.innerWidth * 0.95;
                 const maxH = window.innerHeight * 0.95;
                 if (w > maxW) w = maxW;

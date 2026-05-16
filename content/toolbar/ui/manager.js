@@ -134,7 +134,9 @@
         }
 
         saveWindowDimensions(w, h) {
-            chrome.storage.local.set({ gemini_nexus_window_size: { w, h } });
+            const storage = globalThis.chrome?.storage?.local;
+            if (!storage || typeof storage.set !== 'function') return;
+            storage.set({ gemini_nexus_window_size: { w, h } }).catch?.(() => {});
         }
 
         fireCallback(type, ...args) {
