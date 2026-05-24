@@ -46,6 +46,7 @@ describe('SidebarController', () => {
         localStorage.clear();
         document.body.innerHTML = `
             <button id="sidebar-search-toggle"></button>
+            <button id="sidebar-brand-toggle"></button>
             <button id="new-group-sidebar-btn"></button>
             <div class="search-container" hidden>
                 <input id="history-search">
@@ -182,6 +183,52 @@ describe('SidebarController', () => {
         expect(document.body.classList.contains('sidebar-collapsed')).toBe(true);
         expect(sidebar.classList.contains('collapsed')).toBe(true);
         controller.close();
+    });
+
+    it('collapses the wide sidebar when the brand area is clicked', () => {
+        document.body.classList.add('layout-wide');
+        const sidebar = document.createElement('div');
+        sidebar.className = 'sidebar open';
+        const controller = new SidebarController(
+            {
+                historyListEl: document.getElementById('history-list'),
+                sidebar,
+                sidebarOverlay: null,
+                historyToggleBtn: null,
+                closeSidebarBtn: null,
+            },
+            {}
+        );
+
+        document.getElementById('sidebar-brand-toggle').click();
+
+        expect(document.body.classList.contains('sidebar-collapsed')).toBe(true);
+        expect(sidebar.classList.contains('collapsed')).toBe(true);
+        expect(sidebar.classList.contains('open')).toBe(false);
+        expect(messagingMocks.saveSidebarExpandedToStorage).toHaveBeenLastCalledWith(false);
+        controller.close();
+    });
+
+    it('keeps the wide sidebar collapsed if the brand collapse action fires while collapsed', () => {
+        document.body.classList.add('layout-wide', 'sidebar-collapsed');
+        const sidebar = document.createElement('div');
+        sidebar.className = 'sidebar collapsed';
+        new SidebarController(
+            {
+                historyListEl: document.getElementById('history-list'),
+                sidebar,
+                sidebarOverlay: null,
+                historyToggleBtn: null,
+                closeSidebarBtn: null,
+            },
+            {}
+        );
+
+        document.getElementById('sidebar-brand-toggle').click();
+
+        expect(document.body.classList.contains('sidebar-collapsed')).toBe(true);
+        expect(sidebar.classList.contains('collapsed')).toBe(true);
+        expect(sidebar.classList.contains('open')).toBe(false);
     });
 
     it('does not toggle the sidebar when a history item is clicked', () => {

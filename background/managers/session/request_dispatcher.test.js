@@ -331,6 +331,145 @@ describe('RequestDispatcher response mapping', () => {
         });
     });
 
+    it('keeps generated Gemini Web edit images without placeholder text', async () => {
+        const generatedImage = { url: 'https://lh3.googleusercontent.com/gg-dl/generated-edit' };
+        const echoedInputImage = { url: 'https://lh3.googleusercontent.com/uploaded-input' };
+        sendWebMessage.mockResolvedValue({
+            text: '已完成修改。',
+            thoughts: null,
+            images: [generatedImage, echoedInputImage],
+            hasGeneratedImagePlaceholder: false,
+            newContext: { atValue: 'new-at-token' },
+        });
+        const auth = {
+            accountIndices: [0],
+            getOrFetchContext: vi.fn(async () => ({ atValue: 'at-token' })),
+            updateContext: vi.fn(),
+        };
+        const dispatcher = new RequestDispatcher(auth);
+        const files = [
+            {
+                name: 'image.png',
+                type: 'image/png',
+                base64: 'data:image/png;base64,AAAA',
+            },
+        ];
+
+        await expect(
+            dispatcher.dispatch(
+                { text: '把这张图改成赛博朋克风格', model: 'gemini-web', sessionId: 'session-web' },
+                { provider: 'web' },
+                files,
+                vi.fn(),
+                null
+            )
+        ).resolves.toEqual({
+            action: 'GEMINI_REPLY',
+            sessionId: 'session-web',
+            text: '已完成修改。',
+            thoughts: null,
+            sources: [],
+            images: [generatedImage],
+            status: 'success',
+            context: null,
+        });
+    });
+
+    it('keeps toolbar image edit mode results even when Gemini omits generated URL hints', async () => {
+        const generatedImage = { url: 'https://lh3.googleusercontent.com/generated-primary' };
+        sendWebMessage.mockResolvedValue({
+            text: '',
+            thoughts: null,
+            images: [generatedImage],
+            hasGeneratedImagePlaceholder: false,
+            newContext: { atValue: 'new-at-token' },
+        });
+        const auth = {
+            accountIndices: [0],
+            getOrFetchContext: vi.fn(async () => ({ atValue: 'at-token' })),
+            updateContext: vi.fn(),
+        };
+        const dispatcher = new RequestDispatcher(auth);
+        const files = [
+            {
+                name: 'image.png',
+                type: 'image/png',
+                base64: 'data:image/png;base64,AAAA',
+            },
+        ];
+
+        await expect(
+            dispatcher.dispatch(
+                {
+                    text: 'remove background',
+                    model: 'gemini-web',
+                    sessionId: 'session-web',
+                    imageMode: 'remove_bg',
+                },
+                { provider: 'web' },
+                files,
+                vi.fn(),
+                null
+            )
+        ).resolves.toEqual({
+            action: 'GEMINI_REPLY',
+            sessionId: 'session-web',
+            text: '',
+            thoughts: null,
+            sources: [],
+            images: [generatedImage],
+            status: 'success',
+            context: null,
+        });
+    });
+
+    it('keeps uploaded-image edit prompt results when Gemini returns a generic image URL', async () => {
+        const generatedImage = { url: 'https://lh3.googleusercontent.com/generated-primary' };
+        sendWebMessage.mockResolvedValue({
+            text: '已按要求改好了。',
+            thoughts: null,
+            images: [generatedImage],
+            hasGeneratedImagePlaceholder: false,
+            newContext: { atValue: 'new-at-token' },
+        });
+        const auth = {
+            accountIndices: [0],
+            getOrFetchContext: vi.fn(async () => ({ atValue: 'at-token' })),
+            updateContext: vi.fn(),
+        };
+        const dispatcher = new RequestDispatcher(auth);
+        const files = [
+            {
+                name: 'image.png',
+                type: 'image/png',
+                base64: 'data:image/png;base64,AAAA',
+            },
+        ];
+
+        await expect(
+            dispatcher.dispatch(
+                {
+                    text: '把这张图改成赛博朋克风格',
+                    model: 'gemini-web',
+                    sessionId: 'session-web',
+                },
+                { provider: 'web' },
+                files,
+                vi.fn(),
+                null
+            )
+        ).resolves.toEqual({
+            action: 'GEMINI_REPLY',
+            sessionId: 'session-web',
+            text: '已按要求改好了。',
+            thoughts: null,
+            sources: [],
+            images: [generatedImage],
+            status: 'success',
+            context: null,
+        });
+    });
+
     it('sends web requests with explicit local history and resets native context ids', async () => {
         getHistory.mockResolvedValue([
             { role: 'user', text: 'Remember code ALPHA.' },

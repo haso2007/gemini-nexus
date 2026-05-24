@@ -16,7 +16,10 @@ describe('SidebarTemplate', () => {
 
         expect(header.querySelector('#close-sidebar.sidebar-toggle-btn')).not.toBeNull();
         const brand = header.firstElementChild;
+        expect(brand.id).toBe('sidebar-brand-toggle');
+        expect(brand.tagName).toBe('BUTTON');
         expect(brand.className).toBe('sidebar-brand');
+        expect(brand.getAttribute('type')).toBe('button');
         expect(brand.querySelector('.sidebar-brand-logo').getAttribute('src')).toBe('../logo.png');
         expect(brand.querySelector('.sidebar-brand-logo').getAttribute('aria-hidden')).toBe('true');
         expect(brand.querySelector('.sidebar-header-title').textContent).toBe('Gemini Nexus');

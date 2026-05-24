@@ -106,6 +106,7 @@ export class SidebarController {
         this.listEl = elements.historyListEl;
         this.toggleBtn = elements.historyToggleBtn;
         this.closeBtn = elements.closeSidebarBtn;
+        this.brandToggleBtn = document.getElementById('sidebar-brand-toggle');
 
         this.searchContainer = document.querySelector('.search-container');
         this.searchInput = document.getElementById('history-search');
@@ -161,6 +162,9 @@ export class SidebarController {
         }
         if (this.closeBtn) {
             this.closeBtn.addEventListener('click', () => this.toggle());
+        }
+        if (this.brandToggleBtn) {
+            this.brandToggleBtn.addEventListener('click', () => this.close());
         }
         if (this.collapsedToggleBtn) {
             this.collapsedToggleBtn.addEventListener('click', () => this.toggle());

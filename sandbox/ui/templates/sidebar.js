@@ -5,10 +5,10 @@ export const SidebarTemplate = `
     <div id="history-sidebar" class="sidebar">
         <div class="sidebar-expanded-pane">
             <div class="sidebar-header">
-                <div class="sidebar-brand">
+                <button id="sidebar-brand-toggle" class="sidebar-brand" type="button" data-i18n-title="toggleHistory" title="Chat History" aria-label="Chat History">
                     <img class="sidebar-brand-logo" src="../logo.png" alt="" aria-hidden="true">
-                    <div class="sidebar-header-title">Gemini Nexus</div>
-                </div>
+                    <span class="sidebar-header-title">Gemini Nexus</span>
+                </button>
                 <button id="close-sidebar" class="sidebar-icon-btn sidebar-toggle-btn" data-i18n-title="toggleHistory" title="Chat History">
                     ${TemplateIcons.SIDEBAR_TOGGLE}
                 </button>

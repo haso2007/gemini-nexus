@@ -206,9 +206,25 @@ body.layout-wide .sidebar-overlay {
 .sidebar-brand {
     min-width: 0;
     flex: 1;
+    height: 40px;
+    padding: 0 6px 0 0;
+    border: none;
+    border-radius: 12px;
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
     display: flex;
     align-items: center;
     gap: 8px;
+    font: inherit;
+    text-align: left;
+    transition:
+        background-color 0.15s,
+        color 0.15s;
+}
+
+.sidebar-brand:hover {
+    background: var(--btn-hover);
 }
 
 .sidebar-brand-logo {

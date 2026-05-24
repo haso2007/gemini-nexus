@@ -15,6 +15,16 @@ import {
 import { getHistory } from './history_store.js';
 import { prepareManagedContext } from './context_manager.js';
 
+const WEB_IMAGE_EDIT_MODES = new Set([
+    'upscale',
+    'expand',
+    'remove_text',
+    'remove_bg',
+    'remove_watermark',
+]);
+const WEB_IMAGE_EDIT_INTENT_PATTERN =
+    /\b(edit|modify|change|alter|retouch|upscale|expand|remove|replace|recolor)\b|修图|编辑|修改|改成|改为|改一下|换成|替换|变成|去掉|移除|删除|抠图|抠除|去背景|去水印|扩图|放大|重绘|生成.*图/i;
+
 function getRequestHistory(request) {
     if (Array.isArray(request.historyOverride)) {
         return request.historyOverride;
@@ -38,9 +48,49 @@ function hasImageAttachments(files) {
     return getImageAttachmentDataUrls(files).length > 0;
 }
 
-function suppressWebImageEchoes(response, files) {
+function getImageUrl(image) {
+    return typeof image === 'string' ? image : image?.url;
+}
+
+function isLikelyGeneratedWebImage(image) {
+    const url = String(getImageUrl(image) || '');
+    if (!url) return false;
+
+    try {
+        const parsedUrl = new URL(url.startsWith('//') ? `https:${url}` : url);
+        return (
+            parsedUrl.pathname.includes('/gg-dl/') ||
+            parsedUrl.pathname.includes('/image_generation_content/')
+        );
+    } catch {
+        return url.includes('/gg-dl/') || url.includes('/image_generation_content/');
+    }
+}
+
+function isLikelyImageEditRequest(request = {}) {
+    if (WEB_IMAGE_EDIT_MODES.has(request.imageMode)) return true;
+    return WEB_IMAGE_EDIT_INTENT_PATTERN.test(String(request.text || ''));
+}
+
+function shouldKeepUploadedImageResponseImages(response, request = {}) {
+    if (!Array.isArray(response?.images) || response.images.length === 0) return false;
+    if (response?.hasGeneratedImagePlaceholder) return true;
+    if (isLikelyImageEditRequest(request)) return true;
+    if (response.images.some(isLikelyGeneratedWebImage)) return true;
+    return String(response?.text || '').trim() === '';
+}
+
+function suppressWebImageEchoes(response, files, request = {}) {
     if (!hasImageAttachments(files)) return response;
-    if (response?.hasGeneratedImagePlaceholder) return response;
+    if (shouldKeepUploadedImageResponseImages(response, request)) {
+        const generatedImages = response.images.filter(isLikelyGeneratedWebImage);
+        if (generatedImages.length === 0) return response;
+        return {
+            ...response,
+            images: generatedImages,
+        };
+    }
+
     return {
         ...response,
         images: [],
@@ -371,10 +421,14 @@ export class RequestDispatcher {
                 // Success! Update auth state
                 await this.auth.updateContext(response.newContext, request.model);
 
-                return createSuccessReply(request, suppressWebImageEchoes(response, files), {
-                    sources: [],
-                    context: null,
-                });
+                return createSuccessReply(
+                    request,
+                    suppressWebImageEchoes(response, files, request),
+                    {
+                        sources: [],
+                        context: null,
+                    }
+                );
             } catch (error) {
                 const message = error.message || '';
                 if (isUnavailableWebAuthError(message)) {
