@@ -12,6 +12,7 @@ import {
     getNextWebThinkingLevel,
     normalizeWebThinkingLevelForModel,
 } from '../../shared/models/web_thinking.js';
+import { isDedicatedApiProvider } from '../../shared/settings/dedicated_providers.js';
 
 export class AppController {
     constructor(sessionManager, uiController, imageManager) {
@@ -137,6 +138,17 @@ export class AppController {
             (connectionData?.useOfficialApi === true ? 'official' : DEFAULT_PROVIDER);
         if (provider === 'openai' && connectionData) {
             connectionData.openaiSelectedModel = model;
+        }
+        if (isDedicatedApiProvider(provider) && connectionData) {
+            const providers = connectionData.dedicatedApiProviders || {};
+            const current = providers[provider] || { provider };
+            connectionData.dedicatedApiProviders = {
+                ...providers,
+                [provider]: {
+                    ...current,
+                    selectedModel: model,
+                },
+            };
         }
         if (provider === 'web') {
             this.syncWebThinkingForModel(model, { saveIfChanged: true });

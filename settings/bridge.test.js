@@ -23,6 +23,7 @@ function createController() {
         updateTextSelectionBlacklist: vi.fn(),
         updateCustomSelectionTools: vi.fn(),
         updateImageTools: vi.fn(),
+        updateGeneratedImageWatermarkRemoval: vi.fn(),
         updateSidebarBehavior: vi.fn(),
         updateSidePanelScope: vi.fn(),
         updateAccountIndices: vi.fn(),
@@ -31,6 +32,7 @@ function createController() {
         updateAppVersion: vi.fn(),
         updateMcpTestResult: vi.fn(),
         updateMcpToolsResult: vi.fn(),
+        updateProviderModelsResult: vi.fn(),
         saveLogFile: vi.fn(),
     };
 }
@@ -65,6 +67,7 @@ describe('StandaloneSettingsBridge', () => {
                                 },
                             ],
                             geminiImageToolsEnabled: false,
+                            geminiGeneratedImageWatermarkRemovalEnabled: false,
                             geminiSidebarBehavior: 'restore',
                             geminiSidePanelScope: 'global',
                             geminiAccountIndices: '0,1',
@@ -102,6 +105,7 @@ describe('StandaloneSettingsBridge', () => {
             },
         ]);
         expect(controller.updateImageTools).toHaveBeenCalledWith(false);
+        expect(controller.updateGeneratedImageWatermarkRemoval).toHaveBeenCalledWith(false);
         expect(controller.updateSidebarBehavior).toHaveBeenCalledWith('restore');
         expect(controller.updateSidePanelScope).toHaveBeenCalledWith('global');
         expect(controller.updateContextSettings).toHaveBeenCalledWith({
@@ -153,6 +157,23 @@ describe('StandaloneSettingsBridge', () => {
         });
     });
 
+    it('saves generated image watermark removal without the sidepanel iframe bridge', () => {
+        const controller = createController();
+        const bridge = new StandaloneSettingsBridge(controller);
+
+        bridge.handleWindowMessage({
+            source: window,
+            data: {
+                action: 'SAVE_GENERATED_IMAGE_WATERMARK_REMOVAL',
+                payload: false,
+            },
+        });
+
+        expect(chrome.storage.local.set).toHaveBeenCalledWith({
+            geminiGeneratedImageWatermarkRemovalEnabled: false,
+        });
+    });
+
     it('forwards MCP test requests and applies the response to the settings controller', async () => {
         const controller = createController();
         const bridge = new StandaloneSettingsBridge(controller);
@@ -170,6 +191,34 @@ describe('StandaloneSettingsBridge', () => {
                 action: 'MCP_TEST_RESULT',
                 ok: true,
                 toolsCount: 2,
+            })
+        );
+    });
+
+    it('forwards provider model-list responses to the settings controller', async () => {
+        chrome.runtime.sendMessage.mockResolvedValueOnce({
+            action: 'PROVIDER_MODELS_RESULT',
+            ok: true,
+            provider: 'openrouter',
+            models: ['openai/gpt-5.2'],
+        });
+        const controller = createController();
+        const bridge = new StandaloneSettingsBridge(controller);
+
+        bridge.handleWindowMessage({
+            source: window,
+            data: {
+                action: 'FORWARD_TO_BACKGROUND',
+                payload: { action: 'GET_PROVIDER_MODELS', provider: 'openrouter' },
+            },
+        });
+
+        await vi.waitFor(() =>
+            expect(controller.updateProviderModelsResult).toHaveBeenCalledWith({
+                action: 'PROVIDER_MODELS_RESULT',
+                ok: true,
+                provider: 'openrouter',
+                models: ['openai/gpt-5.2'],
             })
         );
     });

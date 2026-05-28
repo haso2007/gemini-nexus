@@ -54,6 +54,20 @@ export function restoreImageTools(frame) {
     });
 }
 
+export function restoreGeneratedImageWatermarkRemoval(frame) {
+    restorePreference(
+        ['geminiGeneratedImageWatermarkRemovalEnabled'],
+        'generated image watermark removal setting',
+        (result) => {
+            const enabled = result.geminiGeneratedImageWatermarkRemovalEnabled !== false;
+            frame.postMessage({
+                action: 'RESTORE_GENERATED_IMAGE_WATERMARK_REMOVAL',
+                payload: enabled,
+            });
+        }
+    );
+}
+
 export function restoreAccountIndices(frame) {
     restorePreference(['geminiAccountIndices'], 'account indices', (result) => {
         frame.postMessage({

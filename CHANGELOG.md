@@ -1,5 +1,15 @@
 # Changelog
 
+## v5.0.9 - 2026-05-27
+
+- 优化浏览器控制链路，增强快照 UID 稳定性、导航后的缓存清理、弹窗检测提示和动作后的等待逻辑。
+- 改进表单自动化，`fill` / `fill_form` 现在能更可靠处理 checkbox、radio 和 switch 类型控件。
+- 优化工具调用过程显示，工具状态使用唯一调用键并记录耗时，避免连续同名工具调用互相覆盖。
+- 为工具调用过程卡片增加动作图标并修正卡片对齐位置，覆盖浏览器控制动作、常见 MCP 工具关键词和未知工具兜底显示。
+- 新增 OpenAI 官方、DeepSeek、Anthropic、智谱专门 API 渠道，保留 OpenAI Compatible 通用渠道，同时为 Claude Messages、DeepSeek reasoning、GLM thinking 和 OpenAI Responses 提供专门适配。
+- 新增 OpenRouter 与通义 / DashScope 专门 API 渠道，OpenRouter 可从 `/models` 刷新模型列表，并支持 provider routing JSON、OpenRouter `reasoning` 参数和 DashScope `enable_thinking` / VL 模型请求。
+- 补充浏览器控制、工具调用状态和工具卡片渲染相关回归测试。
+
 ## v5.0.8 - 2026-05-26
 
 - 新增页面与选中文本朗读能力，扩展内容工具栏的语音阅读入口与回归测试覆盖。

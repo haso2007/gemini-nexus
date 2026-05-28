@@ -281,6 +281,62 @@ describe('BrowserControlManager native tab group indicator', () => {
         expect(manager.lockedTabId).toBe(99);
     });
 
+    it('clears the controlled target when a page-management tool closes the last page', async () => {
+        const manager = new BrowserControlManager();
+        manager.dispatcher.dispatch = vi.fn(() =>
+            Promise.resolve({
+                output: 'Closed page 0: Last tab. No controlled pages remain.',
+                _meta: { clearTarget: true },
+            })
+        );
+        manager.connection.attached = true;
+        manager.connection.currentTabId = 42;
+        manager.lockedTabId = 42;
+        manager.connection.targetTabId = 42;
+
+        const result = await manager.execute({ name: 'close_page', args: { index: 0 } });
+
+        expect(result).toBe('Closed page 0: Last tab. No controlled pages remain.');
+        expect(manager.lockedTabId).toBeNull();
+        expect(manager.connection.targetTabId).toBeNull();
+    });
+
+    it('runs browser-control tool executions sequentially against the shared debugger session', async () => {
+        const manager = new BrowserControlManager();
+        manager.connection.attached = true;
+        manager.connection.currentTabId = 42;
+        manager.lockedTabId = 42;
+        let releaseFirst;
+        const executionOrder = [];
+        manager.dispatcher.dispatch = vi.fn(async (name) => {
+            executionOrder.push(`${name}:start`);
+            if (name === 'click') {
+                await new Promise((resolve) => {
+                    releaseFirst = resolve;
+                });
+            }
+            executionOrder.push(`${name}:end`);
+            return `${name} done`;
+        });
+        manager.ensureConnection = vi.fn(() => Promise.resolve(true));
+
+        const first = manager.execute({ name: 'click', args: { uid: '1_2' } });
+        const second = manager.execute({ name: 'take_snapshot', args: {} });
+
+        await vi.waitFor(() => expect(executionOrder).toEqual(['click:start']));
+
+        releaseFirst();
+
+        await expect(first).resolves.toBe('click done');
+        await expect(second).resolves.toBe('take_snapshot done');
+        expect(executionOrder).toEqual([
+            'click:start',
+            'click:end',
+            'take_snapshot:start',
+            'take_snapshot:end',
+        ]);
+    });
+
     it('runs page-management tools even when the current tab cannot attach a debugger', async () => {
         const manager = new BrowserControlManager();
         manager.ensureConnection = vi.fn(() => Promise.resolve(false));

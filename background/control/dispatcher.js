@@ -53,9 +53,30 @@ export class ToolDispatcher {
         return !ToolDispatcher.DEBUGGER_OPTIONAL_TOOL_NAMES.has(name);
     }
 
-    constructor(actions, snapshotManager) {
+    constructor(actions, snapshotManager, connection = null) {
         this.actions = actions;
         this.snapshotManager = snapshotManager;
+        this.connection = connection;
+    }
+
+    getOpenDialogText() {
+        const dialog = this.connection?.getDialog?.();
+        if (!dialog) return '';
+
+        const defaultValue =
+            dialog.type === 'prompt' && dialog.defaultPrompt
+                ? ` (default value: "${dialog.defaultPrompt}")`
+                : '';
+        return `# Open dialog\n${dialog.type}: ${dialog.message}${defaultValue}.\nCall handle_dialog to handle it before continuing.`;
+    }
+
+    maybeAppendDialogHint(name, result) {
+        if (name === 'handle_dialog' || typeof result !== 'string') return result;
+
+        const dialogText = this.getOpenDialogText();
+        if (!dialogText || result.includes('# Open dialog')) return result;
+
+        return `${result}\n\n${dialogText}`;
     }
 
     async maybeAppendSnapshot(name, args, result) {
@@ -66,6 +87,11 @@ export class ToolDispatcher {
             result.startsWith('Error')
         ) {
             return result;
+        }
+
+        const dialogText = this.getOpenDialogText();
+        if (dialogText) {
+            return `${result}\n\n${dialogText}`;
         }
 
         const snapshot = await this.snapshotManager.takeSnapshot();
@@ -133,6 +159,7 @@ export class ToolDispatcher {
                 return `Error: Unknown tool '${name}'`;
         }
 
-        return this.maybeAppendSnapshot(name, args, result);
+        result = await this.maybeAppendSnapshot(name, args, result);
+        return this.maybeAppendDialogHint(name, result);
     }
 }

@@ -11,6 +11,7 @@
         "content/**/*.js",
         "shared/ui/**/*.js",
         "shared/dom/**/*.js",
+        "shared/media/**/*.js",
         "scripts/*.mjs",
         "scripts/*.test.js"
     ],

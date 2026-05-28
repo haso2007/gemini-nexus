@@ -29,6 +29,68 @@ describe('connection settings helpers', () => {
             openaiThinkingLevel: 'low',
             openaiUseResponsesApi: false,
             openaiWebSearch: false,
+            dedicatedApiProviders: {
+                openai_official: {
+                    provider: 'openai_official',
+                    baseUrl: 'https://api.openai.com/v1',
+                    apiKey: '',
+                    model: 'gpt-5.1, gpt-5, gpt-4.1',
+                    selectedModel: '',
+                    thinkingLevel: 'low',
+                    webSearch: false,
+                    providerRouting: '',
+                },
+                deepseek: {
+                    provider: 'deepseek',
+                    baseUrl: 'https://api.deepseek.com',
+                    apiKey: '',
+                    model: 'deepseek-v4-pro, deepseek-v4-flash, deepseek-reasoner, deepseek-chat',
+                    selectedModel: '',
+                    thinkingLevel: 'low',
+                    webSearch: false,
+                    providerRouting: '',
+                },
+                openrouter: {
+                    provider: 'openrouter',
+                    baseUrl: 'https://openrouter.ai/api/v1',
+                    apiKey: '',
+                    model: 'openai/gpt-5.2, anthropic/claude-sonnet-4.5, google/gemini-3-pro-preview, deepseek/deepseek-v3.2',
+                    selectedModel: '',
+                    thinkingLevel: 'low',
+                    webSearch: false,
+                    providerRouting: '',
+                },
+                dashscope: {
+                    provider: 'dashscope',
+                    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+                    apiKey: '',
+                    model: 'qwen3.7-max, qwen3.6-plus, qwen-plus, qwen3-vl-plus, qwen-vl-max, qwq-plus',
+                    selectedModel: '',
+                    thinkingLevel: 'low',
+                    webSearch: false,
+                    providerRouting: '',
+                },
+                anthropic: {
+                    provider: 'anthropic',
+                    baseUrl: 'https://api.anthropic.com/v1',
+                    apiKey: '',
+                    model: 'claude-sonnet-4-5, claude-opus-4-1, claude-haiku-4-5',
+                    selectedModel: '',
+                    thinkingLevel: 'low',
+                    webSearch: false,
+                    providerRouting: '',
+                },
+                zhipu: {
+                    provider: 'zhipu',
+                    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+                    apiKey: '',
+                    model: 'glm-4.6, glm-4.5, glm-4-plus',
+                    selectedModel: '',
+                    thinkingLevel: 'low',
+                    webSearch: false,
+                    providerRouting: '',
+                },
+            },
             mcpEnabled: false,
             mcpTransport: 'streamable-http',
             mcpServerUrl: 'http://127.0.0.1:3006/mcp',
@@ -60,6 +122,7 @@ describe('connection settings helpers', () => {
         expect(getConnectionProvider({ geminiUseOfficialApi: true })).toBe('official');
         expect(getConnectionProvider({})).toBe('web');
         expect(getSelectedModelForProvider({}, 'openai')).toBe('openai_custom');
+        expect(getSelectedModelForProvider({}, 'deepseek')).toBe('deepseek-v4-pro');
         expect(getSelectedModelForProvider({}, 'web')).toBe('8c46e95b1a07cecc');
     });
 
@@ -69,6 +132,10 @@ describe('connection settings helpers', () => {
         expect(CONNECTION_STORAGE_KEYS).toContain('geminiWebThinkingLevel');
         expect(CONNECTION_STORAGE_KEYS).toContain('geminiWebTemporaryChat');
         expect(CONNECTION_STORAGE_KEYS).toContain('geminiOpenaiSelectedModel');
+        expect(CONNECTION_STORAGE_KEYS).toContain('geminiDeepseekApiKey');
+        expect(CONNECTION_STORAGE_KEYS).toContain('geminiOpenrouterProviderRouting');
+        expect(CONNECTION_STORAGE_KEYS).toContain('geminiDashscopeSelectedModel');
+        expect(CONNECTION_STORAGE_KEYS).toContain('geminiAnthropicSelectedModel');
         expect(CONNECTION_STORAGE_KEYS).toContain('geminiMcpServers');
     });
 
@@ -83,6 +150,15 @@ describe('connection settings helpers', () => {
                 openaiModel: 'gpt-5',
                 openaiUseResponsesApi: true,
                 openaiWebSearch: true,
+                dedicatedApiProviders: {
+                    deepseek: {
+                        baseUrl: 'https://api.deepseek.com',
+                        apiKey: 'deepseek-key',
+                        model: 'deepseek-v4-pro',
+                        selectedModel: 'deepseek-v4-pro',
+                        thinkingLevel: 'high',
+                    },
+                },
                 mcpEnabled: true,
                 mcpServers: [{ id: 'srv', url: 'http://localhost/mcp' }],
                 mcpActiveServerId: 'srv',
@@ -98,6 +174,9 @@ describe('connection settings helpers', () => {
                 geminiOpenaiModel: 'gpt-5',
                 geminiOpenaiUseResponsesApi: true,
                 geminiOpenaiWebSearch: true,
+                geminiDeepseekApiKey: 'deepseek-key',
+                geminiDeepseekSelectedModel: 'deepseek-v4-pro',
+                geminiDeepseekThinkingLevel: 'high',
                 geminiMcpEnabled: true,
                 geminiMcpTransport: 'streamable-http',
                 geminiMcpServerUrl: '',

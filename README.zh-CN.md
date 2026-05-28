@@ -33,13 +33,13 @@
 
 ### 项目简介
 
-**Gemini Nexus** 赋予浏览器原生 AI 灵魂，是一款集成 Gemini Web、Google Gemini API 与 OpenAI Compatible API 能力的 Chrome 扩展程序。它不仅仅是一个侧边栏插件，而是通过注入式的**悬浮工具栏**、图像与截图输入、基于 Chrome DevTools Protocol 的**浏览器控制工具**以及可选的**外部 MCP 工具**，将 AI 的触角伸向网页浏览的每一个交互细节。
+**Gemini Nexus** 赋予浏览器原生 AI 灵魂，是一款集成 Gemini Web、Google Gemini API、OpenAI Compatible API 以及多个第三方专门 API 渠道的 Chrome 扩展程序。它不仅仅是一个侧边栏插件，而是通过注入式的**悬浮工具栏**、图像与截图输入、基于 Chrome DevTools Protocol 的**浏览器控制工具**以及可选的**外部 MCP 工具**，将 AI 的触角伸向网页浏览的每一个交互细节。
 
 ### 能力概览
 
 Gemini Nexus 当前围绕浏览器内 AI 工作流提供以下能力：
 
-- **Gemini Web**、**Gemini API** 与 **OpenAI Compatible API** 三种提供方切换，支持自定义 `Base URL`、`API Key` 与 `Model IDs`。
+- **Gemini Web**、**Gemini API**、**OpenAI Compatible API**、**OpenAI 官方 API**、**DeepSeek API**、**OpenRouter API**、**通义 / DashScope API**、**Anthropic API** 与 **智谱 API** 多提供方切换，支持按渠道配置 `Base URL`、`API Key` 与 `Model IDs`。
 - **Gemini Web 临时对话** 开关，可让 Web 渠道请求不进入 Gemini 近期对话。
 - **Gemini API Google Search grounding** 支持，并在回复中展示联网来源。
 - **OpenAI Compatible API 联网搜索** 支持，可按当前接口使用 Responses API `web_search` 或 Chat Completions `web_search_options`。
@@ -52,13 +52,19 @@ Gemini Nexus 当前围绕浏览器内 AI 工作流提供以下能力：
 
 ### 多驱动核心对比
 
-项目内置了三种驱动方案，位于 `services/providers`，并通过代码逻辑动态适配不同的使用场景：
+项目内置了多种驱动方案，位于 `services/providers`，并通过代码逻辑动态适配不同的使用场景：
 
-| 驱动方案              | 逻辑入口               | 支持模型                 | 核心优势                                                           | 使用前提                |
-| :-------------------- | :--------------------- | :----------------------- | :----------------------------------------------------------------- | :---------------------- |
-| **Web Client**        | `web.js`               | 当前 Gemini Web 聊天模式 | **免 API Key**，复用 Gemini 网页版会话，支持可选临时对话           | 需保持 Google 账号登录  |
-| **Official API**      | `official.js`          | Gemini Flash/Pro 预览版  | **极速响应**，支持 **Thinking** 与 Google Search grounding         | 需 Google AI Studio Key |
-| **OpenAI Compatible** | `openai_compatible.js` | GPT/Claude/兼容模型      | **高扩展性**，支持 Chat Completions / Responses API 与可选联网搜索 | 需第三方服务密钥        |
+| 驱动方案              | 逻辑入口               | 支持模型                 | 核心优势                                                            | 使用前提                |
+| :-------------------- | :--------------------- | :----------------------- | :------------------------------------------------------------------ | :---------------------- |
+| **Web Client**        | `web.js`               | 当前 Gemini Web 聊天模式 | **免 API Key**，复用 Gemini 网页版会话，支持可选临时对话            | 需保持 Google 账号登录  |
+| **Official API**      | `official.js`          | Gemini Flash/Pro 预览版  | **极速响应**，支持 **Thinking** 与 Google Search grounding          | 需 Google AI Studio Key |
+| **OpenAI Compatible** | `openai_compatible.js` | GPT/Claude/兼容模型      | **高扩展性**，支持 Chat Completions / Responses API 与可选联网搜索  | 需第三方服务密钥        |
+| **OpenAI 官方 API**   | `openai_compatible.js` | GPT 推理/搜索模型        | 专门走 Responses API，支持 reasoning summary 与可选联网搜索         | 需 OpenAI API Key       |
+| **DeepSeek API**      | `openai_compatible.js` | DeepSeek 对话/推理模型   | DeepSeek Chat Completions 默认端点，并显示 `reasoning_content`      | 需 DeepSeek API Key     |
+| **OpenRouter API**    | `openai_compatible.js` | OpenRouter 模型 ID       | 可拉取 `/models`，支持 provider routing JSON 与原生 `reasoning`     | 需 OpenRouter API Key   |
+| **通义 / DashScope**  | `openai_compatible.js` | Qwen 文本与 VL 模型      | 专门 DashScope 兼容端点，发送 `enable_thinking` 并支持 VL 图片输入  | 需 DashScope API Key    |
+| **Anthropic API**     | `anthropic.js`         | Claude 模型              | 原生 Messages API，支持图片输入与 extended thinking 流式显示        | 需 Anthropic API Key    |
+| **智谱 API**          | `openai_compatible.js` | GLM 模型                 | 专门 GLM Chat Completions profile，并发送原生 thinking 开关 payload | 需智谱 API Key          |
 
 ### 浏览器控制能力集
 

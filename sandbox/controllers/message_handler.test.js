@@ -277,4 +277,57 @@ describe('MessageHandler.handleStreamUpdate', () => {
             { suppressCopy: true }
         );
     });
+
+    it('updates an existing tool status card for progress phases instead of appending duplicates', () => {
+        const { handler, ui } = createMessageHandlerHarness();
+        appendMessage.mockImplementationOnce(
+            (container, text, role, attachment, thoughts, sources, options) => {
+                const div = document.createElement('div');
+                if (options.toolStatusKey) div.dataset.toolStatusKey = options.toolStatusKey;
+                const controller = {
+                    div,
+                    dispose: vi.fn(),
+                    finalize: vi.fn(),
+                    update: vi.fn(),
+                };
+                div.__messageController = controller;
+                container.appendChild(div);
+                return controller;
+            }
+        );
+
+        handler.handleToolCallStatusMessage({
+            action: 'TOOL_CALL_STATUS_MESSAGE',
+            sessionId: 'session-1',
+            statusKey: 'session-1|click|local:1',
+            toolName: 'click',
+            status: 'running',
+            text: 'Preparing the controlled tab and debugger session...',
+            phase: 'prepare',
+            toolCallText: '{"tool":"click","args":{"uid":"1_2"}}',
+        });
+        const controller = appendMessage.mock.results[0].value;
+
+        handler.handleToolCallStatusMessage({
+            action: 'TOOL_CALL_STATUS_MESSAGE',
+            sessionId: 'session-1',
+            statusKey: 'session-1|click|local:1',
+            toolName: 'click',
+            status: 'running',
+            text: 'Running click...',
+            phase: 'execute',
+            toolCallText: '{"tool":"click","args":{"uid":"1_2"}}',
+        });
+
+        expect(appendMessage).toHaveBeenCalledTimes(1);
+        expect(ui.historyDiv.querySelectorAll('[data-tool-status-key]')).toHaveLength(1);
+        expect(controller.update).toHaveBeenCalledWith(
+            'Running click...',
+            null,
+            expect.objectContaining({
+                toolPhase: 'execute',
+                toolStatus: 'running',
+            })
+        );
+    });
 });

@@ -1,6 +1,7 @@
 (function () {
     const MAX_UTTERANCE_LENGTH = 180;
     const PAGE_TEXT_LIMIT = 20000;
+    const GEMINI_TTS_TEXT_LIMIT = 5000;
 
     function getStrings() {
         return window.GeminiToolbarStrings || {};
@@ -55,19 +56,41 @@
     }
 
     class SpeechReader {
-        constructor({ speechSynthesis = window.speechSynthesis } = {}) {
+        constructor({
+            speechSynthesis = window.speechSynthesis,
+            runtime = window.chrome?.runtime,
+            AudioCtor = window.Audio,
+        } = {}) {
             this.speechSynthesis = speechSynthesis;
+            this.runtime = runtime;
+            this.AudioCtor = AudioCtor;
             this.queue = [];
             this.isReading = false;
+            this.audio = null;
+            this.objectUrl = null;
+            this.readToken = 0;
         }
 
         get supported() {
-            return Boolean(this.speechSynthesis && typeof SpeechSynthesisUtterance === 'function');
+            return (
+                Boolean(this.runtime?.sendMessage && this.AudioCtor) ||
+                Boolean(this.speechSynthesis && typeof SpeechSynthesisUtterance === 'function')
+            );
         }
 
         stop() {
+            this.readToken += 1;
             this.queue = [];
             this.isReading = false;
+            if (this.audio) {
+                this.audio.pause();
+                this.audio.removeAttribute?.('src');
+                this.audio = null;
+            }
+            if (this.objectUrl) {
+                URL.revokeObjectURL(this.objectUrl);
+                this.objectUrl = null;
+            }
             this.speechSynthesis?.cancel?.();
         }
 
@@ -79,7 +102,7 @@
             return this.readText(getPageText(), getStrings().readPage || 'Read page');
         }
 
-        readText(text, title = '') {
+        async readText(text, title = '') {
             if (!this.supported) {
                 throw new Error(
                     getStrings().speechUnsupported ||
@@ -87,16 +110,21 @@
                 );
             }
 
-            const chunks = splitText(text);
-            if (chunks.length === 0) {
+            const normalizedText = normalizeText(text).slice(0, GEMINI_TTS_TEXT_LIMIT);
+            if (!normalizedText) {
                 throw new Error(getStrings().speechNoText || 'No readable text found.');
             }
 
-            if (this.isReading || this.speechSynthesis.speaking) {
+            if (this.isReading || this.speechSynthesis?.speaking) {
                 this.stop();
                 return { status: 'stopped', title };
             }
 
+            if (this.runtime?.sendMessage && this.AudioCtor) {
+                return await this._readWithGeminiTts(normalizedText, title);
+            }
+
+            const chunks = splitText(normalizedText);
             this.queue = chunks;
             const chunkCount = chunks.length;
             this.isReading = true;
@@ -121,6 +149,56 @@
                 this.isReading = false;
             };
             this.speechSynthesis.speak(utterance);
+        }
+
+        async _readWithGeminiTts(text, title) {
+            const token = (this.readToken += 1);
+            this.isReading = true;
+            let response;
+            try {
+                response = await this.runtime.sendMessage({
+                    action: 'GEMINI_TTS',
+                    text,
+                    locale: navigator.language || 'zh-CN',
+                    sourcePath: '/app',
+                });
+            } catch (error) {
+                this.isReading = false;
+                throw error;
+            }
+
+            if (token !== this.readToken) return { status: 'stopped', title };
+            if (!response || response.status !== 'success' || !response.audioBase64) {
+                this.isReading = false;
+                throw new Error(
+                    response?.error || getStrings().speechUnsupported || 'Gemini TTS failed.'
+                );
+            }
+
+            const audioBytes = this._base64ToBytes(response.audioBase64);
+            const blob = new Blob([audioBytes], {
+                type: response.mimeType || 'audio/ogg',
+            });
+            this.objectUrl = URL.createObjectURL(blob);
+            this.audio = new this.AudioCtor(this.objectUrl);
+            this.audio.onended = () => this.stop();
+            this.audio.onerror = () => this.stop();
+            try {
+                await this.audio.play();
+            } catch (error) {
+                this.stop();
+                throw error;
+            }
+            return { status: 'started', title, chunks: 1, provider: 'gemini' };
+        }
+
+        _base64ToBytes(base64) {
+            const binary = atob(base64);
+            const bytes = new Uint8Array(binary.length);
+            for (let index = 0; index < binary.length; index += 1) {
+                bytes[index] = binary.charCodeAt(index);
+            }
+            return bytes;
         }
     }
 

@@ -5,7 +5,12 @@ import { handleTypeText } from './type.js';
 
 export class KeyboardActions extends BaseActionHandler {
     async fillElement(args) {
-        return handleFillElement(this, args);
+        try {
+            return await handleFillElement(this, args);
+        } catch (error) {
+            const uid = typeof args?.uid === 'string' ? args.uid : '';
+            return `Error filling element${uid ? ` ${uid}` : ''}: ${error.message}. Call take_snapshot before retrying if the page changed.`;
+        }
     }
 
     async fillForm(args) {

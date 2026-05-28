@@ -1,12 +1,37 @@
 import { sendToBackground } from '../../../../shared/messaging/index.js';
 import { inferMcpTransport, normalizeMcpHeaders } from '../../../../shared/mcp/transport.js';
+import {
+    getDedicatedApiProviderConfig,
+    isDedicatedApiProvider,
+} from '../../../../shared/settings/dedicated_providers.js';
 import { t } from '../../../core/i18n.js';
 
 export function bindConnectionSectionEvents(section) {
     const { providerSelect } = section.elements;
     if (providerSelect) {
         providerSelect.addEventListener('change', (event) => {
+            section._saveDedicatedApiProviderEdits(section.activeProvider);
             section.updateVisibility(event.target.value);
+        });
+    }
+
+    const { dedicatedApiRefreshModels } = section.elements;
+    if (dedicatedApiRefreshModels) {
+        dedicatedApiRefreshModels.addEventListener('click', () => {
+            const provider = providerSelect?.value || section.activeProvider;
+            const config = getDedicatedApiProviderConfig(provider);
+            if (!isDedicatedApiProvider(provider) || !config?.modelListUrl) return;
+
+            section._saveDedicatedApiProviderEdits(provider);
+            const providerSettings = section.dedicatedApiProviders[provider] || {};
+            section.setProviderModelListStatus(t('modelListFetching'));
+            dedicatedApiRefreshModels.disabled = true;
+            sendToBackground({
+                action: 'GET_PROVIDER_MODELS',
+                provider,
+                baseUrl: providerSettings.baseUrl || config.defaultBaseUrl,
+                apiKey: providerSettings.apiKey || '',
+            });
         });
     }
 

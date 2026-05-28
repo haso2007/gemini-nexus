@@ -85,6 +85,7 @@
                 "content/toolbar/view/index.js",
                 "content/toolbar/events.js",
                 "content/toolbar/ui/grammar.js",
+                "shared/media/watermark_remover_global.js",
                 "content/toolbar/ui/renderer.js",
                 "content/toolbar/ui/actions_delegate.js",
                 "content/toolbar/ui/custom_selection_tools.js",
@@ -113,6 +114,13 @@
                 "content/index.js"
             ],
             "run_at": "document_end"
+        },
+        {
+            "matches": ["https://gemini.google.com/*"],
+            "exclude_globs": ["*.mhtml*", "*.mht*", "*.MHTML*", "*.MHT*"],
+            "js": ["content/gemini_watermark_page.js"],
+            "run_at": "document_start",
+            "world": "MAIN"
         }
     ],
     "web_accessible_resources": [

@@ -1,6 +1,7 @@
 import { PromptHandler } from './prompt_handler.js';
 import { QuickAskHandler } from './quick_ask_handler.js';
 import { ContextHandler } from './context_handler.js';
+import { TtsHandler } from './tts_handler.js';
 
 export class SessionMessageHandler {
     constructor(sessionManager, imageHandler, controlManager, mcpManager) {
@@ -8,6 +9,7 @@ export class SessionMessageHandler {
         this.promptHandler = new PromptHandler(sessionManager, controlManager, mcpManager);
         this.quickAskHandler = new QuickAskHandler(sessionManager, imageHandler);
         this.contextHandler = new ContextHandler(sessionManager);
+        this.ttsHandler = new TtsHandler(sessionManager);
     }
 
     handle(request, sender, sendResponse) {
@@ -29,6 +31,10 @@ export class SessionMessageHandler {
             this.quickAskHandler.handleQuickAskImage(request, sender).finally(() => {
                 sendResponse({ status: 'completed' });
             });
+            return true;
+        }
+
+        if (this.ttsHandler.handle(request, sendResponse)) {
             return true;
         }
 

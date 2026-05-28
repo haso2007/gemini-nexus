@@ -40,6 +40,9 @@ export class MessageHandler {
             case 'MCP_TOOLS_RESULT':
                 this.handleMcpToolsResult(request);
                 return;
+            case 'PROVIDER_MODELS_RESULT':
+                this.handleProviderModelsResult(request);
+                return;
             case 'GEMINI_STREAM_UPDATE':
                 this.handleStreamUpdate(request);
                 return;
@@ -84,6 +87,12 @@ export class MessageHandler {
     handleMcpToolsResult(request) {
         if (typeof this.ui?.settings?.updateMcpToolsResult === 'function') {
             this.ui.settings.updateMcpToolsResult(request);
+        }
+    }
+
+    handleProviderModelsResult(request) {
+        if (typeof this.ui?.settings?.updateProviderModelsResult === 'function') {
+            this.ui.settings.updateProviderModelsResult(request);
         }
     }
 
@@ -238,7 +247,9 @@ export class MessageHandler {
     }
 
     async handleGeneratedImageResult(request) {
-        await handleGeneratedImageFetchResult(request);
+        await handleGeneratedImageFetchResult(request, {
+            removeWatermark: this.ui?.settings?.generatedImageWatermarkRemovalEnabled !== false,
+        });
     }
 
     async handleCropResult(request) {

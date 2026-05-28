@@ -78,6 +78,10 @@ export function createInitialRestoreMessages(localStorageData, { theme, language
                 payload: localStorageData.geminiImageToolsEnabled !== false,
             },
             {
+                action: 'RESTORE_GENERATED_IMAGE_WATERMARK_REMOVAL',
+                payload: localStorageData.geminiGeneratedImageWatermarkRemovalEnabled !== false,
+            },
+            {
                 action: 'RESTORE_ACCOUNT_INDICES',
                 payload: localStorageData.geminiAccountIndices || '0',
             },
@@ -185,6 +189,13 @@ export function createLocalStorageRestoreMessages(localStorageData, changedKeys)
         messages.push({
             action: 'RESTORE_IMAGE_TOOLS',
             payload: localStorageData.geminiImageToolsEnabled !== false,
+        });
+    }
+
+    if (hasChanged('geminiGeneratedImageWatermarkRemovalEnabled')) {
+        messages.push({
+            action: 'RESTORE_GENERATED_IMAGE_WATERMARK_REMOVAL',
+            payload: localStorageData.geminiGeneratedImageWatermarkRemovalEnabled !== false,
         });
     }
 

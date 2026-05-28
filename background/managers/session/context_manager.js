@@ -1,11 +1,21 @@
 import { sendOfficialMessage } from '../../../services/providers/official.js';
 import { sendOpenAIMessage } from '../../../services/providers/openai_compatible.js';
+import { sendAnthropicMessage } from '../../../services/providers/anthropic.js';
 import {
     DEFAULT_CONTEXT_MODE,
     DEFAULT_CONTEXT_RECENT_TURNS,
     DEFAULT_OPENAI_MODEL,
 } from '../../../shared/config/constants.js';
 import { describeMessageAttachmentMarkers } from '../../../shared/attachments/index.js';
+import {
+    createDedicatedApiChatPayload,
+    getDedicatedApiDefaultModel,
+    getDedicatedApiHeaders,
+    getDedicatedApiProviderConfig,
+    getDedicatedApiReasoningEffort,
+    getDedicatedApiRuntimeSettings,
+    isDedicatedApiProvider,
+} from '../../../shared/settings/dedicated_providers.js';
 import { getSessionContextSummary, updateSessionContextSummary } from '../history_manager.js';
 
 const MIN_RECENT_TURNS = 1;
@@ -203,6 +213,56 @@ async function generateCompressedMessage(compressionPrompt, settings, signal) {
                 model: targetModel,
                 reasoningEffort: settings.openaiThinkingLevel,
                 useResponsesApi: settings.openaiUseResponsesApi === true,
+            },
+            [],
+            signal,
+            noop
+        );
+        return response.text;
+    }
+
+    if (isDedicatedApiProvider(settings.provider)) {
+        const providerSettings = getDedicatedApiRuntimeSettings(settings, settings.provider);
+        const providerConfig = getDedicatedApiProviderConfig(settings.provider);
+        const configuredModel = providerSettings?.model?.split(',')?.[0]?.trim();
+        const targetModel =
+            settings.summaryModel ||
+            configuredModel ||
+            getDedicatedApiDefaultModel(settings.provider);
+
+        if (providerConfig?.transport === 'anthropic-messages') {
+            const response = await sendAnthropicMessage(
+                compressionPrompt,
+                COMPRESSION_SYSTEM_PROMPT,
+                [],
+                {
+                    baseUrl: providerSettings.baseUrl,
+                    apiKey: providerSettings.apiKey,
+                    model: targetModel,
+                    thinkingLevel: providerSettings.thinkingLevel,
+                },
+                [],
+                signal,
+                noop
+            );
+            return response.text;
+        }
+
+        const response = await sendOpenAIMessage(
+            compressionPrompt,
+            COMPRESSION_SYSTEM_PROMPT,
+            [],
+            {
+                baseUrl: providerSettings.baseUrl,
+                apiKey: providerSettings.apiKey,
+                model: targetModel,
+                reasoningEffort: getDedicatedApiReasoningEffort(
+                    settings.provider,
+                    providerSettings.thinkingLevel
+                ),
+                useResponsesApi: providerConfig?.transport === 'openai-responses',
+                chatPayload: createDedicatedApiChatPayload(settings.provider, providerSettings),
+                headers: getDedicatedApiHeaders(settings.provider),
             },
             [],
             signal,

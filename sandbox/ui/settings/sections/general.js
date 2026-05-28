@@ -26,6 +26,9 @@ export class GeneralSection {
             textSelectionToggle: getSettingsElement(DOM_IDS.TEXT_SELECTION_TOGGLE),
             textSelectionBlacklistInput: getSettingsElement(DOM_IDS.TEXT_SELECTION_BLACKLIST),
             imageToolsToggle: getSettingsElement(DOM_IDS.IMAGE_TOOLS_TOGGLE),
+            generatedImageWatermarkToggle: getSettingsElement(
+                DOM_IDS.GENERATED_IMAGE_WATERMARK_TOGGLE
+            ),
             customSelectionToolsList: getSettingsElement(DOM_IDS.CONTAINER_SELECTION_TOOLS),
             customSelectionToolAdd: getSettingsElement(DOM_IDS.BTN_ADD_SELECTION_TOOL),
             accountIndicesInput: getSettingsElement(DOM_IDS.ACCOUNT_INDICES),
@@ -40,6 +43,7 @@ export class GeneralSection {
         const {
             textSelectionToggle,
             imageToolsToggle,
+            generatedImageWatermarkToggle,
             customSelectionToolAdd,
             customSelectionToolsList,
             sidebarRadios,
@@ -55,6 +59,11 @@ export class GeneralSection {
         if (imageToolsToggle) {
             imageToolsToggle.addEventListener('change', (event) =>
                 this.fire('onImageToolsChange', event.target.checked)
+            );
+        }
+        if (generatedImageWatermarkToggle) {
+            generatedImageWatermarkToggle.addEventListener('change', (event) =>
+                this.fire('onGeneratedImageWatermarkRemovalChange', event.target.checked)
             );
         }
         if (customSelectionToolAdd) {
@@ -111,10 +120,14 @@ export class GeneralSection {
         }
     }
 
-    setToggles(textSelection, imageTools) {
+    setToggles(textSelection, imageTools, generatedImageWatermarkRemoval) {
         if (this.elements.textSelectionToggle)
             this.elements.textSelectionToggle.checked = textSelection;
         if (this.elements.imageToolsToggle) this.elements.imageToolsToggle.checked = imageTools;
+        if (this.elements.generatedImageWatermarkToggle) {
+            this.elements.generatedImageWatermarkToggle.checked =
+                generatedImageWatermarkRemoval !== false;
+        }
     }
 
     setTextSelectionBlacklist(value) {
@@ -222,6 +235,7 @@ export class GeneralSection {
             textSelectionToggle,
             textSelectionBlacklistInput,
             imageToolsToggle,
+            generatedImageWatermarkToggle,
             customSelectionToolsList,
             accountIndicesInput,
             contextModeSelect,
@@ -240,6 +254,9 @@ export class GeneralSection {
                 ? textSelectionBlacklistInput.value
                 : '',
             imageTools: imageToolsToggle ? imageToolsToggle.checked : true,
+            generatedImageWatermarkRemoval: generatedImageWatermarkToggle
+                ? generatedImageWatermarkToggle.checked
+                : true,
             customSelectionTools: this.getCustomSelectionTools(customSelectionToolsList),
             accountIndices: accountIndicesInput ? accountIndicesInput.value : '0',
             sidebarBehavior: selectedSidebarBehavior,

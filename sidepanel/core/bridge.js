@@ -3,6 +3,7 @@ import {
     normalizeContextRecentTurns,
 } from '../../shared/config/constants.js';
 import { createConnectionStorageUpdate } from '../../shared/settings/connection.js';
+import { getDedicatedApiStorageKeys } from '../../shared/settings/dedicated_providers.js';
 import {
     buildHistoryImportStorageUpdate,
     buildSettingsImportStorageUpdate,
@@ -23,6 +24,8 @@ import {
 
 function getModelSaveKey(payload) {
     if (payload && typeof payload === 'object') {
+        const dedicatedKeys = getDedicatedApiStorageKeys(payload.provider);
+        if (dedicatedKeys) return dedicatedKeys.selectedModel;
         return payload.provider === 'openai' ? 'geminiOpenaiSelectedModel' : 'geminiModel';
     }
 
@@ -42,6 +45,7 @@ const FORWARDED_RESPONSE_ACTIONS = new Set([
     'CHECK_PAGE_CONTEXT',
     'MCP_TEST_CONNECTION',
     'MCP_LIST_TOOLS',
+    'GET_PROVIDER_MODELS',
 ]);
 
 const HOST_ROUTED_ACTIONS = new Set(['GET_OPEN_TABS', 'SWITCH_TAB', 'TOGGLE_BROWSER_CONTROL']);

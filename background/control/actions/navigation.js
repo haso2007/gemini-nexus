@@ -1,4 +1,9 @@
 import { BaseActionHandler } from './base.js';
+import { getTabUrl } from '../tabs.js';
+
+function getTabLabel(tab) {
+    return tab?.title || getTabUrl(tab) || 'Untitled';
+}
 
 export class NavigationActions extends BaseActionHandler {
     constructor(connection, snapshotManager, waitHelper, groupContext = {}) {
@@ -25,8 +30,12 @@ export class NavigationActions extends BaseActionHandler {
 
     async addTabToControlledGroup(tabId) {
         const groupId = this.getControlledGroupId();
-        if (groupId === null || !chrome.tabs?.group) return;
-        await chrome.tabs.group({ groupId, tabIds: [tabId] });
+        if (groupId === null || !Number.isInteger(tabId) || !chrome.tabs?.group) return;
+        try {
+            await chrome.tabs.group({ groupId, tabIds: [tabId] });
+        } catch {
+            // A tab can close or move windows while it is being created; page control can continue.
+        }
     }
 
     getControlledWindowId() {
@@ -34,30 +43,48 @@ export class NavigationActions extends BaseActionHandler {
         return Number.isInteger(windowId) && windowId > 0 ? windowId : null;
     }
 
-    async navigatePage({ url, type }) {
+    async navigatePage({ url, type, ignoreCache = false } = {}) {
         // Use currentTabId (attached) or fallback to targetTabId (intent)
         const tabId = this.connection.targetTabId || this.connection.currentTabId;
         if (!tabId) return 'Error: No target tab identified.';
 
-        let action = '';
+        const navigationType = type || (url ? 'url' : '');
+        if (!['url', 'back', 'forward', 'reload'].includes(navigationType)) {
+            return "Error: 'type' must be one of: url, back, forward, reload.";
+        }
+        if (navigationType === 'url' && (typeof url !== 'string' || !url.trim())) {
+            return "Error: 'url' is required when type is 'url'.";
+        }
 
-        await this.waitHelper.execute(async () => {
-            if (type === 'back') {
+        let action = '';
+        const willNavigate = true;
+
+        const waitResult = await this.waitHelper.execute(async () => {
+            if (navigationType === 'back') {
                 await chrome.tabs.goBack(tabId);
                 action = 'Navigated back';
-            } else if (type === 'forward') {
+            } else if (navigationType === 'forward') {
                 await chrome.tabs.goForward(tabId);
                 action = 'Navigated forward';
-            } else if (type === 'reload') {
-                await chrome.tabs.reload(tabId);
-                action = 'Reloaded page';
-            } else if (url) {
-                await chrome.tabs.update(tabId, { url });
-                action = `Navigating to ${url}`;
+            } else if (navigationType === 'reload') {
+                await chrome.tabs.reload(tabId, { bypassCache: ignoreCache === true });
+                action = ignoreCache === true ? 'Reloaded page bypassing cache' : 'Reloaded page';
+            } else {
+                const targetUrl = url.trim();
+                await chrome.tabs.update(tabId, { url: targetUrl });
+                action = `Navigating to ${targetUrl}`;
             }
         });
 
-        return action || 'Error: Invalid navigation arguments.';
+        if (willNavigate) {
+            this.snapshotManager.reset?.();
+        }
+
+        if (!action) return 'Error: Invalid navigation arguments.';
+
+        return waitResult?.navigatedToUrl
+            ? `${action}. Current URL: ${waitResult.navigatedToUrl}`
+            : action;
     }
 
     async newPage({ url, background = false }) {
@@ -73,13 +100,17 @@ export class NavigationActions extends BaseActionHandler {
                 width: 1280,
                 height: 800,
             });
-            tab = popupWindow.tabs[0];
+            tab = Array.isArray(popupWindow.tabs) ? popupWindow.tabs[0] : null;
         } else {
             const createOptions = { url: targetUrl };
             const windowId = this.getControlledWindowId();
             if (windowId !== null) createOptions.windowId = windowId;
             tab = await chrome.tabs.create(createOptions);
             await this.addTabToControlledGroup(tab.id);
+        }
+
+        if (!tab?.id) {
+            return `Error: Created page did not return a tab id.`;
         }
 
         // Return object with metadata so ControlManager can update the locked tab
@@ -97,14 +128,32 @@ export class NavigationActions extends BaseActionHandler {
         const tabs = await this.getScopedTabs();
         const tab = tabs[index];
         if (!tab) return `Error: Page index ${index} not found.`;
+        if (!Number.isInteger(tab.id)) return `Error: Page index ${index} has no tab id.`;
+        const targetTabId = this.connection.targetTabId || this.connection.currentTabId;
+        const nextTab = tabs[index + 1] || tabs[index - 1] || null;
 
         await chrome.tabs.remove(tab.id);
-        return `Closed page ${index}: ${tab.title || 'Untitled'}`;
+
+        const output = `Closed page ${index}: ${getTabLabel(tab)}`;
+        if (tab.id !== targetTabId) return output;
+
+        return {
+            output: nextTab
+                ? `${output}. Selected page: ${getTabLabel(nextTab)}`
+                : `${output}. No controlled pages remain.`,
+            _meta: nextTab?.id ? { switchTabId: nextTab.id } : { clearTarget: true },
+        };
     }
 
     async listPages() {
         const tabs = await this.getScopedTabs();
-        return tabs.map((tab, index) => `${index}: ${tab.title} (${tab.url})`).join('\n');
+        const targetTabId = this.connection.targetTabId || this.connection.currentTabId;
+        return tabs
+            .map((tab, index) => {
+                const selected = tab.id === targetTabId ? ' [selected]' : '';
+                return `${index}: ${getTabLabel(tab)} (${getTabUrl(tab)})${selected}`;
+            })
+            .join('\n');
     }
 
     async selectPage({ index }) {
@@ -114,7 +163,7 @@ export class NavigationActions extends BaseActionHandler {
 
         // Return metadata so ControlManager can update the locked tab without forcing focus.
         return {
-            output: `Selected page ${index} (Background Mode): ${tab.title}`,
+            output: `Selected page ${index}: ${getTabLabel(tab)}`,
             _meta: { switchTabId: tab.id },
         };
     }

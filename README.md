@@ -33,13 +33,13 @@
 
 ### Project Overview
 
-**Gemini Nexus** gives your browser a native AI layer by combining Gemini Web, the Google Gemini API, and OpenAI-compatible APIs in one Chrome extension. It is more than a side panel: the extension includes an injected floating toolbar, image and screenshot input, Chrome DevTools Protocol based browser-control tools, and optional external MCP tools for browser-native AI workflows.
+**Gemini Nexus** gives your browser a native AI layer by combining Gemini Web, the Google Gemini API, OpenAI-compatible APIs, and dedicated third-party API providers in one Chrome extension. It is more than a side panel: the extension includes an injected floating toolbar, image and screenshot input, Chrome DevTools Protocol based browser-control tools, and optional external MCP tools for browser-native AI workflows.
 
 ### Capability Overview
 
 Gemini Nexus currently focuses on these browser AI workflows:
 
-- Switch among **Gemini Web**, **Gemini API**, and **OpenAI Compatible API**, with custom `Base URL`, `API Key`, and `Model IDs`.
+- Switch among **Gemini Web**, **Gemini API**, **OpenAI Compatible API**, **OpenAI Official API**, **DeepSeek API**, **OpenRouter API**, **Qwen / DashScope API**, **Anthropic API**, and **Zhipu API**, with provider-specific `Base URL`, `API Key`, and `Model IDs`.
 - Enable Gemini Web temporary chats so Web-provider requests are not added to Gemini Recent chats.
 - Use Gemini API Google Search grounding and show web sources in responses.
 - Use OpenAI-compatible web search through Responses API `web_search` or Chat Completions `web_search_options`, depending on the current endpoint.
@@ -52,13 +52,19 @@ Gemini Nexus currently focuses on these browser AI workflows:
 
 ### Provider Comparison
 
-The project includes three provider drivers under `services/providers` and adapts behavior dynamically in code:
+The project includes provider drivers under `services/providers` and adapts behavior dynamically in code:
 
 | Provider              | Entry                  | Models                             | Strength                                                                             | Requirement                     |
 | :-------------------- | :--------------------- | :--------------------------------- | :----------------------------------------------------------------------------------- | :------------------------------ |
 | **Web Client**        | `web.js`               | Current Gemini Web chat modes      | No API key; reuses the Gemini web session; optional temporary chats                  | Keep a Google account signed in |
 | **Official API**      | `official.js`          | Gemini Flash/Pro preview models    | Fast responses with **Thinking** and Google Search grounding                         | Google AI Studio key            |
 | **OpenAI Compatible** | `openai_compatible.js` | GPT, Claude, and compatible models | Highly extensible; supports Chat Completions / Responses API and optional web search | Third-party service key         |
+| **OpenAI Official**   | `openai_compatible.js` | GPT reasoning/search models        | Dedicated Responses API path with reasoning summary and optional web search          | OpenAI API key                  |
+| **DeepSeek API**      | `openai_compatible.js` | DeepSeek chat/reasoning models     | Dedicated defaults for DeepSeek Chat Completions and `reasoning_content` display     | DeepSeek API key                |
+| **OpenRouter API**    | `openai_compatible.js` | OpenRouter model IDs               | Fetches `/models`, supports provider routing JSON, and sends native `reasoning`      | OpenRouter API key              |
+| **Qwen / DashScope**  | `openai_compatible.js` | Qwen text and VL models            | Dedicated DashScope compatible endpoint with `enable_thinking` and VL image input    | DashScope API key               |
+| **Anthropic API**     | `anthropic.js`         | Claude models                      | Native Messages API adapter with image input and extended-thinking stream display    | Anthropic API key               |
+| **Zhipu API**         | `openai_compatible.js` | GLM models                         | Dedicated GLM Chat Completions profile with native thinking toggle payloads          | Zhipu API key                   |
 
 ### Browser Control
 

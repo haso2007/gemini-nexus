@@ -1,6 +1,7 @@
 import { sendOfficialMessage } from '../../../services/providers/official.js';
 import { sendWebMessage } from '../../../services/providers/web.js';
 import { sendOpenAIMessage } from '../../../services/providers/openai_compatible.js';
+import { sendAnthropicMessage } from '../../../services/providers/anthropic.js';
 import {
     DEFAULT_CONTEXT_MODE,
     DEFAULT_CONTEXT_RECENT_TURNS,
@@ -13,6 +14,15 @@ import {
     getImageAttachmentDataUrls,
     normalizeMessageImages,
 } from '../../../shared/attachments/index.js';
+import {
+    createDedicatedApiChatPayload,
+    getDedicatedApiHeaders,
+    getDedicatedApiProviderConfig,
+    getDedicatedApiReasoningEffort,
+    getDedicatedApiRuntimeSettings,
+    getDedicatedApiDefaultModel,
+    isDedicatedApiProvider,
+} from '../../../shared/settings/dedicated_providers.js';
 import { getHistory } from './history_store.js';
 import { prepareManagedContext } from './context_manager.js';
 
@@ -187,6 +197,20 @@ function assertOpenAIChatWebSearchSupported(model, baseUrl) {
     }
 }
 
+function parseConfiguredModels(rawModels) {
+    return String(rawModels || '')
+        .split(',')
+        .map((model) => model.trim())
+        .filter(Boolean);
+}
+
+function getSelectedDedicatedModel(request, providerSettings, provider) {
+    const requestedModel = request.model;
+    if (requestedModel) return requestedModel;
+    const configured = parseConfiguredModels(providerSettings?.model);
+    return configured[0] || getDedicatedApiDefaultModel(provider);
+}
+
 async function resolveRequestHistory(request, files = request.files) {
     const overrideHistory = getRequestHistory(request);
     if (overrideHistory) return overrideHistory;
@@ -290,6 +314,14 @@ export class RequestDispatcher {
             return await this._handleOfficialRequest(request, settings, files, onUpdate, signal);
         } else if (settings.provider === 'openai') {
             return await this._handleOpenAIRequest(request, settings, files, onUpdate, signal);
+        } else if (isDedicatedApiProvider(settings.provider)) {
+            return await this._handleDedicatedApiRequest(
+                request,
+                settings,
+                files,
+                onUpdate,
+                signal
+            );
         } else {
             return await this._handleWebRequest(request, settings, files, onUpdate, signal);
         }
@@ -380,6 +412,76 @@ export class RequestDispatcher {
         return createSuccessReply(request, response, {
             context: null,
         });
+    }
+
+    async _handleDedicatedApiRequest(request, settings, files, onUpdate, signal) {
+        const provider = settings.provider;
+        const providerSettings = getDedicatedApiRuntimeSettings(settings, provider);
+        const providerConfig = getDedicatedApiProviderConfig(provider);
+        const targetModel = getSelectedDedicatedModel(request, providerSettings, provider);
+
+        if (!providerSettings?.apiKey) {
+            throw new Error('API Key is missing. Please check settings.');
+        }
+
+        const history = await resolveRequestHistory(request, files);
+        const context = await prepareManagedContext(
+            request,
+            settings,
+            history,
+            signal,
+            createContextStatusSender(request, settings)
+        );
+
+        if (providerConfig?.transport === 'anthropic-messages') {
+            const response = await sendAnthropicMessage(
+                request.text,
+                context.systemInstruction,
+                context.history,
+                {
+                    baseUrl: providerSettings.baseUrl,
+                    apiKey: providerSettings.apiKey,
+                    model: targetModel,
+                    thinkingLevel: providerSettings.thinkingLevel,
+                },
+                files,
+                signal,
+                onUpdate
+            );
+
+            return createSuccessReply(request, response, { context: null });
+        }
+
+        const useResponsesApi = providerConfig?.transport === 'openai-responses';
+        const config = {
+            baseUrl: providerSettings.baseUrl,
+            apiKey: providerSettings.apiKey,
+            model: targetModel,
+            reasoningEffort: getDedicatedApiReasoningEffort(
+                provider,
+                providerSettings.thinkingLevel
+            ),
+            useResponsesApi,
+            webSearch: useResponsesApi && providerSettings.webSearch === true,
+            chatPayload: createDedicatedApiChatPayload(provider, providerSettings),
+            headers: getDedicatedApiHeaders(provider),
+        };
+
+        if (config.webSearch) {
+            assertOpenAIWebSearchSupported(config.model, config.reasoningEffort);
+        }
+
+        const response = await sendOpenAIMessage(
+            request.text,
+            context.systemInstruction,
+            context.history,
+            config,
+            files,
+            signal,
+            onUpdate
+        );
+
+        return createSuccessReply(request, response, { context: null });
     }
 
     async _handleWebRequest(request, settings, files, onUpdate, signal) {

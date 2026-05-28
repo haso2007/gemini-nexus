@@ -52,4 +52,33 @@ describe('settings save helpers', () => {
             mcpServers: [{ id: 'srv-1', url: 'http://localhost/mcp' }],
         });
     });
+
+    it('normalizes dedicated provider settings while saving connection form data', () => {
+        expect(
+            buildConnectionSettingsForSave(
+                {
+                    provider: 'deepseek',
+                    dedicatedApiProviders: {
+                        deepseek: {
+                            baseUrl: 'https://api.deepseek.com',
+                            apiKey: 'deepseek-key',
+                            model: 'deepseek-v4-pro',
+                            selectedModel: 'deepseek-v4-pro',
+                            thinkingLevel: 'high',
+                        },
+                    },
+                },
+                { webThinkingLevel: 'high' }
+            )
+        ).toMatchObject({
+            provider: 'deepseek',
+            dedicatedApiProviders: expect.objectContaining({
+                deepseek: expect.objectContaining({
+                    apiKey: 'deepseek-key',
+                    selectedModel: 'deepseek-v4-pro',
+                    thinkingLevel: 'high',
+                }),
+            }),
+        });
+    });
 });

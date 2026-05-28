@@ -33,6 +33,7 @@ describe('data management helpers', () => {
         const payload = buildSettingsExportPayload({
             geminiApiKey: 'gemini-key',
             geminiOpenaiApiKey: 'openai-key',
+            geminiDeepseekApiKey: 'deepseek-key',
             geminiTheme: 'dark',
             geminiMcpServers: [
                 {
@@ -50,6 +51,7 @@ describe('data management helpers', () => {
 
         expect(payload.settings).not.toHaveProperty('geminiApiKey');
         expect(payload.settings).not.toHaveProperty('geminiOpenaiApiKey');
+        expect(payload.settings).not.toHaveProperty('geminiDeepseekApiKey');
         expect(payload.settings.geminiTheme).toBe('dark');
         expect(payload.settings.geminiMcpServers[0]).toEqual(
             expect.objectContaining({
@@ -86,6 +88,7 @@ describe('data management helpers', () => {
                 settings: {
                     geminiApiKey: 'official-secret',
                     geminiOpenaiApiKey: 'openai-secret',
+                    geminiAnthropicApiKey: 'anthropic-secret',
                     geminiMcpServers: [
                         {
                             headers: {

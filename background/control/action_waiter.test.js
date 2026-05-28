@@ -48,6 +48,116 @@ describe('ActionWaiter event waits', () => {
         expect(connection.removeListener).toHaveBeenCalledTimes(1);
     });
 
+    it('handles a fast load event that arrives before navigation-start processing', async () => {
+        const connection = createConnection();
+        const helper = new ActionWaiter(connection);
+        const watcher = helper._createNavigationWatcher();
+
+        connection.emit('Page.loadEventFired');
+        connection.emit('Page.frameStartedNavigating', { navigationType: 'differentDocument' });
+
+        await expect(watcher.wait()).resolves.toBe(true);
+        expect(connection.removeListener).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not wait for a full page load after same-document navigation', async () => {
+        const connection = createConnection();
+        const helper = new ActionWaiter(connection);
+        const watcher = helper._createNavigationWatcher();
+
+        connection.emit('Page.frameStartedNavigating', { navigationType: 'sameDocument' });
+
+        await expect(watcher.wait()).resolves.toBe(false);
+        expect(connection.removeListener).toHaveBeenCalledTimes(1);
+    });
+
+    it('ignores iframe navigation starts when a main frame id is known', async () => {
+        const connection = createConnection();
+        const helper = new ActionWaiter(connection);
+        const watcher = helper._createNavigationWatcher('main-frame');
+
+        connection.emit('Page.frameStartedNavigating', {
+            frameId: 'iframe',
+            navigationType: 'differentDocument',
+        });
+        await vi.advanceTimersByTimeAsync(helper.timeouts.expectNavigationIn);
+
+        await expect(watcher.wait()).resolves.toBe(false);
+        expect(connection.removeListener).toHaveBeenCalledTimes(1);
+    });
+
+    it('waits for the navigating frame to stop loading instead of an unrelated frame', async () => {
+        const connection = createConnection();
+        const helper = new ActionWaiter(connection);
+        const watcher = helper._createNavigationWatcher('main-frame');
+        let settled = false;
+        const wait = watcher.wait().then((result) => {
+            settled = true;
+            return result;
+        });
+
+        connection.emit('Page.frameStartedNavigating', {
+            frameId: 'main-frame',
+            navigationType: 'differentDocument',
+        });
+        connection.emit('Page.frameStoppedLoading', { frameId: 'iframe' });
+        await Promise.resolve();
+
+        expect(settled).toBe(false);
+
+        connection.emit('Page.frameStoppedLoading', { frameId: 'main-frame' });
+
+        await expect(wait).resolves.toBe(true);
+        expect(connection.removeListener).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops waiting for navigation when a JavaScript dialog opens', async () => {
+        const connection = createConnection();
+        const helper = new ActionWaiter(connection);
+        const watcher = helper._createNavigationWatcher();
+
+        connection.emit('Page.frameStartedNavigating', { navigationType: 'differentDocument' });
+        connection.emit('Page.javascriptDialogOpening', { type: 'beforeunload' });
+
+        await expect(watcher.wait()).resolves.toBe(false);
+        expect(connection.removeListener).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns the final URL when an action changes pages', async () => {
+        const connection = createConnection();
+        connection.sendCommand = vi.fn(() => Promise.resolve({}));
+        const helper = new ActionWaiter(connection);
+        helper._getCurrentUrl = vi
+            .fn()
+            .mockResolvedValueOnce('https://before.test/')
+            .mockResolvedValueOnce('https://after.test/');
+        helper.waitForStableDOM = vi.fn(() => Promise.resolve());
+
+        const resultPromise = helper.execute(async () => {
+            connection.emit('Page.frameStartedNavigating', { navigationType: 'differentDocument' });
+            connection.emit('Page.loadEventFired');
+        });
+
+        await expect(resultPromise).resolves.toEqual({
+            navigationStarted: true,
+            navigatedToUrl: 'https://after.test/',
+        });
+        expect(helper.waitForStableDOM).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips DOM stability probing while a JavaScript dialog is open', async () => {
+        const connection = {
+            attached: true,
+            getDialog: vi.fn(() => ({ type: 'alert', message: 'Stop' })),
+            sendCommand: vi.fn(),
+        };
+        const helper = new ActionWaiter(connection);
+
+        await helper.waitForStableDOM();
+
+        expect(connection.sendCommand).not.toHaveBeenCalled();
+    });
+
     it('does not retain unused multiplier fields after calculating timeouts', () => {
         const connection = createConnection();
         const helper = new ActionWaiter(connection, 2, 3);

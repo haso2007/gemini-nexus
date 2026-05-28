@@ -10,6 +10,12 @@ export const ConnectionSettingsTemplate = `
                 <option value="web" data-i18n="providerWeb">Gemini Web Client (Free)</option>
                 <option value="official" data-i18n="providerOfficial">Google Gemini API</option>
                 <option value="openai" data-i18n="providerOpenAI">OpenAI Compatible API</option>
+                <option value="openai_official" data-i18n="providerOpenAIOfficial">OpenAI Official API</option>
+                <option value="deepseek" data-i18n="providerDeepSeek">DeepSeek API</option>
+                <option value="openrouter" data-i18n="providerOpenRouter">OpenRouter API</option>
+                <option value="dashscope" data-i18n="providerDashScope">Qwen / DashScope API</option>
+                <option value="anthropic" data-i18n="providerAnthropic">Anthropic API</option>
+                <option value="zhipu" data-i18n="providerZhipu">Zhipu API</option>
             </select>
 
             <div id="web-fields" class="settings-stack settings-section-offset">
@@ -85,6 +91,44 @@ export const ConnectionSettingsTemplate = `
                             <h5 data-i18n="openaiWebSearch">OpenAI Web search</h5>
                         </div>
                         <input type="checkbox" id="openai-web-search-enabled" class="setting-toggle" />
+                    </div>
+                </div>
+
+                <div id="dedicated-api-fields" class="settings-stack tight" hidden>
+                    <div class="setting-field">
+                        <span data-i18n="baseUrl">Base URL</span>
+                        <input type="text" id="dedicated-api-base-url" class="settings-input settings-full-input" data-i18n-placeholder="baseUrlPlaceholder">
+                    </div>
+                    <div class="setting-field">
+                        <span data-i18n="apiKey">API Key</span>
+                        <input type="password" id="dedicated-api-api-key" class="settings-input settings-full-input" data-i18n-placeholder="apiKeyPlaceholder">
+                    </div>
+                    <div class="setting-field">
+                        <span data-i18n="modelIdsCommaSeparated">Model IDs</span>
+                        <div class="settings-action-row">
+                            <input type="text" id="dedicated-api-model" class="settings-input settings-full-input settings-flex-fill" data-i18n-placeholder="modelIdPlaceholder">
+                            <button id="dedicated-api-refresh-models" class="btn-secondary settings-small-button" type="button" data-i18n="refreshModels" hidden>Refresh</button>
+                        </div>
+                        <div id="dedicated-api-model-list-status" class="settings-muted-text" role="status" aria-live="polite" hidden></div>
+                    </div>
+                    <div class="setting-field">
+                        <span data-i18n="thinkingLevel">Thinking Level</span>
+                        <select id="dedicated-api-thinking-level-select" class="settings-input settings-select">
+                            <option value="minimal" data-i18n="thinkingMinimal">Minimal</option>
+                            <option value="low" data-i18n="thinkingLow">Low</option>
+                            <option value="medium" data-i18n="thinkingMedium">Medium</option>
+                            <option value="high" data-i18n="thinkingHigh">High</option>
+                        </select>
+                    </div>
+                    <div id="dedicated-api-web-search-row" class="setting-panel-row settings-section-offset" hidden>
+                        <div class="setting-panel-header">
+                            <h5 data-i18n="openaiWebSearch">OpenAI Web search</h5>
+                        </div>
+                        <input type="checkbox" id="dedicated-api-web-search-enabled" class="setting-toggle" />
+                    </div>
+                    <div id="dedicated-api-provider-routing-row" class="setting-field" hidden>
+                        <span data-i18n="providerRouting">Provider Routing (JSON)</span>
+                        <textarea id="dedicated-api-provider-routing" class="settings-input settings-full-input settings-monospace-textarea" data-i18n-placeholder="providerRoutingPlaceholder"></textarea>
                     </div>
                 </div>
             </div>

@@ -115,6 +115,12 @@
                         <option value="web">${toolbarStrings.providerWebShort || 'Web'}</option>
                         <option value="official">${toolbarStrings.providerOfficialShort || 'API'}</option>
                         <option value="openai">${toolbarStrings.providerOpenAIShort || 'OpenAI'}</option>
+                        <option value="openai_official">${toolbarStrings.providerOpenAIOfficialShort || 'OpenAI API'}</option>
+                        <option value="deepseek">${toolbarStrings.providerDeepSeekShort || 'DeepSeek'}</option>
+                        <option value="openrouter">${toolbarStrings.providerOpenRouterShort || 'OpenRouter'}</option>
+                        <option value="dashscope">${toolbarStrings.providerDashScopeShort || 'DashScope'}</option>
+                        <option value="anthropic">${toolbarStrings.providerAnthropicShort || 'Anthropic'}</option>
+                        <option value="zhipu">${toolbarStrings.providerZhipuShort || 'Zhipu'}</option>
                     </select>
                     <select id="ask-model-select" class="ask-model-select">
                         ${WEB_MODEL_OPTIONS}

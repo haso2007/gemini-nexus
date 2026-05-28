@@ -29,15 +29,22 @@ export function appendMessage(
     if (options.kind) messageElement.classList.add(`msg-${options.kind}`);
     if (options.toolOutputKey) messageElement.dataset.toolOutputKey = options.toolOutputKey;
     if (options.toolStatusKey) messageElement.dataset.toolStatusKey = options.toolStatusKey;
-    const isNormalMessage = !isToolMessageKind(options.kind);
-    const contentHost = isNormalMessage ? document.createElement('div') : messageElement;
+    const isToolMessage = isToolMessageKind(options.kind);
+    const contentHost = document.createElement('div');
     let actionsHost = null;
 
-    if (isNormalMessage) {
-        const row = document.createElement('div');
-        row.className = 'msg-row';
+    const row = document.createElement('div');
+    row.className = isToolMessage ? 'msg-row tool-message-row' : 'msg-row';
 
-        contentHost.className = 'message-content-container';
+    contentHost.className = isToolMessage
+        ? 'message-content-container tool-message-content-container'
+        : 'message-content-container';
+
+    if (isToolMessage) {
+        actionsHost = createToolMessageRail();
+        row.appendChild(actionsHost);
+        row.appendChild(contentHost);
+    } else {
         actionsHost = createMessageActionRail(role);
 
         if (role === 'user') {
@@ -47,9 +54,9 @@ export function appendMessage(
             row.appendChild(actionsHost);
             row.appendChild(contentHost);
         }
-
-        messageElement.appendChild(row);
     }
+
+    messageElement.appendChild(row);
 
     let currentText = text || '';
     let currentThoughts = thoughts || '';
@@ -177,11 +184,7 @@ export function appendMessage(
         syncCopyButton();
         syncCompactSpacing();
 
-        if (
-            role === 'user' &&
-            !isToolMessageKind(options.kind) &&
-            typeof options.onEdit === 'function'
-        ) {
+        if (role === 'user' && !isToolMessage && typeof options.onEdit === 'function') {
             editController = createMessageEditControl({
                 messageEl: messageElement,
                 contentEl: contentDiv,
@@ -232,6 +235,18 @@ export function appendMessage(
                 }
                 if (state.callCount !== undefined) {
                     options.callCount = state.callCount;
+                }
+                if (state.toolDurationMs !== undefined) {
+                    options.toolDurationMs = state.toolDurationMs;
+                }
+                if (state.toolStartedAt !== undefined) {
+                    options.toolStartedAt = state.toolStartedAt;
+                }
+                if (state.toolCompletedAt !== undefined) {
+                    options.toolCompletedAt = state.toolCompletedAt;
+                }
+                if (state.toolPhase !== undefined) {
+                    options.toolPhase = state.toolPhase;
                 }
                 if (state.suppressCopy !== undefined) {
                     options.suppressCopy = state.suppressCopy === true;
@@ -309,6 +324,13 @@ export function appendMessage(
     function getMessageActionsHost() {
         return actionsHost?.querySelector('.message-actions') || messageElement;
     }
+}
+
+function createToolMessageRail() {
+    const rail = document.createElement('div');
+    rail.className = 'message-action-rail tool-message-rail';
+    rail.setAttribute('aria-hidden', 'true');
+    return rail;
 }
 
 function createMessageActionRail(role) {

@@ -71,6 +71,9 @@ export class SessionFlowController {
                     toolCallText: this.getRestoredToolCallText(message),
                     callIndex: this.getRestoredToolCallIndex(message),
                     callCount: this.getRestoredToolCallCount(message),
+                    toolDurationMs: this.getRestoredToolDurationMs(message),
+                    toolStartedAt: message.toolStartedAt,
+                    toolCompletedAt: message.toolCompletedAt,
                     suppressCopy: message.suppressCopy === true,
                     isCollapsed: true,
                     thoughtsDurationSeconds: message.thoughtsDurationSeconds,
@@ -195,6 +198,11 @@ export class SessionFlowController {
     getRestoredToolCallCount(message) {
         if (this.getMessageKind(message) !== 'tool-output') return '';
         return message.toolCallCount || '';
+    }
+
+    getRestoredToolDurationMs(message) {
+        if (this.getMessageKind(message) !== 'tool-output') return null;
+        return Number.isFinite(message.toolDurationMs) ? message.toolDurationMs : null;
     }
 
     getCompressionNoticeIndex(session) {

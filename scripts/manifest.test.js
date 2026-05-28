@@ -26,6 +26,7 @@ async function listJavaScriptFiles(directory) {
 const classicContentSupportFiles = [
     'shared/config/constants_global.js',
     'shared/dom/crop_global.js',
+    'shared/media/watermark_remover_global.js',
     'shared/media/youtube_global.js',
     'shared/models/web_model_catalog.js',
     'shared/models/web_thinking_global.js',
@@ -78,6 +79,20 @@ describe('manifest content scripts', () => {
                 expect.arrayContaining(['*.mhtml*', '*.mht*', '*.MHTML*', '*.MHT*'])
             );
         }
+    });
+
+    it('runs the Gemini page watermark cleanup in the main world only on Gemini pages', async () => {
+        const manifest = JSON.parse(await readFile('manifest.json', 'utf8'));
+        const geminiEntry = manifest.content_scripts.find((entry) =>
+            entry.js?.includes('content/gemini_watermark_page.js')
+        );
+
+        expect(geminiEntry).toMatchObject({
+            matches: ['https://gemini.google.com/*'],
+            js: ['content/gemini_watermark_page.js'],
+            run_at: 'document_start',
+            world: 'MAIN',
+        });
     });
 
     it('loads the page guard before any content script with side effects', async () => {

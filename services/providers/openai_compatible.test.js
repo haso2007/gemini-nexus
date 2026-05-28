@@ -19,6 +19,34 @@ function makeChatSseStream(text = 'ok') {
     };
 }
 
+function makeOpenRouterReasoningStream() {
+    const encoder = new TextEncoder();
+    const payload = [
+        {
+            choices: [{ delta: { reasoning: 'thinking ', content: '' } }],
+        },
+        {
+            choices: [{ delta: { reasoning_details: [{ text: 'more' }] } }],
+        },
+        {
+            choices: [{ delta: { content: 'done' } }],
+        },
+    ]
+        .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+        .join('');
+
+    return {
+        getReader() {
+            return {
+                read: vi
+                    .fn()
+                    .mockResolvedValueOnce({ done: false, value: encoder.encode(payload) })
+                    .mockResolvedValueOnce({ done: true }),
+            };
+        },
+    };
+}
+
 describe('sendOpenAIMessage', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -165,6 +193,59 @@ describe('sendOpenAIMessage', () => {
                 { type: 'text', text: 'Describe this image' },
             ],
         });
+    });
+
+    it('merges provider-specific Chat Completions payload options', async () => {
+        await sendOpenAIMessage(
+            'Think',
+            '',
+            [],
+            {
+                baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+                model: 'glm-test',
+                chatPayload: { thinking: { type: 'enabled' } },
+            },
+            [],
+            null,
+            vi.fn()
+        );
+
+        const [, init] = global.fetch.mock.calls[0];
+        const payload = JSON.parse(init.body);
+        expect(payload.thinking).toEqual({ type: 'enabled' });
+    });
+
+    it('streams OpenRouter reasoning deltas into thoughts', async () => {
+        const onUpdate = vi.fn();
+        global.fetch.mockResolvedValueOnce({
+            ok: true,
+            body: makeOpenRouterReasoningStream(),
+        });
+
+        await expect(
+            sendOpenAIMessage(
+                'Think',
+                '',
+                [],
+                {
+                    baseUrl: 'https://openrouter.ai/api/v1',
+                    model: 'openai/gpt-5.2',
+                    chatPayload: {
+                        reasoning: { effort: 'high', exclude: false },
+                    },
+                },
+                [],
+                null,
+                onUpdate
+            )
+        ).resolves.toEqual(
+            expect.objectContaining({
+                text: 'done',
+                thoughts: 'thinking more',
+            })
+        );
+
+        expect(onUpdate).toHaveBeenLastCalledWith('done', 'thinking more');
     });
 
     it('keeps image data URLs in Responses API payloads with high detail', async () => {

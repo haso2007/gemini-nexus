@@ -304,28 +304,51 @@ body.layout-wide .msg.ai {
 
 .msg.user.msg-tool-output {
     align-self: flex-start;
-    max-width: min(720px, 86%);
-    width: auto;
+    width: 100%;
+    max-width: 100%;
     box-sizing: border-box;
-    padding: 8px 10px;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--bg-input) 86%, transparent);
+    padding: 0;
+    border: 0;
+    background: transparent;
     color: var(--text-primary);
     white-space: normal;
 }
 
 .msg.user.msg-tool-status {
     align-self: flex-start;
-    max-width: min(640px, 82%);
-    width: auto;
+    width: 100%;
+    max-width: 100%;
     box-sizing: border-box;
-    padding: 6px 8px;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    background: color-mix(in srgb, var(--bg-input) 78%, transparent);
+    padding: 0;
+    border: 0;
+    background: transparent;
     color: var(--text-primary);
     white-space: normal;
+}
+
+.msg.user.msg-tool-output .tool-message-content-container,
+.msg.user.msg-tool-status .tool-message-content-container {
+    width: auto;
+    max-width: min(640px, 100%);
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+}
+
+.msg.user .tool-message-row {
+    justify-content: flex-start;
+}
+
+.msg.user.msg-tool-output .msg-content,
+.msg.user.msg-tool-status .msg-content {
+    white-space: normal;
+}
+
+.tool-message-rail {
+    visibility: hidden;
+    pointer-events: none;
 }
 
 .message-edit {

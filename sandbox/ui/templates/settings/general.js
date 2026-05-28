@@ -35,6 +35,13 @@ export const GeneralSettingsTemplate = `
 
         <div class="setting-panel setting-panel-row">
             <div class="setting-panel-header">
+                <h5><span data-i18n="generatedImageWatermarkToggle">Auto Clean Generated Image Watermark</span>${createSettingsHelpButton('generatedImageWatermarkToggleDesc')}</h5>
+            </div>
+            <input type="checkbox" id="generated-image-watermark-toggle" class="setting-toggle">
+        </div>
+
+        <div class="setting-panel setting-panel-row">
+            <div class="setting-panel-header">
                 <h5><span data-i18n="accountIndices">Account Indices (Web)</span>${createSettingsHelpButton('accountIndicesDesc')}</h5>
             </div>
             <input type="text" id="account-indices-input" class="settings-input setting-panel-small-input" placeholder="0">

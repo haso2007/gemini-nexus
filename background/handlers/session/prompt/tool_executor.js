@@ -5,6 +5,7 @@ export class ToolExecutor {
     constructor(controlManager, mcpManager) {
         this.controlManager = controlManager;
         this.mcpManager = mcpManager;
+        this.invocationCounter = 0;
     }
 
     async executeIfPresent(text, request, onUpdate) {
@@ -46,7 +47,15 @@ export class ToolExecutor {
         const toolName = toolCommand.name;
         const callIndex = Number.isFinite(callMeta.callIndex) ? callMeta.callIndex : null;
         const callCount = Number.isFinite(callMeta.callCount) ? callMeta.callCount : null;
-        const statusKey = this.createToolStatusKey(request, toolName, callIndex, callCount);
+        const invocationId = this.createToolInvocationId(toolCommand);
+        const statusKey = this.createToolStatusKey(
+            request,
+            toolName,
+            callIndex,
+            callCount,
+            invocationId
+        );
+        const startedAt = Date.now();
         this.sendToolStatus(request, {
             statusKey,
             toolName,
@@ -54,6 +63,8 @@ export class ToolExecutor {
             toolCallText,
             callIndex,
             callCount,
+            text: `Starting ${toolName}...`,
+            startedAt,
         });
 
         let output = '';
@@ -68,10 +79,30 @@ export class ToolExecutor {
                 }
 
                 source = 'browser_control';
-                const execResult = await this.controlManager.execute({
-                    name: toolName,
-                    args: toolCommand.args || {},
-                });
+                const execResult = await this.controlManager.execute(
+                    {
+                        name: toolName,
+                        args: toolCommand.args || {},
+                    },
+                    {
+                        onProgress: (progress) => {
+                            const progressText =
+                                typeof progress?.text === 'string' ? progress.text.trim() : '';
+                            if (!progressText) return;
+                            this.sendToolStatus(request, {
+                                statusKey,
+                                toolName,
+                                status: 'running',
+                                toolCallText,
+                                callIndex,
+                                callCount,
+                                text: progressText,
+                                phase: progress?.phase || '',
+                                startedAt,
+                            });
+                        },
+                    }
+                );
 
                 if (execResult && typeof execResult === 'object' && execResult.image) {
                     output = execResult.text;
@@ -84,6 +115,10 @@ export class ToolExecutor {
                     ];
                 } else {
                     output = execResult;
+                }
+
+                if (isFailedToolOutput(output)) {
+                    status = 'failed';
                 }
             } else {
                 const servers = Array.isArray(request.mcpServers) ? request.mcpServers : [];
@@ -169,6 +204,9 @@ export class ToolExecutor {
             status = 'failed';
         }
 
+        const completedAt = Date.now();
+        const durationMs = Math.max(0, completedAt - startedAt);
+
         this.sendToolStatus(request, {
             statusKey,
             toolName,
@@ -177,6 +215,9 @@ export class ToolExecutor {
             callIndex,
             callCount,
             text: status === 'failed' ? output : '',
+            startedAt,
+            completedAt,
+            durationMs,
         });
 
         return {
@@ -187,6 +228,10 @@ export class ToolExecutor {
             files,
             source,
             status,
+            statusKey,
+            startedAt,
+            completedAt,
+            durationMs,
             callIndex,
             callCount,
         };
@@ -208,8 +253,26 @@ export class ToolExecutor {
         }
     }
 
-    createToolStatusKey(request, toolName, callIndex = null, callCount = null) {
+    createToolInvocationId(toolCommand) {
+        if (typeof toolCommand?.id === 'string' && toolCommand.id.trim()) {
+            return `call:${toolCommand.id.trim()}`;
+        }
+        this.invocationCounter += 1;
+        return `local:${this.invocationCounter}`;
+    }
+
+    createToolStatusKey(
+        request,
+        toolName,
+        callIndex = null,
+        callCount = null,
+        invocationId = null
+    ) {
         const parts = [request?.sessionId || 'no-session', toolName || 'tool'];
+        if (invocationId) {
+            parts.push(invocationId);
+            return parts.join('|');
+        }
         if (Number.isFinite(callIndex) && Number.isFinite(callCount) && callCount > 1) {
             parts.push(String(callIndex));
         }
@@ -258,4 +321,9 @@ export class ToolExecutor {
 
 function isPlainObject(value) {
     return value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isFailedToolOutput(output) {
+    const text = typeof output === 'string' ? output.trim() : '';
+    return /^(Error\b|Error executing\b|Timed out\b|Script Exception:)/i.test(text);
 }

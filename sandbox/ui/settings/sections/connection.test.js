@@ -63,6 +63,7 @@ describe('ConnectionSection provider visibility', () => {
             webFields: document.createElement('div'),
             officialFields: document.createElement('div'),
             openaiFields: document.createElement('div'),
+            dedicatedApiFields: document.createElement('div'),
         };
 
         section.updateVisibility('official');
@@ -71,12 +72,121 @@ describe('ConnectionSection provider visibility', () => {
         expect(section.elements.apiKeyContainer.hidden).toBe(false);
         expect(section.elements.officialFields.hidden).toBe(false);
         expect(section.elements.openaiFields.hidden).toBe(true);
+        expect(section.elements.dedicatedApiFields.hidden).toBe(true);
         expect(section.elements.apiKeyContainer.style.display).toBe('');
 
         section.updateVisibility('web');
 
         expect(section.elements.webFields.hidden).toBe(false);
         expect(section.elements.apiKeyContainer.hidden).toBe(true);
+    });
+
+    it('loads dedicated provider defaults into the shared dedicated API form', () => {
+        const section = Object.create(ConnectionSection.prototype);
+        section.dedicatedApiProviders = {
+            deepseek: {
+                provider: 'deepseek',
+                baseUrl: 'https://api.deepseek.com',
+                apiKey: 'deepseek-key',
+                model: 'deepseek-v4-pro',
+                thinkingLevel: 'high',
+            },
+        };
+        section.elements = {
+            apiKeyContainer: document.createElement('div'),
+            webFields: document.createElement('div'),
+            officialFields: document.createElement('div'),
+            openaiFields: document.createElement('div'),
+            dedicatedApiFields: document.createElement('div'),
+            dedicatedApiBaseUrl: document.createElement('input'),
+            dedicatedApiKey: document.createElement('input'),
+            dedicatedApiModel: document.createElement('input'),
+            dedicatedApiRefreshModels: document.createElement('button'),
+            dedicatedApiModelListStatus: document.createElement('div'),
+            dedicatedApiThinkingLevel: document.createElement('select'),
+            dedicatedApiWebSearchRow: document.createElement('div'),
+            dedicatedApiWebSearch: document.createElement('input'),
+            dedicatedApiProviderRoutingRow: document.createElement('div'),
+            dedicatedApiProviderRouting: document.createElement('textarea'),
+        };
+        section.elements.dedicatedApiThinkingLevel.innerHTML =
+            '<option value="low">Low</option><option value="high">High</option>';
+
+        section.updateVisibility('deepseek');
+
+        expect(section.elements.dedicatedApiFields.hidden).toBe(false);
+        expect(section.elements.dedicatedApiKey.value).toBe('deepseek-key');
+        expect(section.elements.dedicatedApiModel.value).toBe('deepseek-v4-pro');
+        expect(section.elements.dedicatedApiThinkingLevel.value).toBe('high');
+        expect(section.elements.dedicatedApiRefreshModels.hidden).toBe(true);
+        expect(section.elements.dedicatedApiWebSearchRow.hidden).toBe(true);
+        expect(section.elements.dedicatedApiProviderRoutingRow.hidden).toBe(true);
+    });
+
+    it('shows OpenRouter provider routing JSON in the dedicated API form', () => {
+        const section = Object.create(ConnectionSection.prototype);
+        section.dedicatedApiProviders = {
+            openrouter: {
+                provider: 'openrouter',
+                baseUrl: 'https://openrouter.ai/api/v1',
+                apiKey: 'openrouter-key',
+                model: 'openai/gpt-5.2',
+                thinkingLevel: 'medium',
+                providerRouting: '{"order":["openai"]}',
+            },
+        };
+        section.elements = {
+            apiKeyContainer: document.createElement('div'),
+            webFields: document.createElement('div'),
+            officialFields: document.createElement('div'),
+            openaiFields: document.createElement('div'),
+            dedicatedApiFields: document.createElement('div'),
+            dedicatedApiBaseUrl: document.createElement('input'),
+            dedicatedApiKey: document.createElement('input'),
+            dedicatedApiModel: document.createElement('input'),
+            dedicatedApiRefreshModels: document.createElement('button'),
+            dedicatedApiModelListStatus: document.createElement('div'),
+            dedicatedApiThinkingLevel: document.createElement('select'),
+            dedicatedApiWebSearchRow: document.createElement('div'),
+            dedicatedApiWebSearch: document.createElement('input'),
+            dedicatedApiProviderRoutingRow: document.createElement('div'),
+            dedicatedApiProviderRouting: document.createElement('textarea'),
+        };
+        section.elements.dedicatedApiThinkingLevel.innerHTML =
+            '<option value="low">Low</option><option value="medium">Medium</option>';
+
+        section.updateVisibility('openrouter');
+
+        expect(section.elements.dedicatedApiProviderRoutingRow.hidden).toBe(false);
+        expect(section.elements.dedicatedApiRefreshModels.hidden).toBe(false);
+        expect(section.elements.dedicatedApiProviderRouting.value).toBe('{"order":["openai"]}');
+    });
+
+    it('applies refreshed provider models to the active dedicated API form', () => {
+        const section = Object.create(ConnectionSection.prototype);
+        section.activeProvider = 'openrouter';
+        section.dedicatedApiProviders = {
+            openrouter: {
+                provider: 'openrouter',
+                selectedModel: 'missing-model',
+            },
+        };
+        section.elements = {
+            dedicatedApiModel: document.createElement('input'),
+            dedicatedApiRefreshModels: document.createElement('button'),
+            dedicatedApiModelListStatus: document.createElement('div'),
+        };
+
+        section.setProviderModelList('openrouter', ['openai/gpt-5.2', 'anthropic/claude']);
+
+        expect(section.elements.dedicatedApiModel.value).toBe('openai/gpt-5.2, anthropic/claude');
+        expect(section.dedicatedApiProviders.openrouter).toEqual(
+            expect.objectContaining({
+                model: 'openai/gpt-5.2, anthropic/claude',
+                selectedModel: '',
+            })
+        );
+        expect(section.elements.dedicatedApiModelListStatus.textContent).toBe('Loaded 2 models.');
     });
 
     it('restores and reads the Gemini Web temporary chat checkbox', () => {

@@ -7,6 +7,9 @@ export function buildToolOutputHistoryText(request) {
 
 export function getToolOutputKey(request) {
     if (!request) return '';
+    if (typeof request.statusKey === 'string' && request.statusKey.trim()) {
+        return `status:${request.statusKey.trim()}:output`;
+    }
     return [
         request.sessionId || '',
         request.toolName || '',
@@ -18,6 +21,9 @@ export function getToolOutputKey(request) {
 
 export function getToolStatusKey(request) {
     if (!request) return '';
+    if (typeof request.statusKey === 'string' && request.statusKey.trim()) {
+        return request.statusKey;
+    }
     const parts = [request.sessionId || '', request.toolName || ''];
     if (
         Number.isFinite(request.callIndex) &&
@@ -39,5 +45,7 @@ export function hasPersistedToolOutput(session, request) {
 
 export function getToolOutputStatus(request) {
     const text = typeof request?.text === 'string' ? request.text.trim() : '';
-    return text.startsWith('Error executing tool:') ? 'failed' : 'completed';
+    return /^(Error\b|Error executing\b|Timed out\b|Script Exception:)/i.test(text)
+        ? 'failed'
+        : 'completed';
 }

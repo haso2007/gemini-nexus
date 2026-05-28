@@ -120,6 +120,7 @@ describe('ToolDispatcher includeSnapshot responses', () => {
         expect(BROWSER_CONTROL_PREAMBLE).toContain('index from the latest list_pages output');
         expect(BROWSER_CONTROL_PREAMBLE).toContain('For <select>, pass the select element UID');
         expect(BROWSER_CONTROL_PREAMBLE).toContain('do not reuse the failed UID');
+        expect(BROWSER_CONTROL_PREAMBLE).toContain('same document');
         expect(BROWSER_CONTROL_PREAMBLE).toContain('wait_for only waits for visible page text');
         expect(BROWSER_CONTROL_PREAMBLE).toContain(
             'Use evaluate_script mainly for inspection, extraction, and calculations.'
@@ -297,6 +298,32 @@ describe('ToolDispatcher includeSnapshot responses', () => {
         expect(result).toBe(
             'Successfully attached 1 files to element 1_2.\n\n## Latest page snapshot\nuid=2_1 button "Upload complete"'
         );
+    });
+
+    it('reports an open dialog instead of trying to take a snapshot after an interaction', async () => {
+        const actions = {
+            clickElement: vi.fn(() => Promise.resolve('Clicked element 1_2')),
+        };
+        const snapshotManager = {
+            takeSnapshot: vi.fn(() => Promise.resolve('uid=2_1 RootWebArea')),
+        };
+        const connection = {
+            getDialog: vi.fn(() => ({
+                type: 'alert',
+                message: 'Please confirm',
+            })),
+        };
+        const dispatcher = new ToolDispatcher(actions, snapshotManager, connection);
+
+        const result = await dispatcher.dispatch('click', {
+            uid: '1_2',
+            includeSnapshot: true,
+        });
+
+        expect(snapshotManager.takeSnapshot).not.toHaveBeenCalled();
+        expect(result).toContain('Clicked element 1_2');
+        expect(result).toContain('# Open dialog');
+        expect(result).toContain('Call handle_dialog to handle it before continuing.');
     });
 });
 

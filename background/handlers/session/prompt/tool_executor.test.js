@@ -172,4 +172,133 @@ describe('ToolExecutor routing', () => {
             })
         );
     });
+
+    it('marks browser-control string errors as failed execution status', async () => {
+        const controlManager = {
+            execute: vi.fn(async () => 'Error: Element 1_2 not found in current snapshot.'),
+        };
+        const executor = new ToolExecutor(controlManager, null);
+
+        const result = await executor.executeCommand(
+            { name: 'click', args: { uid: '1_2' } },
+            {
+                sessionId: 'session-1',
+                enableBrowserControl: true,
+            },
+            '{"tool":"click","args":{"uid":"1_2"}}'
+        );
+
+        expect(result).toEqual(
+            expect.objectContaining({
+                source: 'browser_control',
+                status: 'failed',
+                output: 'Error: Element 1_2 not found in current snapshot.',
+            })
+        );
+        expect(chrome.runtime.sendMessage).toHaveBeenLastCalledWith(
+            expect.objectContaining({
+                status: 'failed',
+                text: 'Error: Element 1_2 not found in current snapshot.',
+            })
+        );
+    });
+
+    it('forwards browser-control progress updates to the tool status card', async () => {
+        const controlManager = {
+            execute: vi.fn(async (toolCall, options = {}) => {
+                options.onProgress?.({
+                    phase: 'prepare',
+                    text: 'Preparing the controlled tab and debugger session...',
+                });
+                options.onProgress?.({
+                    phase: 'execute',
+                    text: 'Running click...',
+                });
+                return 'Clicked element 1_2';
+            }),
+        };
+        const executor = new ToolExecutor(controlManager, null);
+
+        const result = await executor.executeCommand(
+            { name: 'click', args: { uid: '1_2' } },
+            {
+                sessionId: 'session-1',
+                enableBrowserControl: true,
+            },
+            '{"tool":"click","args":{"uid":"1_2"}}'
+        );
+
+        expect(result).toEqual(
+            expect.objectContaining({
+                source: 'browser_control',
+                status: 'completed',
+                output: 'Clicked element 1_2',
+            })
+        );
+        expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+            expect.objectContaining({
+                status: 'running',
+                phase: 'prepare',
+                text: 'Preparing the controlled tab and debugger session...',
+            })
+        );
+        expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+            expect.objectContaining({
+                status: 'running',
+                phase: 'execute',
+                text: 'Running click...',
+            })
+        );
+    });
+
+    it('uses unique status keys and records duration for repeated same-name tool calls', async () => {
+        const now = vi
+            .spyOn(Date, 'now')
+            .mockReturnValueOnce(100)
+            .mockReturnValueOnce(140)
+            .mockReturnValueOnce(200)
+            .mockReturnValueOnce(275);
+        const controlManager = {
+            execute: vi.fn(async () => 'clicked'),
+        };
+        const executor = new ToolExecutor(controlManager, null);
+        const request = {
+            sessionId: 'session-1',
+            enableBrowserControl: true,
+        };
+
+        try {
+            const first = await executor.executeCommand(
+                { name: 'click', args: { uid: '1_2' } },
+                request,
+                '{"tool":"click","args":{"uid":"1_2"}}'
+            );
+            const second = await executor.executeCommand(
+                { name: 'click', args: { uid: '1_3' } },
+                request,
+                '{"tool":"click","args":{"uid":"1_3"}}'
+            );
+
+            expect(first.statusKey).toBe('session-1|click|local:1');
+            expect(first.durationMs).toBe(40);
+            expect(second.statusKey).toBe('session-1|click|local:2');
+            expect(second.durationMs).toBe(75);
+            expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    statusKey: 'session-1|click|local:1',
+                    status: 'running',
+                    startedAt: 100,
+                })
+            );
+            expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    statusKey: 'session-1|click|local:2',
+                    status: 'completed',
+                    durationMs: 75,
+                })
+            );
+        } finally {
+            now.mockRestore();
+        }
+    });
 });

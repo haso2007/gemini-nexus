@@ -12,10 +12,16 @@ export class SnapshotManager {
         this.uidToNodeId = new Map(); // Maps uid -> AX nodeId
         this.nodeIdToUid = new Map(); // Maps AX nodeId -> uid
         this.axNodeByNodeId = new Map(); // Maps AX nodeId -> AXNode (raw)
+        this.backendNodeIdToUid = new Map(); // Keeps stable UIDs for DOM nodes while the page is stable
         this.snapshotIdCount = 0;
 
         // Listen to connection detach to clear state
-        this.connection.onDetach(() => this.clear());
+        this.connection.onDetach(() => this.reset());
+        this.connection.addListener?.((method, params) => {
+            if (this._shouldResetStableIdsForEvent(method, params)) {
+                this.reset();
+            }
+        });
     }
 
     clear() {
@@ -26,7 +32,26 @@ export class SnapshotManager {
         this.axNodeByNodeId.clear();
     }
 
+    reset() {
+        this.clear();
+        this.backendNodeIdToUid.clear();
+    }
+
+    _shouldResetStableIdsForEvent(method, params = {}) {
+        if (method === 'Page.navigatedWithinDocument') return false;
+        if (method === 'Page.frameStartedNavigating') {
+            return !['sameDocument', 'historySameDocument'].includes(params?.navigationType);
+        }
+        if (method === 'Page.frameNavigated') {
+            return !params?.frame?.parentId;
+        }
+        return false;
+    }
+
     getBackendNodeId(uid) {
+        const id = this.snapshotMap.get(uid);
+        if (id) return id;
+
         // UIDs are formatted as "{snapshotId}_{nodeIndex}"
         if (uid && uid.includes('_')) {
             const parts = uid.split('_');
@@ -39,14 +64,10 @@ export class SnapshotManager {
             }
         }
 
-        const id = this.snapshotMap.get(uid);
-        if (!id) {
-            // If ID matches current version but not found in map, it's likely invalid or ephemeral
-            throw new Error(
-                `Element '${uid}' not found in current snapshot. Please verify the UID or take a new snapshot.`
-            );
-        }
-        return id;
+        // If ID matches current version but not found in map, it's likely invalid or ephemeral
+        throw new Error(
+            `Element '${uid}' not found in current snapshot. Please verify the UID or take a new snapshot.`
+        );
     }
 
     getAXNode(uid) {
@@ -98,6 +119,7 @@ export class SnapshotManager {
 
         // Clear maps
         this.clear();
+        const seenBackendNodeIds = new Set();
         nodes.forEach((node) => {
             if (node.nodeId) this.axNodeByNodeId.set(node.nodeId, node);
         });
@@ -105,9 +127,20 @@ export class SnapshotManager {
         const formatter = new SnapshotFormatter({
             verbose: args.verbose === true,
             snapshotPrefix: this.snapshotIdCount,
+            resolveUid: (node, fallbackUid) => {
+                const backendNodeId = node.backendDOMNodeId;
+                if (!backendNodeId) return fallbackUid;
+
+                const existingUid = this.backendNodeIdToUid.get(backendNodeId);
+                if (existingUid) return existingUid;
+
+                this.backendNodeIdToUid.set(backendNodeId, fallbackUid);
+                return fallbackUid;
+            },
             onNode: (node, uid) => {
                 if (node.backendDOMNodeId) {
                     this.snapshotMap.set(uid, node.backendDOMNodeId);
+                    seenBackendNodeIds.add(node.backendDOMNodeId);
                 }
                 this.uidToAxNode.set(uid, node);
                 if (node.nodeId) {
@@ -117,6 +150,14 @@ export class SnapshotManager {
             },
         });
 
-        return formatter.format(nodes);
+        const snapshot = formatter.format(nodes);
+
+        for (const backendNodeId of this.backendNodeIdToUid.keys()) {
+            if (!seenBackendNodeIds.has(backendNodeId)) {
+                this.backendNodeIdToUid.delete(backendNodeId);
+            }
+        }
+
+        return snapshot;
     }
 }

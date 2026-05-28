@@ -122,6 +122,30 @@ describe('appendMessage copy button', () => {
         expect(userController.div.querySelector('.message-actions .edit-btn')).not.toBeNull();
     });
 
+    it('aligns tool process cards with the assistant content column', () => {
+        const container = document.createElement('div');
+
+        const controller = appendMessage(container, '', 'user', null, null, null, {
+            kind: 'tool-status',
+            toolName: 'navigate_page',
+            toolStatus: 'completed',
+            autoScroll: false,
+        });
+
+        const row = controller.div.querySelector(':scope > .msg-row');
+        expect(row?.classList.contains('tool-message-row')).toBe(true);
+        expect(row?.children[0]?.classList.contains('tool-message-rail')).toBe(true);
+        expect(row?.children[1]?.classList.contains('tool-message-content-container')).toBe(true);
+        expect(controller.div.querySelector('.message-avatar')).toBeNull();
+        expect(controller.div.querySelector('.message-actions .copy-btn')).toBeNull();
+        expect(renderContent).toHaveBeenLastCalledWith(
+            expect.any(HTMLDivElement),
+            '',
+            'tool-status',
+            expect.objectContaining({ toolName: 'navigate_page' })
+        );
+    });
+
     it('groups consecutive normal messages from the same role like AMC', () => {
         const container = document.createElement('div');
 

@@ -13,6 +13,7 @@ import {
     restoreAccountIndices,
     restoreContextSettings,
     restoreCustomSelectionTools,
+    restoreGeneratedImageWatermarkRemoval,
     restoreImageTools,
     restoreTextSelection,
     restoreTextSelectionBlacklist,
@@ -75,6 +76,9 @@ const WINDOW_MESSAGE_HANDLERS = {
     GET_IMAGE_TOOLS(payload, bridge) {
         restoreImageTools(bridge.frame);
     },
+    GET_GENERATED_IMAGE_WATERMARK_REMOVAL(payload, bridge) {
+        restoreGeneratedImageWatermarkRemoval(bridge.frame);
+    },
     GET_ACCOUNT_INDICES(payload, bridge) {
         restoreAccountIndices(bridge.frame);
     },
@@ -122,6 +126,9 @@ const WINDOW_MESSAGE_HANDLERS = {
     },
     SAVE_IMAGE_TOOLS(payload, bridge) {
         bridge.state.save('geminiImageToolsEnabled', payload);
+    },
+    SAVE_GENERATED_IMAGE_WATERMARK_REMOVAL(payload, bridge) {
+        bridge.state.save('geminiGeneratedImageWatermarkRemovalEnabled', payload !== false);
     },
     SAVE_SIDEBAR_BEHAVIOR(payload, bridge) {
         bridge.state.save('geminiSidebarBehavior', payload);

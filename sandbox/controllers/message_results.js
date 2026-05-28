@@ -1,4 +1,5 @@
 import { cropImage } from '../../shared/dom/crop_image.js';
+import { WatermarkRemover } from '../../shared/media/watermark_remover.js';
 import { t } from '../core/i18n.js';
 
 export function handleImageFetchResult(request, { ui, imageManager }) {
@@ -13,12 +14,23 @@ export function handleImageFetchResult(request, { ui, imageManager }) {
     imageManager.setFile(request.base64, request.type, request.name);
 }
 
-export async function handleGeneratedImageFetchResult(request) {
+async function prepareGeneratedImageBase64(base64Image, { removeWatermark = true } = {}) {
+    if (removeWatermark === false) return base64Image;
+
+    try {
+        return await WatermarkRemover.process(base64Image);
+    } catch (error) {
+        console.warn('Generated image watermark removal failed:', error);
+        return base64Image;
+    }
+}
+
+export async function handleGeneratedImageFetchResult(request, options = {}) {
     const imageElement = document.querySelector(`img[data-req-id="${request.reqId}"]`);
     if (!imageElement) return;
 
     if (request.base64) {
-        imageElement.src = request.base64;
+        imageElement.src = await prepareGeneratedImageBase64(request.base64, options);
         imageElement.classList.remove('loading');
         return;
     }

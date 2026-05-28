@@ -25,6 +25,22 @@ function isXAIBaseUrl(baseUrl) {
     }
 }
 
+function mergePlainObject(target, source) {
+    if (!source || typeof source !== 'object' || Array.isArray(source)) return target;
+    return Object.assign(target, source);
+}
+
+function extractReasoningText(container = {}) {
+    if (typeof container.reasoning_content === 'string') return container.reasoning_content;
+    if (typeof container.reasoning === 'string') return container.reasoning;
+    if (!Array.isArray(container.reasoning_details)) return '';
+
+    return container.reasoning_details
+        .map((detail) => detail?.text || detail?.summary || '')
+        .filter(Boolean)
+        .join('');
+}
+
 /**
  * Sends a message using an OpenAI Compatible API.
  */
@@ -73,6 +89,7 @@ export async function sendOpenAIMessage(
     if (webSearch) {
         payload.web_search_options = {};
     }
+    mergePlainObject(payload, config.chatPayload);
 
     const headers = {
         'Content-Type': 'application/json',
@@ -81,6 +98,7 @@ export async function sendOpenAIMessage(
     if (apiKey) {
         headers['Authorization'] = `Bearer ${apiKey}`;
     }
+    mergePlainObject(headers, config.headers);
 
     const webSearchLabel = webSearch ? ' with Chat web search' : '';
     debugLog(`[OpenAI Compatible] Requesting ${model} at ${url}${webSearchLabel}...`);
@@ -113,10 +131,15 @@ export async function sendOpenAIMessage(
                 onUpdate(fullText, fullThoughts);
             }
 
-            // Reasoning Content (DeepSeek R1 style or similar extension)
-            // If the API returns reasoning_content, use it as thoughts
-            if (delta.reasoning_content) {
-                fullThoughts += delta.reasoning_content;
+            const reasoningText = extractReasoningText(delta);
+            if (reasoningText) {
+                fullThoughts += reasoningText;
+                onUpdate(fullText, fullThoughts);
+            }
+
+            const completedReasoningText = extractReasoningText(choice.message);
+            if (completedReasoningText && !fullThoughts) {
+                fullThoughts = completedReasoningText;
                 onUpdate(fullText, fullThoughts);
             }
 
@@ -180,6 +203,7 @@ async function sendOpenAIResponsesMessage(
             summary: 'detailed',
         };
     }
+    mergePlainObject(payload, config.responsesPayload);
 
     const headers = {
         'Content-Type': 'application/json',
@@ -188,6 +212,7 @@ async function sendOpenAIResponsesMessage(
     if (apiKey) {
         headers['Authorization'] = `Bearer ${apiKey}`;
     }
+    mergePlainObject(headers, config.headers);
 
     const webSearchLabel = config.webSearch === true ? ' with web search' : '';
     debugLog(`[OpenAI Responses] Requesting ${model} at ${url}${webSearchLabel}...`);

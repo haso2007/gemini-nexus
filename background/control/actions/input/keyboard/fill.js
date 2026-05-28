@@ -1,4 +1,8 @@
 export async function handleFillElement(handler, { uid, value }) {
+    if (typeof uid !== 'string' || !uid.trim()) {
+        throw new Error("'uid' must be a non-empty string.");
+    }
+
     const objectId = await handler.getObjectIdFromUid(uid);
 
     await handler.waitHelper.execute(async () => {
@@ -20,6 +24,8 @@ export async function handleFillElement(handler, { uid, value }) {
 
         if (isSelect) {
             await handleSelect(handler, objectId, uid, value);
+        } else if (await isToggleElement(handler, objectId)) {
+            await handleToggle(handler, objectId, value);
         } else {
             await handleInput(handler, objectId, value);
         }
@@ -40,10 +46,84 @@ export async function handleFillForm(handler, { elements = [] }) {
         if (typeof element.value !== 'string') {
             return "Error: Each form element requires a string 'value'.";
         }
-        await handleFillElement(handler, element);
+        try {
+            await handleFillElement(handler, element);
+        } catch (error) {
+            const index = elements.indexOf(element) + 1;
+            return `Error filling form element ${index}/${elements.length} (${element.uid}): ${error.message}. Fields before this step may already be changed; take_snapshot before retrying.`;
+        }
     }
 
     return `Filled form (${elements.length} elements)`;
+}
+
+async function isToggleElement(handler, objectId) {
+    const result = await handler.cmd('Runtime.callFunctionOn', {
+        objectId,
+        functionDeclaration: `function() {
+            if (this instanceof HTMLInputElement) {
+                return this.type === 'checkbox' || this.type === 'radio';
+            }
+            const role = this.getAttribute && this.getAttribute('role');
+            return role === 'checkbox' || role === 'radio' || role === 'switch';
+        }`,
+        returnByValue: true,
+    });
+
+    return result?.result?.value === true;
+}
+
+async function handleToggle(handler, objectId, value) {
+    const normalizedValue = String(value || '')
+        .trim()
+        .toLowerCase();
+    if (normalizedValue !== 'true' && normalizedValue !== 'false') {
+        throw new Error(
+            `Checkboxes, radio buttons, and switches require a value of "true" or "false".`
+        );
+    }
+
+    await handler.cmd('Runtime.callFunctionOn', {
+        objectId,
+        functionDeclaration: `function(desired) {
+            const nextChecked = desired === true;
+            const dispatchStateEvents = () => {
+                this.dispatchEvent(new Event('input', { bubbles: true }));
+                this.dispatchEvent(new Event('change', { bubbles: true }));
+            };
+
+            if (this instanceof HTMLInputElement) {
+                if (this.type === 'radio' && nextChecked === false) {
+                    this.checked = false;
+                    dispatchStateEvents();
+                    return;
+                }
+
+                if (this.checked !== nextChecked) {
+                    this.click();
+                    if (this.checked !== nextChecked) {
+                        this.checked = nextChecked;
+                        dispatchStateEvents();
+                    }
+                }
+                return;
+            }
+
+            const checkedAttr = this.getAttribute('aria-checked');
+            const pressedAttr = this.getAttribute('aria-pressed');
+            const currentChecked = checkedAttr === 'true' || pressedAttr === 'true';
+            if (currentChecked !== nextChecked && typeof this.click === 'function') {
+                this.click();
+            }
+
+            const nextValue = nextChecked ? 'true' : 'false';
+            if (checkedAttr !== null) this.setAttribute('aria-checked', nextValue);
+            if (pressedAttr !== null) this.setAttribute('aria-pressed', nextValue);
+            dispatchStateEvents();
+        }`,
+        arguments: [{ value: normalizedValue === 'true' }],
+        userGesture: true,
+    });
 }
 
 async function handleSelect(handler, objectId, uid, value) {

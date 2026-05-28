@@ -5,11 +5,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 async function installContentIndex(storageResult, options = {}) {
     vi.resetModules();
     window.history.replaceState(null, '', '/docs/page');
+    const postMessageSpy = vi.spyOn(window, 'postMessage').mockImplementation(() => {});
 
     let storageChanged;
     const controller = {
         setSelectionEnabled: vi.fn(),
         setImageToolsEnabled: vi.fn(),
+        setGeneratedImageWatermarkRemovalEnabled: vi.fn(),
         setCustomSelectionTools: vi.fn(),
     };
     const router = { init: vi.fn() };
@@ -47,7 +49,7 @@ async function installContentIndex(storageResult, options = {}) {
     await import('./settings_sync.js');
     await import('./index.js');
 
-    return { controller, storageChanged };
+    return { controller, storageChanged, postMessageSpy };
 }
 
 describe('content index text selection blacklist', () => {
@@ -114,6 +116,41 @@ describe('content index text selection blacklist', () => {
         expect(controller.setCustomSelectionTools).toHaveBeenLastCalledWith(nextTools);
     });
 
+    it('loads and hot-updates generated image watermark cleanup', async () => {
+        const { controller, postMessageSpy, storageChanged } = await installContentIndex({
+            geminiTextSelectionEnabled: true,
+            geminiTextSelectionBlacklist: '',
+            geminiGeneratedImageWatermarkRemovalEnabled: false,
+        });
+
+        expect(controller.setGeneratedImageWatermarkRemovalEnabled).toHaveBeenCalledWith(false);
+        expect(postMessageSpy).toHaveBeenCalledWith(
+            {
+                source: 'GeminiNexus',
+                type: 'GEMINI_NEXUS_WATERMARK_REMOVAL_ENABLED',
+                enabled: false,
+            },
+            '*'
+        );
+
+        storageChanged(
+            {
+                geminiGeneratedImageWatermarkRemovalEnabled: { newValue: true },
+            },
+            'local'
+        );
+
+        expect(controller.setGeneratedImageWatermarkRemovalEnabled).toHaveBeenLastCalledWith(true);
+        expect(postMessageSpy).toHaveBeenLastCalledWith(
+            {
+                source: 'GeminiNexus',
+                type: 'GEMINI_NEXUS_WATERMARK_REMOVAL_ENABLED',
+                enabled: true,
+            },
+            '*'
+        );
+    });
+
     it('keeps current toolbar state when the initial settings read fails', async () => {
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
@@ -130,6 +167,7 @@ describe('content index text selection blacklist', () => {
 
             expect(controller.setSelectionEnabled).not.toHaveBeenCalled();
             expect(controller.setImageToolsEnabled).not.toHaveBeenCalled();
+            expect(controller.setGeneratedImageWatermarkRemovalEnabled).not.toHaveBeenCalled();
             expect(controller.setCustomSelectionTools).not.toHaveBeenCalled();
             expect(warnSpy).toHaveBeenCalledWith(
                 'Failed to load content toolbar settings:',

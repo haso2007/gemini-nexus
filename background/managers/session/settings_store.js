@@ -8,37 +8,30 @@ import {
 import {
     getConnectionProvider,
     getOpenAIWebSearchStorageKeys,
+    CONNECTION_STORAGE_KEYS,
 } from '../../../shared/settings/connection.js';
 import { normalizeWebThinkingLevel } from '../../../shared/models/web_thinking.js';
 import { normalizeOpenAIWebSearchSettings } from '../../../shared/settings/openai.js';
+import {
+    createDedicatedApiSettingsPayload,
+    isDedicatedApiProvider,
+} from '../../../shared/settings/dedicated_providers.js';
 import { debugLog } from '../../../shared/logging/debug.js';
 
 function normalizeProviderOverride(provider) {
     const normalized = String(provider || '').trim();
-    return normalized === 'web' || normalized === 'official' || normalized === 'openai'
+    return normalized === 'web' ||
+        normalized === 'official' ||
+        normalized === 'openai' ||
+        isDedicatedApiProvider(normalized)
         ? normalized
         : null;
 }
 
 export async function getConnectionSettings(options = {}) {
     const stored = await chrome.storage.local.get([
-        'geminiProvider',
-        'geminiUseOfficialApi',
-        'geminiWebThinkingLevel',
-        'geminiWebTemporaryChat',
-        'geminiOfficialBaseUrl',
-        'geminiApiKey',
-        'geminiOfficialModel',
-        'geminiThinkingLevel',
-        'geminiOfficialWebSearch',
+        ...CONNECTION_STORAGE_KEYS,
         'geminiApiKeyPointer',
-        'geminiOpenaiBaseUrl',
-        'geminiOpenaiApiKey',
-        'geminiOpenaiModel',
-        'geminiOpenaiThinkingLevel',
-        'geminiOpenaiUseResponsesApi',
-        'geminiOpenaiWebSearchMode',
-        'geminiOpenaiWebSearch',
         'geminiContextMode',
         'geminiContextRecentTurns',
     ]);
@@ -91,6 +84,7 @@ export async function getConnectionSettings(options = {}) {
         openaiThinkingLevel: stored.geminiOpenaiThinkingLevel || DEFAULT_THINKING_LEVEL,
         openaiUseResponsesApi: openaiSettings.useResponsesApi,
         openaiWebSearch: openaiSettings.webSearch,
+        dedicatedApiProviders: createDedicatedApiSettingsPayload(stored),
         contextMode: stored.geminiContextMode || DEFAULT_CONTEXT_MODE,
         contextRecentTurns: stored.geminiContextRecentTurns || DEFAULT_CONTEXT_RECENT_TURNS,
     };

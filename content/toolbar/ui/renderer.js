@@ -8,6 +8,7 @@
             this.view = view;
             this.bridge = bridge;
             this.currentResultText = '';
+            this.generatedImageWatermarkRemovalEnabled = true;
         }
 
         /**
@@ -57,14 +58,32 @@
             });
         }
 
-        handleGeneratedImageResult(request) {
+        setGeneratedImageWatermarkRemovalEnabled(enabled) {
+            this.generatedImageWatermarkRemovalEnabled = enabled !== false;
+        }
+
+        async _prepareGeneratedImageBase64(base64Image) {
+            if (this.generatedImageWatermarkRemovalEnabled === false) return base64Image;
+
+            const watermarkRemover = globalThis.GeminiNexusWatermarkRemover;
+            if (typeof watermarkRemover?.process !== 'function') return base64Image;
+
+            try {
+                return await watermarkRemover.process(base64Image);
+            } catch (error) {
+                console.warn('Generated image watermark removal failed:', error);
+                return base64Image;
+            }
+        }
+
+        async handleGeneratedImageResult(request) {
             const container = this.view.elements.resultText;
             if (!container) return;
 
             const imageElement = container.querySelector(`img[data-req-id="${request.reqId}"]`);
             if (imageElement) {
                 if (request.base64) {
-                    imageElement.src = request.base64;
+                    imageElement.src = await this._prepareGeneratedImageBase64(request.base64);
                     imageElement.classList.remove('loading');
                     imageElement.style.minHeight = 'auto';
                 } else {

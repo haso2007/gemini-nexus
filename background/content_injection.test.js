@@ -2,24 +2,34 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
     getContentScriptFiles,
+    getMatchingContentScriptEntries,
     injectContentScriptsIntoOpenTabs,
     injectContentScriptsIntoTab,
     isInjectableTabUrl,
     setupContentScriptInjection,
 } from './content_injection.js';
 
+const testManifest = {
+    content_scripts: [
+        {
+            matches: ['<all_urls>'],
+            js: ['content/page_guard.js', 'content/index.js'],
+        },
+        {
+            matches: ['https://gemini.google.com/*'],
+            js: ['content/gemini_watermark_page.js'],
+            run_at: 'document_start',
+            world: 'MAIN',
+        },
+    ],
+};
+
 describe('content script startup injection', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         globalThis.chrome = {
             runtime: {
-                getManifest: vi.fn(() => ({
-                    content_scripts: [
-                        {
-                            js: ['content/page_guard.js', 'content/index.js'],
-                        },
-                    ],
-                })),
+                getManifest: vi.fn(() => testManifest),
                 onInstalled: {
                     addListener: vi.fn(),
                 },
@@ -46,7 +56,32 @@ describe('content script startup injection', () => {
     });
 
     it('uses the manifest content script order for source and packaged builds', () => {
-        expect(getContentScriptFiles()).toEqual(['content/page_guard.js', 'content/index.js']);
+        expect(getContentScriptFiles()).toEqual([
+            'content/page_guard.js',
+            'content/index.js',
+            'content/gemini_watermark_page.js',
+        ]);
+    });
+
+    it('matches content script entries by page URL and execution world', () => {
+        expect(getMatchingContentScriptEntries(testManifest, 'https://example.com/docs')).toEqual([
+            expect.objectContaining({
+                js: ['content/page_guard.js', 'content/index.js'],
+                world: 'ISOLATED',
+            }),
+        ]);
+        expect(
+            getMatchingContentScriptEntries(testManifest, 'https://gemini.google.com/app')
+        ).toEqual([
+            expect.objectContaining({
+                js: ['content/page_guard.js', 'content/index.js'],
+                world: 'ISOLATED',
+            }),
+            expect.objectContaining({
+                js: ['content/gemini_watermark_page.js'],
+                world: 'MAIN',
+            }),
+        ]);
     });
 
     it('injects manifest content scripts into an open page that has no existing content script', async () => {
@@ -64,6 +99,59 @@ describe('content script startup injection', () => {
         expect(chrome.scripting.executeScript).toHaveBeenNthCalledWith(2, {
             target: { tabId: 12 },
             files: ['content/page_guard.js', 'content/index.js'],
+        });
+    });
+
+    it('injects the Gemini main-world watermark script only on Gemini pages', async () => {
+        chrome.scripting.executeScript
+            .mockResolvedValueOnce([{ result: false }])
+            .mockResolvedValueOnce([{ result: undefined }])
+            .mockResolvedValueOnce([{ result: false }])
+            .mockResolvedValueOnce([{ result: undefined }]);
+
+        const result = await injectContentScriptsIntoTab({
+            id: 12,
+            url: 'https://gemini.google.com/app',
+        });
+
+        expect(result.status).toBe('injected');
+        expect(chrome.scripting.executeScript).toHaveBeenNthCalledWith(2, {
+            target: { tabId: 12 },
+            files: ['content/page_guard.js', 'content/index.js'],
+        });
+        expect(chrome.scripting.executeScript).toHaveBeenNthCalledWith(3, {
+            target: { tabId: 12 },
+            world: 'MAIN',
+            func: expect.any(Function),
+        });
+        expect(chrome.scripting.executeScript).toHaveBeenNthCalledWith(4, {
+            target: { tabId: 12 },
+            files: ['content/gemini_watermark_page.js'],
+            world: 'MAIN',
+        });
+    });
+
+    it('adds the Gemini main-world script when the normal content script is already present', async () => {
+        chrome.scripting.executeScript
+            .mockResolvedValueOnce([{ result: true }])
+            .mockResolvedValueOnce([{ result: false }])
+            .mockResolvedValueOnce([{ result: undefined }]);
+
+        const result = await injectContentScriptsIntoTab({
+            id: 12,
+            url: 'https://gemini.google.com/app',
+        });
+
+        expect(result.status).toBe('injected');
+        expect(chrome.scripting.executeScript).toHaveBeenNthCalledWith(2, {
+            target: { tabId: 12 },
+            world: 'MAIN',
+            func: expect.any(Function),
+        });
+        expect(chrome.scripting.executeScript).toHaveBeenNthCalledWith(3, {
+            target: { tabId: 12 },
+            files: ['content/gemini_watermark_page.js'],
+            world: 'MAIN',
         });
     });
 

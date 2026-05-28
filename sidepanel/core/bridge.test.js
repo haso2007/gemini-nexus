@@ -85,6 +85,26 @@ describe('MessageBridge model persistence', () => {
         expect(state.save).toHaveBeenCalledWith('geminiModel', 'gemini-3-flash');
     });
 
+    it('saves dedicated provider model selections in provider-specific keys', () => {
+        const frame = createFrame();
+        const state = createState();
+        const bridge = new MessageBridge(frame, state);
+
+        bridge.handleWindowMessage({
+            source: frame.getWindow(),
+            data: {
+                action: 'SAVE_MODEL',
+                payload: {
+                    provider: 'deepseek',
+                    model: 'deepseek-v4-pro',
+                },
+            },
+        });
+
+        expect(state.save).toHaveBeenCalledWith('geminiDeepseekSelectedModel', 'deepseek-v4-pro');
+        expect(state.save).not.toHaveBeenCalledWith('geminiModel', 'deepseek-v4-pro');
+    });
+
     it('merges side panel session bindings with existing session storage', () => {
         const frame = createFrame();
         const state = createState();

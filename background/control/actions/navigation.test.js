@@ -3,10 +3,11 @@ import { NavigationActions } from './navigation.js';
 
 function createActions(groupContext = {}) {
     const connection = { currentTabId: 101, targetTabId: 101 };
+    const snapshotManager = { reset: vi.fn() };
     const waitHelper = {
         execute: vi.fn(async (fn) => fn()),
     };
-    return new NavigationActions(connection, {}, waitHelper, groupContext);
+    return new NavigationActions(connection, snapshotManager, waitHelper, groupContext);
 }
 
 describe('NavigationActions controlled tab group scope', () => {
@@ -66,15 +67,75 @@ describe('NavigationActions controlled tab group scope', () => {
 
     it('navigates the intended target tab when debugger is still attached elsewhere', async () => {
         const connection = { currentTabId: 101, targetTabId: 202 };
+        const snapshotManager = { reset: vi.fn() };
         const waitHelper = {
             execute: vi.fn(async (fn) => fn()),
         };
-        const actions = new NavigationActions(connection, {}, waitHelper);
+        const actions = new NavigationActions(connection, snapshotManager, waitHelper);
         chrome.tabs.update = vi.fn(() => Promise.resolve());
 
         await actions.navigatePage({ url: 'https://target.test/' });
 
         expect(chrome.tabs.update).toHaveBeenCalledWith(202, { url: 'https://target.test/' });
+        expect(snapshotManager.reset).toHaveBeenCalledTimes(1);
+    });
+
+    it('clears cached snapshot UIDs after history navigation', async () => {
+        const connection = { currentTabId: 101, targetTabId: 101 };
+        const snapshotManager = { reset: vi.fn() };
+        const waitHelper = {
+            execute: vi.fn(async (fn) => fn()),
+        };
+        const actions = new NavigationActions(connection, snapshotManager, waitHelper);
+        chrome.tabs.goBack = vi.fn(() => Promise.resolve());
+
+        await actions.navigatePage({ type: 'back' });
+
+        expect(chrome.tabs.goBack).toHaveBeenCalledWith(101);
+        expect(snapshotManager.reset).toHaveBeenCalledTimes(1);
+    });
+
+    it('reloads with cache bypass when requested', async () => {
+        const connection = { currentTabId: 101, targetTabId: 101 };
+        const snapshotManager = { reset: vi.fn() };
+        const waitHelper = {
+            execute: vi.fn(async (fn) => fn()),
+        };
+        const actions = new NavigationActions(connection, snapshotManager, waitHelper);
+        chrome.tabs.reload = vi.fn(() => Promise.resolve());
+
+        const output = await actions.navigatePage({ type: 'reload', ignoreCache: true });
+
+        expect(chrome.tabs.reload).toHaveBeenCalledWith(101, { bypassCache: true });
+        expect(output).toBe('Reloaded page bypassing cache');
+    });
+
+    it('rejects invalid navigation arguments before waiting for page events', async () => {
+        const actions = createActions();
+
+        const output = await actions.navigatePage({ type: 'url' });
+
+        expect(output).toBe("Error: 'url' is required when type is 'url'.");
+        expect(actions.waitHelper.execute).not.toHaveBeenCalled();
+    });
+
+    it('includes the final URL when the action waiter observes a URL change', async () => {
+        const connection = { currentTabId: 101, targetTabId: 101 };
+        const snapshotManager = { reset: vi.fn() };
+        const waitHelper = {
+            execute: vi.fn(async (fn) => {
+                await fn();
+                return { navigationStarted: true, navigatedToUrl: 'https://target.test/done' };
+            }),
+        };
+        const actions = new NavigationActions(connection, snapshotManager, waitHelper);
+        chrome.tabs.update = vi.fn(() => Promise.resolve());
+
+        const output = await actions.navigatePage({ url: 'https://target.test/' });
+
+        expect(output).toBe(
+            'Navigating to https://target.test/. Current URL: https://target.test/done'
+        );
     });
 
     it('selects pages by index from the controlled group only', async () => {
@@ -83,18 +144,21 @@ describe('NavigationActions controlled tab group scope', () => {
         const result = await actions.selectPage({ index: 1 });
 
         expect(result).toMatchObject({
-            output: 'Selected page 1 (Background Mode): Grouped B',
+            output: 'Selected page 1: Grouped B',
             _meta: { switchTabId: 202 },
         });
     });
 
-    it('closes pages by index from the controlled group only', async () => {
+    it('switches to another grouped page after closing the current target', async () => {
         const actions = createActions({ getControlledGroupId: () => 7 });
 
         const result = await actions.closePage({ index: 0 });
 
         expect(chrome.tabs.remove).toHaveBeenCalledWith(101);
-        expect(result).toBe('Closed page 0: Grouped A');
+        expect(result).toMatchObject({
+            output: 'Closed page 0: Grouped A. Selected page: Grouped B',
+            _meta: { switchTabId: 202 },
+        });
     });
 
     it('adds newly opened pages to the controlled group', async () => {

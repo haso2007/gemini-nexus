@@ -37,7 +37,13 @@ describe('message tool helpers', () => {
         };
 
         expect(getToolOutputKey(request)).toBe('session-1|search|2|1|Found docs');
+        expect(getToolOutputKey({ ...request, statusKey: 'session-1|search|local:7' })).toBe(
+            'status:session-1|search|local:7:output'
+        );
         expect(getToolStatusKey(request)).toBe('session-1|search|1');
+        expect(getToolStatusKey({ ...request, statusKey: 'session-1|search|local:7' })).toBe(
+            'session-1|search|local:7'
+        );
     });
 
     it('detects persisted tool output and failed output status', () => {
@@ -56,6 +62,10 @@ describe('message tool helpers', () => {
 
         expect(hasPersistedToolOutput(session, request)).toBe(true);
         expect(getToolOutputStatus(request)).toBe('failed');
+        expect(getToolOutputStatus({ text: 'Error: No active tab found.' })).toBe('failed');
+        expect(getToolOutputStatus({ text: 'Timed out waiting for text: Dashboard' })).toBe(
+            'failed'
+        );
     });
 
     it('finds and removes rendered tool status controllers', () => {

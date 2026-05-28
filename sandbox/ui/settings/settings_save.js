@@ -6,6 +6,7 @@ import {
     DEFAULT_THINKING_LEVEL,
 } from '../../../shared/config/constants.js';
 import { normalizeWebThinkingLevel } from '../../../shared/models/web_thinking.js';
+import { normalizeDedicatedApiSettingsPayload } from '../../../shared/settings/dedicated_providers.js';
 import { normalizeOpenAIWebSearchSettings } from '../../../shared/settings/openai.js';
 import { normalizeCustomSelectionTools } from '../../../shared/settings/selection_tools.js';
 
@@ -31,6 +32,7 @@ export function buildGeneralSettingsForSave(formData) {
         textSelectionBlacklist: formData.textSelectionBlacklist || '',
         customSelectionTools: normalizeCustomSelectionTools(formData.customSelectionTools),
         imageToolsEnabled: formData.imageTools,
+        generatedImageWatermarkRemovalEnabled: formData.generatedImageWatermarkRemoval !== false,
         accountIndices: normalizeAccountIndices(formData.accountIndices),
         sidebarBehavior: formData.sidebarBehavior || 'auto',
         sidePanelScope: formData.sidePanelScope || DEFAULT_SIDE_PANEL_SCOPE,
@@ -63,6 +65,9 @@ export function buildConnectionSettingsForSave(connection, previousConnectionDat
         openaiThinkingLevel: connection.openaiThinkingLevel || DEFAULT_THINKING_LEVEL,
         openaiUseResponsesApi: openaiSettings.useResponsesApi,
         openaiWebSearch: openaiSettings.webSearch,
+        dedicatedApiProviders: normalizeDedicatedApiSettingsPayload(
+            connection.dedicatedApiProviders || previousConnectionData.dedicatedApiProviders
+        ),
         mcpEnabled: connection.mcpEnabled === true,
         mcpTransport: connection.mcpTransport || DEFAULT_MCP_TRANSPORT,
         mcpServerUrl: connection.mcpServerUrl || '',

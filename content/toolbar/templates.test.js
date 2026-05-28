@@ -53,6 +53,12 @@ describe('GeminiToolbarTemplates', () => {
                 providerWebShort: 'Web',
                 providerOfficialShort: 'API',
                 providerOpenAIShort: 'OpenAI',
+                providerOpenAIOfficialShort: 'OpenAI API',
+                providerDeepSeekShort: 'DeepSeek',
+                providerOpenRouterShort: 'OpenRouter',
+                providerDashScopeShort: 'DashScope',
+                providerAnthropicShort: 'Anthropic',
+                providerZhipuShort: 'Zhipu',
                 translateTargetLabel: 'Translate to',
                 translationTargetOptions: [
                     { value: 'auto', label: 'Auto' },
@@ -107,8 +113,28 @@ describe('GeminiToolbarTemplates', () => {
 
         expect(providerSelect).not.toBeNull();
         expect(providerSelect.getAttribute('title')).toBe('Popup provider');
-        expect(options.map((option) => option.value)).toEqual(['web', 'official', 'openai']);
-        expect(options.map((option) => option.textContent)).toEqual(['Web', 'API', 'OpenAI']);
+        expect(options.map((option) => option.value)).toEqual([
+            'web',
+            'official',
+            'openai',
+            'openai_official',
+            'deepseek',
+            'openrouter',
+            'dashscope',
+            'anthropic',
+            'zhipu',
+        ]);
+        expect(options.map((option) => option.textContent)).toEqual([
+            'Web',
+            'API',
+            'OpenAI',
+            'OpenAI API',
+            'DeepSeek',
+            'OpenRouter',
+            'DashScope',
+            'Anthropic',
+            'Zhipu',
+        ]);
     });
 
     it('renders the Web thinking toggle with the lightning icon in the ask window header', () => {

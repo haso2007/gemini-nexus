@@ -1,4 +1,5 @@
 import { CONNECTION_STORAGE_KEYS } from '../settings/connection.js';
+import { DEDICATED_API_SECRET_STORAGE_KEYS } from '../settings/dedicated_providers.js';
 import { CUSTOM_SELECTION_TOOLS_STORAGE_KEY } from '../settings/selection_tools.js';
 
 export const HISTORY_EXPORT_TYPE = 'GeminiNexus-History';
@@ -15,6 +16,7 @@ export const SETTINGS_STORAGE_KEYS = [
     'geminiTextSelectionBlacklist',
     CUSTOM_SELECTION_TOOLS_STORAGE_KEY,
     'geminiImageToolsEnabled',
+    'geminiGeneratedImageWatermarkRemovalEnabled',
     'geminiSidebarBehavior',
     'geminiSidePanelScope',
     'geminiAccountIndices',
@@ -30,7 +32,11 @@ export const SETTINGS_STORAGE_KEYS = [
 ];
 
 const SETTINGS_STORAGE_KEY_SET = new Set(SETTINGS_STORAGE_KEYS);
-const SECRET_STORAGE_KEYS = new Set(['geminiApiKey', 'geminiOpenaiApiKey']);
+const SECRET_STORAGE_KEYS = new Set([
+    'geminiApiKey',
+    'geminiOpenaiApiKey',
+    ...DEDICATED_API_SECRET_STORAGE_KEYS,
+]);
 
 function cloneJsonSafe(value) {
     if (value === undefined) return undefined;

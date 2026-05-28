@@ -89,6 +89,9 @@ export class StandaloneSettingsBridge {
             localStorageData[CUSTOM_SELECTION_TOOLS_STORAGE_KEY] || []
         );
         this.controller.updateImageTools(localStorageData.geminiImageToolsEnabled !== false);
+        this.controller.updateGeneratedImageWatermarkRemoval(
+            localStorageData.geminiGeneratedImageWatermarkRemovalEnabled !== false
+        );
         this.controller.updateSidebarBehavior(localStorageData.geminiSidebarBehavior || 'auto');
         this.controller.updateSidePanelScope(
             localStorageData.geminiSidePanelScope || DEFAULT_SIDE_PANEL_SCOPE
@@ -140,6 +143,11 @@ export class StandaloneSettingsBridge {
                 return;
             case 'SAVE_IMAGE_TOOLS':
                 setLocalStorageData({ geminiImageToolsEnabled: payload !== false });
+                return;
+            case 'SAVE_GENERATED_IMAGE_WATERMARK_REMOVAL':
+                setLocalStorageData({
+                    geminiGeneratedImageWatermarkRemovalEnabled: payload !== false,
+                });
                 return;
             case 'SAVE_SIDEBAR_BEHAVIOR':
                 setLocalStorageData({ geminiSidebarBehavior: payload || 'auto' });
@@ -269,6 +277,8 @@ export class StandaloneSettingsBridge {
             this.controller.updateMcpTestResult(response);
         } else if (response.action === 'MCP_TOOLS_RESULT') {
             this.controller.updateMcpToolsResult(response);
+        } else if (response.action === 'PROVIDER_MODELS_RESULT') {
+            this.controller.updateProviderModelsResult(response);
         } else if (response.logs) {
             this.controller.saveLogFile(response.logs);
         }

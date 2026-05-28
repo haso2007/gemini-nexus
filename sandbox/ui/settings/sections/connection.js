@@ -11,12 +11,21 @@ import {
 } from '../../../../shared/settings/connection.js';
 import { inferMcpTransport, normalizeMcpHeaders } from '../../../../shared/mcp/transport.js';
 import { normalizeOpenAIWebSearchSettings } from '../../../../shared/settings/openai.js';
+import {
+    isDedicatedApiProvider,
+    normalizeDedicatedApiSettingsPayload,
+} from '../../../../shared/settings/dedicated_providers.js';
 import { formatMcpHeaders, parseMcpHeadersText } from './mcp_header_fields.js';
 import { bindConnectionSectionEvents } from './connection_events.js';
+import {
+    loadDedicatedApiProviderIntoForm,
+    saveDedicatedApiProviderEdits,
+} from './dedicated_api_fields.js';
+import { setProviderModelList, setProviderModelListStatus } from './provider_model_list.js';
+import { queryConnectionElements } from './connection_elements.js';
 import { renderMcpToolsUI } from './mcp_tools_view.js';
 import { t } from '../../../core/i18n.js';
 import { createPrefixedId } from '../../../../shared/utils/index.js';
-import { DOM_IDS } from '../constants.js';
 import { getSettingsElement } from '../dom.js';
 
 export function createMcpServerId() {
@@ -28,6 +37,8 @@ export class ConnectionSection {
         this.elements = {};
         this.mcpServers = [];
         this.mcpActiveServerId = null;
+        this.activeProvider = null;
+        this.dedicatedApiProviders = normalizeDedicatedApiSettingsPayload();
         this.mcpToolsCache = new Map(); // serverId -> { key, tools }
         this.mcpToolsUiState = new Map(); // serverId -> { openGroups: Set<string> }
         this.queryElements();
@@ -47,47 +58,7 @@ export class ConnectionSection {
     }
 
     queryElements() {
-        this.elements = {
-            providerSelect: getSettingsElement(DOM_IDS.PROVIDER_SELECT),
-            apiKeyContainer: getSettingsElement(DOM_IDS.API_KEY_CONTAINER),
-            webFields: getSettingsElement(DOM_IDS.WEB_FIELDS),
-            webTemporaryChat: getSettingsElement(DOM_IDS.WEB_TEMPORARY_CHAT),
-
-            officialFields: getSettingsElement(DOM_IDS.OFFICIAL_FIELDS),
-            officialBaseUrl: getSettingsElement(DOM_IDS.OFFICIAL_BASE_URL),
-            apiKeyInput: getSettingsElement(DOM_IDS.OFFICIAL_API_KEY),
-            officialModel: getSettingsElement(DOM_IDS.OFFICIAL_MODEL),
-            thinkingLevelSelect: getSettingsElement(DOM_IDS.OFFICIAL_THINKING_LEVEL),
-            officialWebSearchEnabled: getSettingsElement(DOM_IDS.OFFICIAL_WEB_SEARCH),
-
-            openaiFields: getSettingsElement(DOM_IDS.OPENAI_FIELDS),
-            openaiBaseUrl: getSettingsElement(DOM_IDS.OPENAI_BASE_URL),
-            openaiApiKey: getSettingsElement(DOM_IDS.OPENAI_API_KEY),
-            openaiModel: getSettingsElement(DOM_IDS.OPENAI_MODEL),
-            openaiThinkingLevelSelect: getSettingsElement(DOM_IDS.OPENAI_THINKING_LEVEL),
-            openaiUseResponsesApi: getSettingsElement(DOM_IDS.OPENAI_USE_RESPONSES_API),
-            openaiWebSearch: getSettingsElement(DOM_IDS.OPENAI_WEB_SEARCH),
-
-            mcpEnabled: getSettingsElement(DOM_IDS.MCP_ENABLED),
-            mcpFields: getSettingsElement(DOM_IDS.MCP_FIELDS),
-            mcpServerSelect: getSettingsElement(DOM_IDS.MCP_SERVER_SELECT),
-            mcpAddServer: getSettingsElement(DOM_IDS.MCP_ADD_SERVER),
-            mcpRemoveServer: getSettingsElement(DOM_IDS.MCP_REMOVE_SERVER),
-            mcpServerName: getSettingsElement(DOM_IDS.MCP_SERVER_NAME),
-            mcpTransport: getSettingsElement(DOM_IDS.MCP_TRANSPORT),
-            mcpServerUrl: getSettingsElement(DOM_IDS.MCP_SERVER_URL),
-            mcpHeaders: getSettingsElement(DOM_IDS.MCP_HEADERS),
-            mcpServerEnabled: getSettingsElement(DOM_IDS.MCP_SERVER_ENABLED),
-            mcpTestConnection: getSettingsElement(DOM_IDS.MCP_TEST_CONNECTION),
-            mcpTestStatus: getSettingsElement(DOM_IDS.MCP_TEST_STATUS),
-            mcpToolMode: getSettingsElement(DOM_IDS.MCP_TOOL_MODE),
-            mcpRefreshTools: getSettingsElement(DOM_IDS.MCP_REFRESH_TOOLS),
-            mcpEnableAllTools: getSettingsElement(DOM_IDS.MCP_ENABLE_ALL_TOOLS),
-            mcpDisableAllTools: getSettingsElement(DOM_IDS.MCP_DISABLE_ALL_TOOLS),
-            mcpToolSearch: getSettingsElement(DOM_IDS.MCP_TOOL_SEARCH),
-            mcpToolsSummary: getSettingsElement(DOM_IDS.MCP_TOOLS_SUMMARY),
-            mcpToolList: getSettingsElement(DOM_IDS.MCP_TOOL_LIST),
-        };
+        this.elements = queryConnectionElements(getSettingsElement);
     }
 
     bindEvents() {
@@ -136,6 +107,11 @@ export class ConnectionSection {
         const openaiSettings = normalizeOpenAIWebSearchSettings(data || {});
         if (openaiUseResponsesApi) openaiUseResponsesApi.checked = openaiSettings.useResponsesApi;
         if (openaiWebSearch) openaiWebSearch.checked = openaiSettings.webSearch;
+
+        this.dedicatedApiProviders = normalizeDedicatedApiSettingsPayload(
+            data?.dedicatedApiProviders
+        );
+        this._loadDedicatedApiProviderIntoForm(providerSelect?.value || DEFAULT_PROVIDER);
 
         if (mcpEnabled) {
             mcpEnabled.checked = data?.mcpEnabled === true;
@@ -198,6 +174,8 @@ export class ConnectionSection {
             mcpEnabled,
         } = this.elements;
 
+        const provider = providerSelect ? providerSelect.value : DEFAULT_PROVIDER;
+        this._saveDedicatedApiProviderEdits(provider);
         this._saveCurrentServerEdits();
         const servers = Array.isArray(this.mcpServers) ? this.mcpServers : [];
         const firstEnabled = servers.find(
@@ -206,7 +184,7 @@ export class ConnectionSection {
         );
 
         return {
-            provider: providerSelect ? providerSelect.value : DEFAULT_PROVIDER,
+            provider,
             officialBaseUrl: officialBaseUrl
                 ? officialBaseUrl.value.trim()
                 : DEFAULT_OFFICIAL_BASE_URL,
@@ -227,6 +205,7 @@ export class ConnectionSection {
                 ? openaiUseResponsesApi.checked === true
                 : false,
             openaiWebSearch: openaiWebSearch ? openaiWebSearch.checked === true : false,
+            dedicatedApiProviders: this.dedicatedApiProviders,
 
             mcpEnabled: mcpEnabled ? mcpEnabled.checked === true : false,
             mcpServers: servers,
@@ -240,22 +219,29 @@ export class ConnectionSection {
     }
 
     updateVisibility(provider) {
-        const { apiKeyContainer, webFields, officialFields, openaiFields } = this.elements;
+        const { apiKeyContainer, webFields, officialFields, openaiFields, dedicatedApiFields } =
+            this.elements;
         if (!apiKeyContainer) return;
 
         if (webFields) webFields.hidden = provider !== 'web';
+        if (officialFields) officialFields.hidden = provider !== 'official';
+        if (openaiFields) openaiFields.hidden = provider !== 'openai';
+        if (dedicatedApiFields) dedicatedApiFields.hidden = !isDedicatedApiProvider(provider);
         if (provider === 'web') {
             apiKeyContainer.hidden = true;
         } else {
             apiKeyContainer.hidden = false;
-            if (provider === 'official') {
-                if (officialFields) officialFields.hidden = false;
-                if (openaiFields) openaiFields.hidden = true;
-            } else if (provider === 'openai') {
-                if (officialFields) officialFields.hidden = true;
-                if (openaiFields) openaiFields.hidden = false;
-            }
+            if (isDedicatedApiProvider(provider)) this._loadDedicatedApiProviderIntoForm(provider);
         }
+        this.activeProvider = provider;
+    }
+
+    _saveDedicatedApiProviderEdits(provider = this.activeProvider) {
+        saveDedicatedApiProviderEdits(this, provider);
+    }
+
+    _loadDedicatedApiProviderIntoForm(provider) {
+        loadDedicatedApiProviderIntoForm(this, provider);
     }
 
     updateMcpVisibility(enabled) {
@@ -368,6 +354,14 @@ export class ConnectionSection {
         if (!mcpTestStatus) return;
         mcpTestStatus.textContent = text || '';
         mcpTestStatus.classList.toggle('is-error', isError);
+    }
+
+    setProviderModelListStatus(text, isError = false) {
+        setProviderModelListStatus(this, text, isError);
+    }
+
+    setProviderModelList(provider, models) {
+        setProviderModelList(this, provider, models);
     }
 
     _serverKey(server) {

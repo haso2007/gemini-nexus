@@ -12,6 +12,8 @@ import {
     saveSidePanelScopeToStorage,
     saveImageToolsToStorage,
     requestImageToolsFromStorage,
+    saveGeneratedImageWatermarkRemovalToStorage,
+    requestGeneratedImageWatermarkRemovalFromStorage,
     saveAccountIndicesToStorage,
     requestAccountIndicesFromStorage,
     saveContextSettingsToStorage,
@@ -42,6 +44,7 @@ import {
 } from '../../../shared/config/constants.js';
 import { createDefaultMcpServer } from '../../../shared/settings/connection.js';
 import { DEFAULT_WEB_THINKING_LEVEL } from '../../../shared/models/web_thinking.js';
+import { normalizeDedicatedApiSettingsPayload } from '../../../shared/settings/dedicated_providers.js';
 import { normalizeCustomSelectionTools } from '../../../shared/settings/selection_tools.js';
 import {
     buildConnectionSettingsForSave,
@@ -61,6 +64,7 @@ export class SettingsController {
         this.textSelectionBlacklist = '';
         this.customSelectionTools = [];
         this.imageToolsEnabled = true;
+        this.generatedImageWatermarkRemovalEnabled = true;
         this.accountIndices = '0';
         this.sidebarBehavior = 'auto';
         this.sidePanelScope = DEFAULT_SIDE_PANEL_SCOPE;
@@ -86,6 +90,7 @@ export class SettingsController {
             openaiThinkingLevel: DEFAULT_THINKING_LEVEL,
             openaiUseResponsesApi: false,
             openaiWebSearch: false,
+            dedicatedApiProviders: normalizeDedicatedApiSettingsPayload(),
             mcpEnabled: false,
             mcpTransport: DEFAULT_MCP_TRANSPORT,
             mcpServerUrl: DEFAULT_MCP_HTTP_URL,
@@ -108,6 +113,12 @@ export class SettingsController {
             onImageToolsChange: (value) => {
                 this.imageToolsEnabled = value === 'on' || value === true;
                 saveImageToolsToStorage(this.imageToolsEnabled);
+            },
+            onGeneratedImageWatermarkRemovalChange: (value) => {
+                this.generatedImageWatermarkRemovalEnabled = value === 'on' || value === true;
+                saveGeneratedImageWatermarkRemovalToStorage(
+                    this.generatedImageWatermarkRemovalEnabled
+                );
             },
             onSidebarBehaviorChange: (value) => {
                 this.sidebarBehavior = value || 'auto';
@@ -132,6 +143,7 @@ export class SettingsController {
             }
             if (action === 'DATA_IMPORT_RESULT') {
                 this.handleDataImportResult(payload);
+                return;
             }
         });
     }
@@ -147,7 +159,11 @@ export class SettingsController {
     handleOpen() {
         this.view.setShortcuts(this.shortcuts);
         this.view.setLanguageValue(getLanguagePreference());
-        this.view.setToggles(this.textSelectionEnabled, this.imageToolsEnabled);
+        this.view.setToggles(
+            this.textSelectionEnabled,
+            this.imageToolsEnabled,
+            this.generatedImageWatermarkRemovalEnabled
+        );
         this.view.setTextSelectionBlacklist(this.textSelectionBlacklist);
         this.view.setCustomSelectionTools(this.customSelectionTools);
         this.view.setAccountIndices(this.accountIndices);
@@ -160,6 +176,7 @@ export class SettingsController {
         requestTextSelectionBlacklistFromStorage();
         requestCustomSelectionToolsFromStorage();
         requestImageToolsFromStorage();
+        requestGeneratedImageWatermarkRemovalFromStorage();
         requestAccountIndicesFromStorage();
         requestContextSettingsFromStorage();
         requestConnectionSettingsFromStorage();
@@ -188,6 +205,10 @@ export class SettingsController {
 
         this.imageToolsEnabled = generalSettings.imageToolsEnabled;
         saveImageToolsToStorage(this.imageToolsEnabled);
+
+        this.generatedImageWatermarkRemovalEnabled =
+            generalSettings.generatedImageWatermarkRemovalEnabled;
+        saveGeneratedImageWatermarkRemovalToStorage(this.generatedImageWatermarkRemovalEnabled);
 
         this.accountIndices = generalSettings.accountIndices;
         this.view.setAccountIndices(this.accountIndices);
@@ -310,7 +331,11 @@ export class SettingsController {
 
     updateTextSelection(enabled) {
         this.textSelectionEnabled = enabled;
-        this.view.setToggles(this.textSelectionEnabled, this.imageToolsEnabled);
+        this.view.setToggles(
+            this.textSelectionEnabled,
+            this.imageToolsEnabled,
+            this.generatedImageWatermarkRemovalEnabled
+        );
     }
 
     updateTextSelectionBlacklist(value) {
@@ -325,7 +350,20 @@ export class SettingsController {
 
     updateImageTools(enabled) {
         this.imageToolsEnabled = enabled;
-        this.view.setToggles(this.textSelectionEnabled, this.imageToolsEnabled);
+        this.view.setToggles(
+            this.textSelectionEnabled,
+            this.imageToolsEnabled,
+            this.generatedImageWatermarkRemovalEnabled
+        );
+    }
+
+    updateGeneratedImageWatermarkRemoval(enabled) {
+        this.generatedImageWatermarkRemovalEnabled = enabled !== false;
+        this.view.setToggles(
+            this.textSelectionEnabled,
+            this.imageToolsEnabled,
+            this.generatedImageWatermarkRemovalEnabled
+        );
     }
 
     updateConnectionSettings(settings) {
@@ -398,6 +436,29 @@ export class SettingsController {
             result.url || '',
             Array.isArray(result.tools) ? result.tools : [],
             result.requestKey || null
+        );
+    }
+
+    updateProviderModelsResult(result) {
+        if (
+            !this.view ||
+            !this.view.connection ||
+            typeof this.view.connection.setProviderModelList !== 'function'
+        )
+            return;
+
+        if (!result || result.ok !== true) {
+            const errorMessage = result && result.error ? result.error : t('modelListFailed');
+            this.view.connection.setProviderModelListStatus(
+                formatT('mcpFailed', { error: errorMessage }),
+                true
+            );
+            return;
+        }
+
+        this.view.connection.setProviderModelList(
+            result.provider || null,
+            Array.isArray(result.models) ? result.models : []
         );
     }
 

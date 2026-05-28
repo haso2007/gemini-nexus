@@ -68,6 +68,16 @@ describe('GeminiToolbarController model persistence', () => {
                       : 'minimal',
         };
         window.GeminiNexusWebThinking = globalThis.GeminiNexusWebThinking;
+        globalThis.GeminiNexusConfig = {
+            DEDICATED_API_PROVIDERS: {
+                deepseek: {
+                    storagePrefix: 'Deepseek',
+                    defaultBaseUrl: 'https://api.deepseek.com',
+                    defaultModels: 'deepseek-v4-pro',
+                    defaultModel: 'deepseek-v4-pro',
+                },
+            },
+        };
         globalThis.chrome = {
             storage: {
                 local: {
@@ -180,6 +190,44 @@ describe('GeminiToolbarController model persistence', () => {
         expect(chrome.storage.local.set).not.toHaveBeenCalledWith({
             geminiOpenaiSelectedModel: 'gpt-5.1',
         });
+    });
+
+    it('saves dedicated provider toolbar model changes in a provider-specific key', () => {
+        ui.getProvider.mockReturnValue('deepseek');
+        const controller = new window.GeminiToolbarController();
+
+        controller.handleModelChange('deepseek-v4-pro');
+
+        expect(chrome.storage.local.set).toHaveBeenCalledWith({
+            geminiDeepseekSelectedModel: 'deepseek-v4-pro',
+        });
+        expect(chrome.storage.local.set).not.toHaveBeenCalledWith({
+            geminiToolbarModel: 'deepseek-v4-pro',
+        });
+    });
+
+    it('restores dedicated provider model options from dedicated storage', async () => {
+        chrome.storage.local.get.mockResolvedValueOnce({
+            geminiToolbarProvider: 'deepseek',
+            geminiDeepseekModel: 'deepseek-v4-pro, deepseek-chat',
+            geminiDeepseekSelectedModel: 'deepseek-chat',
+        });
+
+        new window.GeminiToolbarController();
+        await Promise.resolve();
+
+        expect(ui.updateModelList).toHaveBeenCalledWith(
+            expect.objectContaining({
+                provider: 'deepseek',
+                dedicatedApiProviders: expect.objectContaining({
+                    deepseek: expect.objectContaining({
+                        model: 'deepseek-v4-pro, deepseek-chat',
+                        selectedModel: 'deepseek-chat',
+                    }),
+                }),
+            }),
+            'deepseek-chat'
+        );
     });
 
     it('toggles the shared Gemini Web thinking level from the toolbar button', () => {

@@ -57,6 +57,20 @@ describe('chat message layout styles', () => {
         expect(mediaCss).toMatch(/\.generated-image\s*{[^}]*box-sizing:\s*border-box/s);
     });
 
+    it('aligns tool process cards with the assistant content column', async () => {
+        const chatCss = await readCss('chat.css');
+
+        expect(chatCss).toMatch(/\.msg\.user\.msg-tool-status\s*{[^}]*background:\s*transparent/s);
+        expect(chatCss).toMatch(/\.msg\.user\.msg-tool-status\s*{[^}]*padding:\s*0/s);
+        expect(chatCss).toMatch(
+            /\.msg\.user\s+\.tool-message-row\s*{[^}]*justify-content:\s*flex-start/s
+        );
+        expect(chatCss).toMatch(
+            /\.tool-message-content-container\s*{[^}]*background:\s*transparent/s
+        );
+        expect(chatCss).toMatch(/\.tool-message-rail\s*{[^}]*visibility:\s*hidden/s);
+    });
+
     it('keeps diagram previews expanded and compact on errors', async () => {
         const markdownCss = await readCss('chat_markdown.css');
 

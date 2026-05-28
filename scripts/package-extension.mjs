@@ -53,12 +53,26 @@ export function shouldExcludeFromPackage(relativePath) {
  * @param {{ content_scripts?: Array<Record<string, unknown> & { js?: string[] }> } & Record<string, unknown>} manifest
  */
 export function createPackagedManifest(manifest) {
-    return {
-        ...manifest,
-        content_scripts: (manifest.content_scripts ?? []).map((entry) => ({
+    let hasWrittenContentBundleEntry = false;
+    const contentScripts = [];
+
+    for (const entry of manifest.content_scripts ?? []) {
+        if (entry.world === 'MAIN') {
+            contentScripts.push(entry);
+            continue;
+        }
+
+        if (hasWrittenContentBundleEntry) continue;
+        hasWrittenContentBundleEntry = true;
+        contentScripts.push({
             ...entry,
             js: ['content/index.js'],
-        })),
+        });
+    }
+
+    return {
+        ...manifest,
+        content_scripts: contentScripts,
     };
 }
 
@@ -193,6 +207,20 @@ async function writeContentBundle() {
     await writeFile(target, formatContentBundle(segments), 'utf8');
 }
 
+async function copyUnbundledContentScripts() {
+    /** @type {{ content_scripts?: Array<{ world?: string, js?: string[] }> }} */
+    const manifest = JSON.parse(await readFile(path.join(rootDir, 'manifest.json'), 'utf8'));
+    const files = [
+        ...new Set(
+            (manifest.content_scripts ?? [])
+                .filter((entry) => entry.world === 'MAIN')
+                .flatMap((entry) => entry.js ?? [])
+        ),
+    ];
+
+    await Promise.all(files.map((relativePath) => copyIntoPackage(relativePath)));
+}
+
 /**
  * @param {string} directory
  */
@@ -235,6 +263,7 @@ async function main() {
         copyIntoPackage('assets/icons'),
         copyIntoPackage('background'),
         writeContentBundle(),
+        copyUnbundledContentScripts(),
         copyIntoPackage('shared'),
         copyIntoPackage('services'),
         copyLocalDependencyAssets(),

@@ -11,12 +11,70 @@ const BLOCKED_WEB_ORIGINS = new Set([
     'https://chromewebstore.google.com',
 ]);
 
+const DEFAULT_CONTENT_SCRIPT_WORLD = 'ISOLATED';
+
 function hasGeminiNexusContentScript() {
     return Boolean(
         window.GeminiNexusContentReady === true ||
         window.GeminiMessageRouter ||
         document.getElementById('gemini-nexus-toolbar-host')
     );
+}
+
+function hasGeminiNexusWatermarkPageScript() {
+    return window.GeminiNexusWatermarkPage?.installed === true;
+}
+
+function globToRegExp(glob) {
+    return new RegExp(
+        `^${glob
+            .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+            .replace(/\*/g, '.*')
+            .replace(/\?/g, '.')}$`
+    );
+}
+
+function matchesHostPattern(hostname, hostPattern) {
+    if (hostPattern === '*') return true;
+    if (hostPattern.startsWith('*.')) {
+        const domain = hostPattern.slice(2);
+        return hostname === domain || hostname.endsWith(`.${domain}`);
+    }
+    return hostname === hostPattern;
+}
+
+function matchesChromePattern(url, pattern) {
+    if (pattern === '<all_urls>') return true;
+
+    const match = pattern.match(/^(\*|http|https):\/\/([^/]+)(\/.*)$/);
+    if (!match) return false;
+
+    try {
+        const parsed = new URL(url);
+        const [, schemePattern, hostPattern, pathPattern] = match;
+        const scheme = parsed.protocol.slice(0, -1);
+
+        if (schemePattern !== '*' && schemePattern !== scheme) return false;
+        if (schemePattern === '*' && scheme !== 'http' && scheme !== 'https') return false;
+        if (!matchesHostPattern(parsed.hostname, hostPattern)) return false;
+
+        return globToRegExp(pathPattern).test(`${parsed.pathname}${parsed.search}${parsed.hash}`);
+    } catch {
+        return false;
+    }
+}
+
+function matchesContentScriptEntry(entry, url) {
+    const matches = entry.matches || [];
+    if (!matches.some((pattern) => matchesChromePattern(url, pattern))) return false;
+
+    const excludeMatches = entry.exclude_matches || [];
+    if (excludeMatches.some((pattern) => matchesChromePattern(url, pattern))) return false;
+
+    const excludeGlobs = entry.exclude_globs || [];
+    if (excludeGlobs.some((glob) => globToRegExp(glob).test(url))) return false;
+
+    return true;
 }
 
 export function isInjectableTabUrl(url) {
@@ -39,12 +97,45 @@ export function getContentScriptFiles(manifest = chrome.runtime.getManifest()) {
     return [...new Set(files)];
 }
 
+export function getMatchingContentScriptEntries(manifest = chrome.runtime.getManifest(), url = '') {
+    return (manifest.content_scripts || [])
+        .filter((entry) => matchesContentScriptEntry(entry, url))
+        .map((entry) => ({
+            ...entry,
+            js: [...new Set(entry.js || [])],
+            world: entry.world || DEFAULT_CONTENT_SCRIPT_WORLD,
+        }))
+        .filter((entry) => entry.js.length > 0);
+}
+
 async function isAlreadyInjected(tabId, scripting = chrome.scripting) {
     const results = await scripting.executeScript({
         target: { tabId },
         func: hasGeminiNexusContentScript,
     });
     return results?.some((result) => result.result === true) === true;
+}
+
+async function isWatermarkPageScriptInjected(tabId, scripting = chrome.scripting) {
+    const results = await scripting.executeScript({
+        target: { tabId },
+        world: 'MAIN',
+        func: hasGeminiNexusWatermarkPageScript,
+    });
+    return results?.some((result) => result.result === true) === true;
+}
+
+async function injectContentScriptEntry(tabId, entry, scripting = chrome.scripting) {
+    const options = {
+        target: { tabId },
+        files: entry.js,
+    };
+
+    if (entry.world && entry.world !== DEFAULT_CONTENT_SCRIPT_WORLD) {
+        options.world = entry.world;
+    }
+
+    await scripting.executeScript(options);
 }
 
 export async function injectContentScriptsIntoTab(tab, options = {}) {
@@ -58,15 +149,26 @@ export async function injectContentScriptsIntoTab(tab, options = {}) {
     }
 
     try {
-        if (await isAlreadyInjected(tabId, scripting)) {
-            return { tabId, status: 'already-injected' };
+        const entries = getMatchingContentScriptEntries(manifest, url);
+        const normalEntries = entries.filter((entry) => entry.world !== 'MAIN');
+        const mainEntries = entries.filter((entry) => entry.world === 'MAIN');
+        let injected = false;
+
+        if (normalEntries.length > 0 && !(await isAlreadyInjected(tabId, scripting))) {
+            for (const entry of normalEntries) {
+                await injectContentScriptEntry(tabId, entry, scripting);
+                injected = true;
+            }
         }
 
-        await scripting.executeScript({
-            target: { tabId },
-            files: getContentScriptFiles(manifest),
-        });
-        return { tabId, status: 'injected' };
+        if (mainEntries.length > 0 && !(await isWatermarkPageScriptInjected(tabId, scripting))) {
+            for (const entry of mainEntries) {
+                await injectContentScriptEntry(tabId, entry, scripting);
+                injected = true;
+            }
+        }
+
+        return { tabId, status: injected ? 'injected' : 'already-injected' };
     } catch (error) {
         console.warn('[Gemini Nexus] Failed to inject content scripts into existing tab:', error);
         return { tabId, status: 'failed', error };

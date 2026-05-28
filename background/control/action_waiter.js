@@ -28,7 +28,7 @@ export class ActionWaiter {
             await actionFn();
             // Wait a bit for potential navigation to start/process since we can't track it precisely via CDP
             await new Promise((resolve) => setTimeout(resolve, 1000));
-            return;
+            return {};
         }
 
         try {
@@ -37,30 +37,160 @@ export class ActionWaiter {
             // The action can still run if Page events are unavailable.
         }
 
-        // Listen before the action so immediate transitions are not missed.
-        const navigationStartedPromise = this._waitForNavigationStart();
+        const initialUrl = await this._getCurrentUrl();
+        const mainFrameId = await this._getMainFrameId();
+        // Listen before the action so immediate transitions and fast loads are not missed.
+        const navigationWatcher = this._createNavigationWatcher(mainFrameId);
+        let navigationStarted = false;
 
         try {
             await actionFn();
-
-            const navigationStarted = await navigationStartedPromise;
-
-            if (navigationStarted) {
-                await this._waitForLoadEvent();
-            }
+            navigationStarted = await navigationWatcher.wait();
         } catch (error) {
+            navigationWatcher.dispose();
             console.error('Error during action execution/waiting:', error);
             throw error;
         }
 
         await this.waitForStableDOM();
+        const finalUrl = await this._getCurrentUrl();
+
+        return {
+            navigationStarted,
+            ...(initialUrl && finalUrl && initialUrl !== finalUrl
+                ? { navigatedToUrl: finalUrl }
+                : {}),
+        };
+    }
+
+    async _getCurrentUrl() {
+        if (!this.connection.attached) return '';
+
+        try {
+            const response = await this.connection.sendCommand('Runtime.evaluate', {
+                expression: 'typeof location === "undefined" ? "" : location.href',
+                returnByValue: true,
+            });
+            return typeof response?.result?.value === 'string' ? response.result.value : '';
+        } catch {
+            return '';
+        }
+    }
+
+    async _getMainFrameId() {
+        if (!this.connection.attached) return '';
+
+        try {
+            const response = await this.connection.sendCommand('Page.getFrameTree');
+            return response?.frameTree?.frame?.id || '';
+        } catch {
+            return '';
+        }
+    }
+
+    _isSameDocumentNavigation(params = {}) {
+        return ['sameDocument', 'historySameDocument'].includes(params.navigationType);
+    }
+
+    _createNavigationWatcher(mainFrameId = '') {
+        let done = false;
+        let sawNavigationStart = false;
+        let sawLoadEvent = false;
+        let navigationFrameId = '';
+        let startTimer = null;
+        let navigationTimer = null;
+
+        const cleanup = () => {
+            this.connection.removeListener(listener);
+            if (startTimer) clearTimeout(startTimer);
+            if (navigationTimer) clearTimeout(navigationTimer);
+        };
+
+        const finish = (value = false) => {
+            if (done) return;
+            done = true;
+            cleanup();
+            resolvePromise(value);
+        };
+
+        let resolvePromise;
+        const waitPromise = new Promise((resolve) => {
+            resolvePromise = resolve;
+        });
+
+        const listener = (method, params) => {
+            if (method === 'Page.javascriptDialogOpening') {
+                finish(false);
+                return;
+            }
+
+            if (method === 'Page.navigatedWithinDocument') {
+                finish(false);
+                return;
+            }
+
+            if (method === 'Page.frameStartedNavigating') {
+                if (mainFrameId && params?.frameId && params.frameId !== mainFrameId) {
+                    return;
+                }
+
+                if (this._isSameDocumentNavigation(params)) {
+                    finish(false);
+                    return;
+                }
+
+                sawNavigationStart = true;
+                navigationFrameId = params?.frameId || mainFrameId || '';
+                if (startTimer) {
+                    clearTimeout(startTimer);
+                    startTimer = null;
+                }
+                if (sawLoadEvent) {
+                    finish(true);
+                    return;
+                }
+                if (navigationTimer) {
+                    clearTimeout(navigationTimer);
+                    navigationTimer = null;
+                }
+                navigationTimer = setTimeout(() => {
+                    finish(false);
+                }, this.timeouts.navigation);
+                return;
+            }
+
+            if (method === 'Page.loadEventFired' || method === 'Page.frameStoppedLoading') {
+                if (
+                    method === 'Page.frameStoppedLoading' &&
+                    navigationFrameId &&
+                    params?.frameId &&
+                    params.frameId !== navigationFrameId
+                ) {
+                    return;
+                }
+
+                sawLoadEvent = true;
+                if (sawNavigationStart) {
+                    finish(true);
+                }
+            }
+        };
+
+        this.connection.addListener(listener);
+        startTimer = setTimeout(() => {
+            finish(false);
+        }, this.timeouts.expectNavigationIn);
+
+        return {
+            wait: () => waitPromise,
+            dispose: cleanup,
+        };
     }
 
     _waitForNavigationStart() {
         return this._waitForEvent(
-            (method) =>
-                method === 'Page.frameStartedNavigating' ||
-                method === 'Page.navigatedWithinDocument',
+            (method, params) =>
+                method === 'Page.frameStartedNavigating' && !this._isSameDocumentNavigation(params),
             this.timeouts.expectNavigationIn
         );
     }
@@ -104,6 +234,7 @@ export class ActionWaiter {
      */
     async waitForStableDOM(timeout = null, stabilityDuration = null) {
         if (!this.connection.attached) return;
+        if (this.connection.getDialog?.()) return;
 
         const maxStableDomWait = timeout || this.timeouts.stableDom;
         const stableDomQuietWindow = stabilityDuration || this.timeouts.stableDomFor;
@@ -114,7 +245,7 @@ export class ActionWaiter {
                     (async () => {
                         const startTime = Date.now();
 
-                        while (!document || !document.body) {
+                        while (typeof document === 'undefined' || !document.body) {
                             if (Date.now() - startTime > ${maxStableDomWait}) return false;
                             await new Promise(resolve => setTimeout(resolve, 100));
                         }

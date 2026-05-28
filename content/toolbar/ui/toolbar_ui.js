@@ -34,6 +34,20 @@
         return getConfig().DEFAULT_OPENAI_MODEL || '';
     }
 
+    function getDedicatedProviderConfig(provider) {
+        return getConfig().DEDICATED_API_PROVIDERS?.[provider] || null;
+    }
+
+    function createDedicatedModelOptions(settings, provider) {
+        const providerConfig = getDedicatedProviderConfig(provider);
+        const providerSettings = settings.dedicatedApiProviders?.[provider] || {};
+        const fallback = providerConfig?.defaultModel || '';
+        return createCustomModelOptions(providerSettings.model || providerConfig?.defaultModels, {
+            value: fallback,
+            label: fallback || getStrings().customModel || 'Custom Model',
+        });
+    }
+
     function getWebThinking() {
         return globalThis.GeminiNexusWebThinking || window.GeminiNexusWebThinking || null;
     }
@@ -207,6 +221,10 @@
             this.customSelectionTools?.setTools(tools);
         }
 
+        setGeneratedImageWatermarkRemovalEnabled(enabled) {
+            this.renderer?.setGeneratedImageWatermarkRemovalEnabled?.(enabled !== false);
+        }
+
         handleTranslationTargetsChange(targets) {
             const storedTargets = this.translationTargetStore.setTargets(targets);
             this.view.setSelectedTranslationTargets(storedTargets);
@@ -366,6 +384,8 @@
                     value: getDefaultOpenAIModel(),
                     label: getStrings().customModel || 'Custom Model',
                 });
+            } else if (getDedicatedProviderConfig(provider)) {
+                options = createDedicatedModelOptions(settings, provider);
             } else {
                 options = window.GeminiWebModels.createOptions();
             }

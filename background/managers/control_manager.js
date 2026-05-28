@@ -2,7 +2,7 @@ import { BrowserConnection } from '../control/connection.js';
 import { SnapshotManager } from '../control/snapshot/index.js';
 import { BrowserActions } from '../control/actions/index.js';
 import { ToolDispatcher } from '../control/dispatcher.js';
-import { getTabControlAvailability, toControlTabSummary } from '../control/tabs.js';
+import { getTabControlAvailability, getTabUrl, toControlTabSummary } from '../control/tabs.js';
 import { debugLog } from '../../shared/logging/debug.js';
 
 export const DEFAULT_BROWSER_CONTROL_START_URL = 'https://www.google.com/search?q=';
@@ -19,7 +19,7 @@ export class BrowserControlManager {
             getControlledGroupId: () => this.getControlledGroupId(),
             getControlledWindowId: () => this.getControlledWindowId(),
         });
-        this.dispatcher = new ToolDispatcher(this.actions, this.snapshotManager);
+        this.dispatcher = new ToolDispatcher(this.actions, this.snapshotManager, this.connection);
         this.lockedTabId = null;
         this.ownerSidePanelTabId = null;
         this.controlGroupTabId = null;
@@ -27,6 +27,8 @@ export class BrowserControlManager {
         this.controlWindowId = null;
         this.nativeGroupDisabledForTabId = null;
         this.controlTaskTitle = 'Browser control';
+        this.lastControlError = '';
+        this.executionQueue = Promise.resolve();
 
         this.connection.onDetach(() => {
             this._broadcastCurrentLockState();
@@ -51,8 +53,13 @@ export class BrowserControlManager {
     }
 
     setTargetTab(tabId, options = {}) {
+        const previousTabId = this.lockedTabId;
         this.lockedTabId = tabId;
         this.connection.targetTabId = Number.isInteger(tabId) && tabId > 0 ? tabId : null;
+        if (previousTabId !== tabId) {
+            this.snapshotManager.reset?.();
+            this.connection.clearDialog?.();
+        }
         debugLog(`[ControlManager] Target tab locked to: ${tabId}`);
 
         if (tabId) {
@@ -348,7 +355,10 @@ export class BrowserControlManager {
 
     async ensureConnection() {
         const targetTab = await this._ensureControllableTarget();
-        if (!targetTab?.id) return false;
+        if (!targetTab?.id) {
+            this.lastControlError = 'No controllable browser tab is selected.';
+            return false;
+        }
         const tabId = targetTab.id;
 
         // Perform quick check on URL before attaching
@@ -356,16 +366,25 @@ export class BrowserControlManager {
         try {
             tabObj = await chrome.tabs.get(tabId);
         } catch {
+            this.lastControlError = `The selected tab (${tabId}) is no longer available.`;
             return false;
         }
 
         const availability = getTabControlAvailability(tabObj);
         if (!availability.controllable) {
             // Fail silently for restricted pages to avoid log noise
+            const url = getTabUrl(tabObj) || 'unknown URL';
+            this.lastControlError = `The selected page cannot be debugged by Chrome (${url}). Open or select a regular http(s) page first.`;
             return false;
         }
 
         const attached = await this.connection.attach(tabId);
+        this.lastControlError =
+            attached === true
+                ? ''
+                : this.connection.lastAttachErrorMessage ||
+                  this.connection.lastDetachReason ||
+                  'Chrome refused the debugger attachment.';
         this._broadcastCurrentLockState();
         return attached === true && this.connection.attached === true;
     }
@@ -386,20 +405,69 @@ export class BrowserControlManager {
 
     // --- Execution Entry Point ---
 
-    async execute(toolCall) {
+    _runExclusive(task) {
+        const previous = this.executionQueue.catch(() => {});
+        let release;
+        this.executionQueue = new Promise((resolve) => {
+            release = resolve;
+        });
+
+        return previous.then(task).finally(() => {
+            release();
+        });
+    }
+
+    _notifyProgress(onProgress, text, phase = '') {
+        if (typeof onProgress !== 'function') return;
+        try {
+            onProgress({
+                text,
+                phase,
+            });
+        } catch (error) {
+            debugLog('[ControlManager] Tool progress callback failed:', error);
+        }
+    }
+
+    _getConnectionErrorMessage() {
+        return (
+            this.lastControlError ||
+            this.connection.lastAttachErrorMessage ||
+            this.connection.lastDetachReason ||
+            'No active tab found, restricted URL, or debugger disconnected.'
+        );
+    }
+
+    async execute(toolCall, options = {}) {
+        return await this._runExclusive(() => this._executeNow(toolCall, options));
+    }
+
+    async _executeNow(toolCall, options = {}) {
         try {
             const { name, args } = toolCall;
             const requiresDebugger = ToolDispatcher.requiresDebugger(name);
+            const onProgress = options.onProgress;
+
+            this._notifyProgress(
+                onProgress,
+                requiresDebugger
+                    ? 'Preparing the controlled tab and debugger session...'
+                    : 'Preparing the controlled tab scope...',
+                'prepare'
+            );
+
             const success = requiresDebugger
                 ? await this.ensureConnection()
                 : await this.ensureTargetReference();
 
             // Check attached status as well to be safe
             if (requiresDebugger && (!success || !this.connection.attached)) {
-                return 'Error: No active tab found, restricted URL, or debugger disconnected.';
+                return `Error: ${this._getConnectionErrorMessage()}`;
             }
 
             debugLog(`[MCP] Running tool: ${name}`, args);
+
+            this._notifyProgress(onProgress, `Running ${name}...`, 'execute');
 
             // Delegate to dispatcher
             const result = await this.dispatcher.dispatch(name, args);
@@ -408,8 +476,22 @@ export class BrowserControlManager {
 
             // Handle metadata objects returned by tools (e.g. NavigationActions)
             if (result && typeof result === 'object') {
+                if (result._meta?.clearTarget) {
+                    this._notifyProgress(
+                        onProgress,
+                        'Clearing the controlled tab target...',
+                        'target'
+                    );
+                    this.setTargetTab(null);
+                }
+
                 if (result._meta && result._meta.switchTabId) {
                     const nextTabId = result._meta.switchTabId;
+                    this._notifyProgress(
+                        onProgress,
+                        `Switching browser control to tab ${nextTabId}...`,
+                        'target'
+                    );
                     if (
                         !result._meta.allowOutsideControlledGroup &&
                         !(await this.isTabInControlledGroup(nextTabId))

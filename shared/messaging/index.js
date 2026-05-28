@@ -156,6 +156,20 @@ export function saveImageToolsToStorage(enabled) {
     );
 }
 
+export function requestGeneratedImageWatermarkRemovalFromStorage() {
+    window.parent.postMessage({ action: 'GET_GENERATED_IMAGE_WATERMARK_REMOVAL' }, '*');
+}
+
+export function saveGeneratedImageWatermarkRemovalToStorage(enabled) {
+    window.parent.postMessage(
+        {
+            action: 'SAVE_GENERATED_IMAGE_WATERMARK_REMOVAL',
+            payload: enabled,
+        },
+        '*'
+    );
+}
+
 export function saveSidebarBehaviorToStorage(behavior) {
     window.parent.postMessage(
         {

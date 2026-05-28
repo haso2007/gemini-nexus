@@ -1,12 +1,58 @@
 import { transformMarkdown } from './pipeline.js';
 import { enhanceLiveArtifacts } from './artifacts.js';
 import { formatT, t } from '../core/i18n.js';
+import { TemplateIcons } from '../ui/templates/icons.js';
 import { createPrefixedId } from '../../shared/utils/index.js';
 
 const TOOL_OUTPUT_HEADER_PATTERN = /^\[Tool Output:\s*([^\]]+)\]\n?/;
 const TOOL_STEP_FOOTER_PATTERN = /\n\n\[Proceeding to step\s+(\d+)\]\s*$/;
 const TOOL_DISCLOSURE_PREFIX = 'tool-disclosure';
 const TOOL_PREVIEW_KEYS = ['summary', 'message', 'error', 'result', 'text', 'title', 'name', 'url'];
+const TOOL_ICON_BY_NAME = new Map([
+    ['navigate_page', { id: 'navigate', html: TemplateIcons.EXTERNAL_OPEN }],
+    ['new_page', { id: 'new-page', html: TemplateIcons.BROWSER_TAB }],
+    ['close_page', { id: 'close-page', html: TemplateIcons.CLOSE }],
+    ['list_pages', { id: 'tabs', html: TemplateIcons.TAB_STACK }],
+    ['select_page', { id: 'active-tab', html: TemplateIcons.ACTIVE_TAB }],
+    ['click', { id: 'click', html: TemplateIcons.MOUSE_POINTER_CLICK }],
+    ['hover', { id: 'hover', html: TemplateIcons.MOUSE_POINTER }],
+    ['fill', { id: 'fill', html: TemplateIcons.EDIT }],
+    ['fill_form', { id: 'form', html: TemplateIcons.FORM }],
+    ['press_key', { id: 'keyboard', html: TemplateIcons.KEYBOARD }],
+    ['type_text', { id: 'keyboard', html: TemplateIcons.KEYBOARD }],
+    ['attach_file', { id: 'attach', html: TemplateIcons.PAPERCLIP }],
+    ['take_snapshot', { id: 'capture', html: TemplateIcons.SCREEN_CAPTURE }],
+    ['wait_for', { id: 'wait', html: TemplateIcons.CLOCK }],
+    ['handle_dialog', { id: 'dialog', html: TemplateIcons.MESSAGE_SQUARE }],
+    ['evaluate_script', { id: 'code', html: TemplateIcons.CODE }],
+]);
+const TOOL_ICON_KEYWORDS = [
+    { pattern: /(?:search|find|lookup|query|grep|rg)/i, id: 'search', html: TemplateIcons.SEARCH },
+    {
+        pattern: /(?:browser|page|tab|navigate|open|url|web)/i,
+        id: 'page',
+        html: TemplateIcons.BROWSER_TAB,
+    },
+    {
+        pattern: /(?:screenshot|capture|image|vision|ocr)/i,
+        id: 'capture',
+        html: TemplateIcons.SCREEN_CAPTURE,
+    },
+    { pattern: /(?:keyboard|press|type|input)/i, id: 'keyboard', html: TemplateIcons.KEYBOARD },
+    { pattern: /(?:file|attach|upload)/i, id: 'attach', html: TemplateIcons.PAPERCLIP },
+    { pattern: /(?:download|export|save)/i, id: 'download', html: TemplateIcons.DOWNLOAD },
+    { pattern: /(?:edit|write|patch|update|replace)/i, id: 'edit', html: TemplateIcons.EDIT },
+    { pattern: /(?:read|document|context|summary)/i, id: 'document', html: TemplateIcons.SUMMARY },
+    { pattern: /(?:database|sql|db|store)/i, id: 'database', html: TemplateIcons.DATABASE },
+    { pattern: /(?:key|secret|auth|token)/i, id: 'key', html: TemplateIcons.KEY },
+    {
+        pattern: /(?:terminal|shell|exec|command|bash|run)/i,
+        id: 'terminal',
+        html: TemplateIcons.TERMINAL,
+    },
+    { pattern: /(?:code|script|evaluate|eval)/i, id: 'code', html: TemplateIcons.CODE },
+];
+const FALLBACK_TOOL_ICON = { id: 'tool', html: TemplateIcons.PLUG };
 
 function normalizeEscapedFenceMarkers(text) {
     return (text || '')
@@ -68,6 +114,36 @@ function sanitizeToolName(toolName) {
     return words || t('toolFallbackName');
 }
 
+function normalizeToolNameForIcon(toolName) {
+    const raw = typeof toolName === 'string' ? toolName.trim() : '';
+    const routedName = raw.includes('__') ? raw.split('__').pop() : raw;
+    return routedName.replace(/^mcp[_-]+/i, '').toLowerCase();
+}
+
+function getToolIcon(toolName) {
+    const normalized = normalizeToolNameForIcon(toolName);
+    if (!normalized) return FALLBACK_TOOL_ICON;
+
+    const exactIcon = TOOL_ICON_BY_NAME.get(normalized);
+    if (exactIcon) return exactIcon;
+
+    for (const keywordIcon of TOOL_ICON_KEYWORDS) {
+        if (keywordIcon.pattern.test(normalized)) return keywordIcon;
+    }
+
+    return FALLBACK_TOOL_ICON;
+}
+
+function createToolIcon(toolName) {
+    const icon = getToolIcon(toolName);
+    const element = document.createElement('span');
+    element.className = 'tool-disclosure-icon';
+    element.dataset.toolIcon = icon.id;
+    element.setAttribute('aria-hidden', 'true');
+    element.innerHTML = icon.html;
+    return element;
+}
+
 function normalizeToolStatus(status) {
     const normalized = typeof status === 'string' ? status.toLowerCase() : '';
     if (['running', 'completed', 'failed', 'cancelled'].includes(normalized)) {
@@ -90,6 +166,15 @@ function getToolBadgeText(status) {
     if (status === 'failed') return t('toolBadgeFailed');
     if (status === 'cancelled') return t('toolBadgeCancelled');
     return t('toolBadgeDone');
+}
+
+function formatDurationMs(durationMs) {
+    const value = Number(durationMs);
+    if (!Number.isFinite(value) || value < 0) return '';
+
+    if (value < 1000) return `${Math.round(value)}ms`;
+    if (value < 10000) return `${(value / 1000).toFixed(1)}s`;
+    return `${Math.round(value / 1000)}s`;
 }
 
 function parseToolOutputText(text) {
@@ -233,6 +318,7 @@ function createToolDisclosure(contentDiv, text, options = {}) {
     const regionId = createPrefixedId(TOOL_DISCLOSURE_PREFIX);
     const expanded = options.isCollapsed === false;
     const hasOutput = formattedBody.trim().length > 0;
+    const durationText = formatDurationMs(options.toolDurationMs);
 
     contentDiv.innerHTML = '';
 
@@ -272,6 +358,7 @@ function createToolDisclosure(contentDiv, text, options = {}) {
     }
 
     toggle.appendChild(arrow);
+    toggle.appendChild(createToolIcon(rawToolName));
     toggle.appendChild(main);
 
     const body = document.createElement('div');
@@ -286,6 +373,7 @@ function createToolDisclosure(contentDiv, text, options = {}) {
         if (Number.isFinite(callIndex) && Number.isFinite(callCount) && callCount > 1) {
             metaParts.push(formatT('callLabel', { index: callIndex, count: callCount }));
         }
+        if (durationText) metaParts.push(formatT('durationLabel', { duration: durationText }));
         meta.textContent = metaParts.join(' · ');
         body.appendChild(meta);
     }

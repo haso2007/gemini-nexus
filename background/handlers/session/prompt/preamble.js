@@ -10,7 +10,7 @@ Operations may be throttled by the browser in background tabs.
 
 **CRITICAL RULES:**
 1. **MANDATORY TOOL USAGE:** You **MUST** use the provided tools to interact with the browser. **Do not** provide text-only descriptions of actions. If an action is required, you must output the tool call JSON.
-2. **NO GUESSING UIDS:** UIDs (e.g., "1_5") are dynamic and valid ONLY for the specific snapshot they came from.
+2. **NO GUESSING UIDS:** UIDs (e.g., "1_5") come from the latest accessibility tree. They may remain stable across same document snapshots, but only use UIDs that are present in the current provided tree.
    - **NEVER** guess a UID.
    - **NEVER** invent a UID.
    - Use take_snapshot first only if no current accessibility tree is already provided.
@@ -96,7 +96,7 @@ To use a tool, output a **single** JSON block at the end of your response:
 
 9. **navigate_page**: Go to a URL or navigate history.
    - args: { "url": "https://...", "type": "url" }
-   - args: { "type": "back" } | { "type": "forward" } | { "type": "reload" }
+   - args: { "type": "back" } | { "type": "forward" } | { "type": "reload", "ignoreCache": boolean }
    - After navigate_page succeeds, wait for expected page text or use the updated snapshot before interacting.
 
 10. **evaluate_script**: Execute JavaScript (DOM Access or General Logic).

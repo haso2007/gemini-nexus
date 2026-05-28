@@ -10,6 +10,9 @@ export class BrowserConnection {
         this.attached = false;
         this.onDetachCallbacks = [];
         this.eventListeners = new Set();
+        this.currentDialog = null;
+        this.lastAttachErrorMessage = '';
+        this.lastDetachReason = '';
 
         // Global listener for CDP events
         chrome.debugger.onEvent.addListener(this._handleEvent.bind(this));
@@ -20,7 +23,22 @@ export class BrowserConnection {
 
     _handleEvent(source, method, params) {
         if (this.attached && this.currentTabId === source.tabId) {
-            this.eventListeners.forEach((callback) => callback(method, params));
+            if (method === 'Page.javascriptDialogOpening') {
+                this.currentDialog = {
+                    type: params?.type || 'dialog',
+                    message: params?.message || '',
+                    defaultPrompt: params?.defaultPrompt || '',
+                };
+            } else if (method === 'Page.javascriptDialogClosed') {
+                this.currentDialog = null;
+            }
+            for (const callback of Array.from(this.eventListeners)) {
+                try {
+                    callback(method, params);
+                } catch (error) {
+                    debugLog('[BrowserConnection] Event listener failed:', error);
+                }
+            }
         }
     }
 
@@ -28,6 +46,7 @@ export class BrowserConnection {
         // If the browser detached our current session, clean up state immediately
         if (this.currentTabId === source.tabId) {
             debugLog('[BrowserConnection] Debugger detached by browser:', reason);
+            this.lastDetachReason = reason || 'detached';
             this._cleanupState();
         }
     }
@@ -35,7 +54,14 @@ export class BrowserConnection {
     _cleanupState() {
         this.attached = false;
         this.currentTabId = null;
-        this.onDetachCallbacks.forEach((callback) => callback());
+        this.currentDialog = null;
+        this.onDetachCallbacks.forEach((callback) => {
+            try {
+                callback();
+            } catch (error) {
+                debugLog('[BrowserConnection] Detach callback failed:', error);
+            }
+        });
     }
 
     addListener(callback) {
@@ -50,11 +76,38 @@ export class BrowserConnection {
         this.onDetachCallbacks.push(callback);
     }
 
+    getDialog() {
+        return this.currentDialog;
+    }
+
+    clearDialog() {
+        this.currentDialog = null;
+    }
+
+    async _enableDomains() {
+        await this.sendCommand('Runtime.enable');
+        await this.sendCommand('Page.enable');
+        try {
+            await this.sendCommand('Target.setAutoAttach', {
+                autoAttach: true,
+                waitForDebuggerOnStart: false,
+                flatten: true,
+            });
+        } catch (error) {
+            debugLog('[BrowserConnection] Target auto-attach unavailable:', error);
+        }
+    }
+
     async attach(tabId) {
         this.targetTabId = tabId; // Always store the intended tab
 
         // If already attached to the same tab, just ensure domains are enabled
         if (this.attached && this.currentTabId === tabId) {
+            try {
+                await this._enableDomains();
+            } catch (error) {
+                console.warn('Failed to refresh debugger domains:', error);
+            }
             return true;
         }
 
@@ -67,6 +120,7 @@ export class BrowserConnection {
             chrome.debugger.attach({ tabId }, '1.3', async () => {
                 if (chrome.runtime.lastError) {
                     const attachErrorMessage = chrome.runtime.lastError.message;
+                    this.lastAttachErrorMessage = attachErrorMessage;
                     // Suppress common expected errors for restricted targets to avoid log noise
                     if (
                         attachErrorMessage.includes('restricted URL') ||
@@ -85,22 +139,17 @@ export class BrowserConnection {
                 } else {
                     this.attached = true;
                     this.currentTabId = tabId;
+                    this.lastAttachErrorMessage = '';
+                    this.lastDetachReason = '';
 
                     try {
-                        await this.sendCommand('Runtime.enable');
-                        // Page domain is often enabled by actions, but good to have for lifecycle
-                        await this.sendCommand('Page.enable');
-
-                        // Enable auto-attach for OOPIFs (Out-Of-Process Iframes)
-                        // This allows perceiving content in cross-origin frames like Stripe, Google Login, etc.
-                        // flatten: true is essential for chrome.debugger handling
-                        await this.sendCommand('Target.setAutoAttach', {
-                            autoAttach: true,
-                            waitForDebuggerOnStart: false,
-                            flatten: true,
-                        });
+                        await this._enableDomains();
                     } catch (error) {
+                        this.lastAttachErrorMessage = error?.message || String(error);
                         console.warn('Failed to enable collection domains:', error);
+                        await this.detach();
+                        resolve(false);
+                        return;
                     }
 
                     resolve(true);
@@ -129,7 +178,7 @@ export class BrowserConnection {
     }
 
     sendCommand(method, params = {}) {
-        if (!this.currentTabId) throw new Error('No active debugger session');
+        if (!this.attached || !this.currentTabId) throw new Error('No active debugger session');
         return new Promise((resolve, reject) => {
             chrome.debugger.sendCommand({ tabId: this.currentTabId }, method, params, (result) => {
                 if (chrome.runtime.lastError) {

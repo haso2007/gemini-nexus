@@ -107,4 +107,26 @@ describe('getConnectionSettings', () => {
             })
         );
     });
+
+    it('restores dedicated provider credentials and allows provider overrides', async () => {
+        storedSettings = {
+            geminiProvider: 'web',
+            geminiDeepseekApiKey: 'deepseek-key',
+            geminiDeepseekModel: 'deepseek-v4-pro',
+            geminiDeepseekThinkingLevel: 'high',
+        };
+
+        await expect(getConnectionSettings({ provider: 'deepseek' })).resolves.toEqual(
+            expect.objectContaining({
+                provider: 'deepseek',
+                dedicatedApiProviders: expect.objectContaining({
+                    deepseek: expect.objectContaining({
+                        apiKey: 'deepseek-key',
+                        model: 'deepseek-v4-pro',
+                        thinkingLevel: 'high',
+                    }),
+                }),
+            })
+        );
+    });
 });

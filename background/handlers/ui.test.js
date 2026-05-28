@@ -3,9 +3,19 @@ import { UIMessageHandler } from './ui.js';
 
 describe('UIMessageHandler browser control tab ownership', () => {
     let controlManager;
+    let imageHandler;
     let handler;
 
     beforeEach(() => {
+        imageHandler = {
+            fetchImage: vi.fn(() =>
+                Promise.resolve({
+                    action: 'FETCH_IMAGE_RESULT',
+                    base64: 'data:image/jpeg;base64,abc',
+                    type: 'image/jpeg',
+                })
+            ),
+        };
         controlManager = {
             setOwnerSidePanelTabId: vi.fn(),
             enableControl: vi.fn(),
@@ -13,7 +23,7 @@ describe('UIMessageHandler browser control tab ownership', () => {
             setTargetTab: vi.fn(),
             isTabControllable: vi.fn(() => true),
         };
-        handler = new UIMessageHandler({}, controlManager, null, null);
+        handler = new UIMessageHandler(imageHandler, controlManager, null, null);
     });
 
     it('scopes browser control toggle broadcasts to the requesting side panel tab', () => {
@@ -536,5 +546,75 @@ describe('UIMessageHandler browser control tab ownership', () => {
             })
         );
         expect(sendResponse).toHaveBeenCalledWith({ status: 'completed' });
+    });
+
+    it('fetches Gemini watermark image URLs only for Gemini page senders', async () => {
+        const sendResponse = vi.fn();
+
+        const handled = handler.handle(
+            {
+                action: 'FETCH_GEMINI_WATERMARK_IMAGE',
+                url: 'https://lh3.googleusercontent.com/gg/sample=s0-rw',
+            },
+            { tab: { id: 7, url: 'https://gemini.google.com/app' } },
+            sendResponse
+        );
+
+        expect(handled).toBe(true);
+        await vi.waitFor(() =>
+            expect(sendResponse).toHaveBeenCalledWith({
+                status: 'completed',
+                base64: 'data:image/jpeg;base64,abc',
+                type: 'image/jpeg',
+                error: null,
+            })
+        );
+        expect(imageHandler.fetchImage).toHaveBeenCalledWith(
+            'https://lh3.googleusercontent.com/gg/sample=s0-rw'
+        );
+    });
+
+    it('rejects Gemini watermark image proxy requests from non-Gemini pages', async () => {
+        const sendResponse = vi.fn();
+
+        const handled = handler.handle(
+            {
+                action: 'FETCH_GEMINI_WATERMARK_IMAGE',
+                url: 'https://lh3.googleusercontent.com/gg/sample=s0-rw',
+            },
+            { tab: { id: 7, url: 'https://example.com/' } },
+            sendResponse
+        );
+
+        expect(handled).toBe(true);
+        await vi.waitFor(() =>
+            expect(sendResponse).toHaveBeenCalledWith({
+                status: 'error',
+                error: 'Unsupported sender',
+            })
+        );
+        expect(imageHandler.fetchImage).not.toHaveBeenCalled();
+    });
+
+    it('rejects non-Gemini image URLs for the Gemini watermark proxy', async () => {
+        const sendResponse = vi.fn();
+
+        const handled = handler.handle(
+            {
+                action: 'FETCH_GEMINI_WATERMARK_IMAGE',
+                url: 'https://example.com/image.png',
+            },
+            { tab: { id: 7, url: 'https://gemini.google.com/app' } },
+            sendResponse
+        );
+
+        expect(handled).toBe(true);
+        await vi.waitFor(() =>
+            expect(sendResponse).toHaveBeenCalledWith({
+                status: 'error',
+                error: 'Unsupported image URL',
+            })
+        );
+        expect(imageHandler.fetchImage).not.toHaveBeenCalled();
     });
 });

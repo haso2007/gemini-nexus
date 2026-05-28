@@ -34,6 +34,12 @@ describe('package-extension', () => {
                     js: ['content/overlay.js', 'content/index.js'],
                     run_at: 'document_end',
                 },
+                {
+                    matches: ['https://gemini.google.com/*'],
+                    js: ['content/gemini_watermark_page.js'],
+                    run_at: 'document_start',
+                    world: 'MAIN',
+                },
             ],
         };
 
@@ -42,6 +48,12 @@ describe('package-extension', () => {
                 matches: ['<all_urls>'],
                 js: ['content/index.js'],
                 run_at: 'document_end',
+            },
+            {
+                matches: ['https://gemini.google.com/*'],
+                js: ['content/gemini_watermark_page.js'],
+                run_at: 'document_start',
+                world: 'MAIN',
             },
         ]);
     });

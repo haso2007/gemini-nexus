@@ -149,6 +149,7 @@ export async function injectBrowserControlSnapshot({
     const snapshotSkippedTools = ['take_snapshot', 'list_pages'];
     if (
         toolResult.source !== 'browser_control' ||
+        toolResult.status === 'failed' ||
         !request.enableBrowserControl ||
         !controlManager ||
         snapshotSkippedTools.includes(toolResult.toolName) ||
@@ -242,6 +243,10 @@ export async function persistToolOutputMessages({
             images: historyImages,
             toolCallText: entryToolCallText,
             status: toolResultEntry.status || 'completed',
+            statusKey: toolResultEntry.statusKey || null,
+            startedAt: toolResultEntry.startedAt,
+            completedAt: toolResultEntry.completedAt,
+            durationMs: toolResultEntry.durationMs,
             step,
             callIndex,
             callCount,
@@ -255,6 +260,10 @@ export async function persistToolOutputMessages({
             toolName: toolResultEntry.toolName,
             toolStatus: toolResultEntry.status || 'completed',
             toolCallText: entryToolCallText,
+            toolStatusKey: toolResultEntry.statusKey || null,
+            toolStartedAt: toolResultEntry.startedAt,
+            toolCompletedAt: toolResultEntry.completedAt,
+            toolDurationMs: toolResultEntry.durationMs,
             toolStep: step,
             toolCallIndex: callIndex,
             toolCallCount: callCount,
@@ -288,6 +297,10 @@ export async function persistToolOutputMessages({
         toolName: primaryMessage.toolName,
         toolStatus: primaryMessage.toolStatus,
         toolCallText: primaryMessage.toolCallText,
+        toolStatusKey: primaryMessage.toolStatusKey,
+        toolStartedAt: primaryMessage.toolStartedAt,
+        toolCompletedAt: primaryMessage.toolCompletedAt,
+        toolDurationMs: primaryMessage.toolDurationMs,
         toolStep: primaryMessage.toolStep,
         toolCallIndex: primaryMessage.toolCallIndex,
         toolCallCount: primaryMessage.toolCallCount,

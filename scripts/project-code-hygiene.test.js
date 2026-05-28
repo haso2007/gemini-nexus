@@ -1057,7 +1057,7 @@ describe('project code hygiene', () => {
 
     it('uses descriptive fallback UUID and sampled color variable names', async () => {
         const utils = await readProjectFile('shared/utils/index.js');
-        const watermarkRemover = await readProjectFile('shared/media/watermark_remover.js');
+        const watermarkRemover = await readProjectFile('shared/media/watermark_remover_global.js');
 
         expect(utils).toContain('randomNibble');
         expect(utils).toContain('uuidNibble');

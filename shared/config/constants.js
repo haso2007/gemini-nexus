@@ -18,6 +18,8 @@ export const DEFAULT_MCP_TRANSPORT = config.DEFAULT_MCP_TRANSPORT;
 export const DEFAULT_MCP_HTTP_URL = config.DEFAULT_MCP_HTTP_URL;
 export const DEFAULT_MCP_SSE_URL = config.DEFAULT_MCP_SSE_URL;
 export const DEFAULT_MCP_WS_URL = config.DEFAULT_MCP_WS_URL;
+export const DEDICATED_API_PROVIDERS = config.DEDICATED_API_PROVIDERS;
+export const DEDICATED_API_PROVIDER_IDS = config.DEDICATED_API_PROVIDER_IDS;
 
 export function normalizeContextRecentTurns(value) {
     const parsed = Number.parseInt(value, 10);

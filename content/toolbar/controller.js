@@ -3,6 +3,41 @@
     const TOOLBAR_MODEL_STORAGE_KEY = 'geminiToolbarModel';
     const TOOLBAR_OPENAI_MODEL_STORAGE_KEY = 'geminiToolbarOpenaiSelectedModel';
     const TRANSLATION_TARGET_STORAGE_KEY = 'geminiTranslationTargets';
+    const DEDICATED_FIELD_SUFFIXES = {
+        baseUrl: 'BaseUrl',
+        apiKey: 'ApiKey',
+        model: 'Model',
+        selectedModel: 'SelectedModel',
+        thinkingLevel: 'ThinkingLevel',
+        webSearch: 'WebSearch',
+        providerRouting: 'ProviderRouting',
+    };
+
+    function getDedicatedProviderConfigs() {
+        return globalThis.GeminiNexusConfig?.DEDICATED_API_PROVIDERS || {};
+    }
+
+    function getDedicatedProviderConfig(provider) {
+        return getDedicatedProviderConfigs()[provider] || null;
+    }
+
+    function getDedicatedProviderStorageKeys(provider) {
+        const config = getDedicatedProviderConfig(provider);
+        if (!config) return null;
+        return Object.fromEntries(
+            Object.entries(DEDICATED_FIELD_SUFFIXES).map(([field, suffix]) => [
+                field,
+                `gemini${config.storagePrefix}${suffix}`,
+            ])
+        );
+    }
+
+    function getDedicatedStorageKeys() {
+        return Object.keys(getDedicatedProviderConfigs()).flatMap((provider) =>
+            Object.values(getDedicatedProviderStorageKeys(provider) || {})
+        );
+    }
+
     const TOOLBAR_MODEL_STORAGE_KEYS = [
         TOOLBAR_PROVIDER_STORAGE_KEY,
         TOOLBAR_MODEL_STORAGE_KEY,
@@ -14,7 +49,42 @@
         'geminiOfficialModel',
         'geminiOpenaiModel',
         'geminiOpenaiSelectedModel',
+        ...getDedicatedStorageKeys(),
     ];
+
+    function createDedicatedProviderSettings(stored) {
+        return Object.fromEntries(
+            Object.keys(getDedicatedProviderConfigs()).map((provider) => {
+                const config = getDedicatedProviderConfig(provider);
+                const keys = getDedicatedProviderStorageKeys(provider);
+                return [
+                    provider,
+                    {
+                        provider,
+                        baseUrl: stored[keys.baseUrl] || config.defaultBaseUrl,
+                        apiKey: stored[keys.apiKey] || '',
+                        model: stored[keys.model] || config.defaultModels,
+                        selectedModel: stored[keys.selectedModel] || '',
+                        thinkingLevel: stored[keys.thinkingLevel] || 'low',
+                        webSearch: stored[keys.webSearch] === true,
+                        providerRouting: stored[keys.providerRouting] || '',
+                    },
+                ];
+            })
+        );
+    }
+
+    function getDedicatedSelectedModel(stored, provider) {
+        const config = getDedicatedProviderConfig(provider);
+        const keys = getDedicatedProviderStorageKeys(provider);
+        if (!config || !keys) return null;
+        const selected = stored[keys.selectedModel];
+        if (selected) return selected;
+        return String(stored[keys.model] || config.defaultModels)
+            .split(',')
+            .map((model) => model.trim())
+            .filter(Boolean)[0];
+    }
 
     function getWebThinking() {
         return globalThis.GeminiNexusWebThinking || window.GeminiNexusWebThinking || null;
@@ -116,6 +186,7 @@
                 officialModel: result.geminiOfficialModel,
                 openaiModel: result.geminiOpenaiModel,
                 webThinkingLevel: result.geminiWebThinkingLevel,
+                dedicatedApiProviders: createDedicatedProviderSettings(result),
             };
 
             const provider =
@@ -128,7 +199,11 @@
                     ? result[TOOLBAR_OPENAI_MODEL_STORAGE_KEY] ||
                       result.geminiOpenaiSelectedModel ||
                       result.geminiModel
-                    : result[TOOLBAR_MODEL_STORAGE_KEY] || result.geminiModel;
+                    : getDedicatedProviderConfig(provider)
+                      ? getDedicatedSelectedModel(result, provider) ||
+                        result[TOOLBAR_MODEL_STORAGE_KEY] ||
+                        result.geminiModel
+                      : result[TOOLBAR_MODEL_STORAGE_KEY] || result.geminiModel;
             this.ui.updateModelList(settings, selectedModel);
         }
 
@@ -141,6 +216,10 @@
 
         setImageToolsEnabled(enabled) {
             this.imageDetector.setEnabled(enabled);
+        }
+
+        setGeneratedImageWatermarkRemovalEnabled(enabled) {
+            this.ui.setGeneratedImageWatermarkRemovalEnabled?.(enabled !== false);
         }
 
         setCustomSelectionTools(tools) {
@@ -240,6 +319,12 @@
                 return;
             }
 
+            const dedicatedKeys = getDedicatedProviderStorageKeys(provider);
+            if (dedicatedKeys) {
+                chrome.storage.local.set({ [dedicatedKeys.selectedModel]: model });
+                return;
+            }
+
             chrome.storage.local.set({ [TOOLBAR_MODEL_STORAGE_KEY]: model });
         }
 
@@ -301,17 +386,17 @@
             this.dispatcher.dispatch(actionType, data);
         }
 
-        readSelectionAloud() {
+        async readSelectionAloud() {
             try {
-                this.speechReader.readSelection(this.currentSelection);
+                await this.speechReader.readSelection(this.currentSelection);
             } catch (error) {
                 this.showExtensionError(error.message || String(error));
             }
         }
 
-        readPageAloud() {
+        async readPageAloud() {
             try {
-                this.speechReader.readPage();
+                await this.speechReader.readPage();
             } catch (error) {
                 this.showExtensionError(error.message || String(error));
             }

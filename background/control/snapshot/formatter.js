@@ -2,6 +2,7 @@ export class SnapshotFormatter {
     constructor(options = {}) {
         this.verbose = options.verbose || false;
         this.onNode = options.onNode || (() => {});
+        this.resolveUid = options.resolveUid || null;
         this.snapshotPrefix = options.snapshotPrefix || '1';
         this.selectedBackendNodeId = options.selectedBackendNodeId || null;
         this.nodeCounter = 0;
@@ -99,16 +100,21 @@ export class SnapshotFormatter {
     }
 
     format(nodes) {
+        const nodeById = new Map();
+        for (const node of nodes) {
+            if (node.nodeId) nodeById.set(node.nodeId, node);
+        }
+
         // Identify Root: Node that is not a child of any other node
         const allChildIds = new Set(nodes.flatMap((n) => n.childIds || []));
         const root = nodes.find((n) => !allChildIds.has(n.nodeId));
 
         if (!root) return 'Error: Could not find root of A11y tree.';
 
-        return this._formatNode(root, nodes, 0);
+        return this._formatNode(root, nodeById, 0);
     }
 
-    _formatNode(node, allNodes, depth) {
+    _formatNode(node, nodeById, depth) {
         const interesting = this._isInteresting(node);
         // In verbose mode, show everything. In default mode, prune uninteresting nodes.
         // Even if skipped, we process children (flattening hierarchy).
@@ -118,7 +124,11 @@ export class SnapshotFormatter {
 
         if (shouldPrint) {
             this.nodeCounter++;
-            const uid = `${this.snapshotPrefix}_${this.nodeCounter}`;
+            const fallbackUid = `${this.snapshotPrefix}_${this.nodeCounter}`;
+            const uid =
+                (typeof this.resolveUid === 'function'
+                    ? this.resolveUid(node, fallbackUid)
+                    : null) || fallbackUid;
 
             this.onNode(node, uid);
 
@@ -189,9 +199,9 @@ export class SnapshotFormatter {
 
         if (node.childIds) {
             for (const childId of node.childIds) {
-                const child = allNodes.find((n) => n.nodeId === childId);
+                const child = nodeById.get(childId);
                 if (child) {
-                    line += this._formatNode(child, allNodes, nextDepth);
+                    line += this._formatNode(child, nodeById, nextDepth);
                 }
             }
         }

@@ -12,6 +12,7 @@
         'geminiOfficialModel',
         'geminiOpenaiModel',
         'geminiOpenaiSelectedModel',
+        ...getDedicatedStorageKeys(),
     ]);
 
     function parseConfiguredModels(rawModels) {
@@ -27,6 +28,29 @@
 
     function getDefaultWebModel() {
         return catalog?.DEFAULT_WEB_MODEL || config?.DEFAULT_STORED_GEMINI_MODEL || null;
+    }
+
+    function getDedicatedProviderConfigs() {
+        return config?.DEDICATED_API_PROVIDERS || {};
+    }
+
+    function getDedicatedProviderConfig(provider) {
+        return getDedicatedProviderConfigs()[provider] || null;
+    }
+
+    function getDedicatedProviderStorageKeys(provider) {
+        const providerConfig = getDedicatedProviderConfig(provider);
+        if (!providerConfig) return null;
+        return {
+            model: `gemini${providerConfig.storagePrefix}Model`,
+            selectedModel: `gemini${providerConfig.storagePrefix}SelectedModel`,
+        };
+    }
+
+    function getDedicatedStorageKeys() {
+        return Object.keys(getDedicatedProviderConfigs()).flatMap((provider) =>
+            Object.values(getDedicatedProviderStorageKeys(provider) || {})
+        );
     }
 
     function getStoredProvider(stored) {
@@ -63,6 +87,18 @@
                     : configured.includes(stored.geminiModel)
                       ? stored.geminiModel
                       : config?.DEFAULT_OPENAI_MODEL;
+                return createSummaryConfig(provider, model);
+            }
+
+            const dedicatedConfig = getDedicatedProviderConfig(provider);
+            if (dedicatedConfig) {
+                const keys = getDedicatedProviderStorageKeys(provider);
+                const configured = parseConfiguredModels(stored[keys.model]);
+                const model =
+                    stored[keys.selectedModel] ||
+                    configured[0] ||
+                    dedicatedConfig.defaultModel ||
+                    null;
                 return createSummaryConfig(provider, model);
             }
 

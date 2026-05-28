@@ -13,6 +13,7 @@ export class DialogActions extends BaseActionHandler {
             }
 
             await this.cmd('Page.handleJavaScriptDialog', params);
+            this.connection.clearDialog?.();
 
             return action === 'accept' ? 'Accepted dialog' : 'Dismissed dialog';
         } catch (error) {

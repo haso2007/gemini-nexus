@@ -32,6 +32,30 @@ function createSectionHarness() {
     return { mcpTestConnection, section, server };
 }
 
+function createModelRefreshHarness() {
+    const providerSelect = document.createElement('select');
+    providerSelect.innerHTML = '<option value="openrouter">OpenRouter</option>';
+    providerSelect.value = 'openrouter';
+    const dedicatedApiRefreshModels = document.createElement('button');
+    const section = {
+        activeProvider: 'openrouter',
+        dedicatedApiProviders: {
+            openrouter: {
+                baseUrl: 'https://openrouter.ai/api/v1',
+                apiKey: 'openrouter-key',
+            },
+        },
+        elements: {
+            providerSelect,
+            dedicatedApiRefreshModels,
+        },
+        _saveDedicatedApiProviderEdits: vi.fn(),
+        setProviderModelListStatus: vi.fn(),
+    };
+
+    return { dedicatedApiRefreshModels, section };
+}
+
 describe('bindConnectionSectionEvents', () => {
     beforeEach(() => {
         vi.clearAllMocks();
@@ -51,6 +75,23 @@ describe('bindConnectionSectionEvents', () => {
             transport: 'sse',
             url: 'http://localhost/sse',
             headers: { Authorization: 'Bearer local' },
+        });
+    });
+
+    it('requests OpenRouter models through the dedicated provider model-list action', () => {
+        const { dedicatedApiRefreshModels, section } = createModelRefreshHarness();
+
+        bindConnectionSectionEvents(section);
+        dedicatedApiRefreshModels.click();
+
+        expect(section._saveDedicatedApiProviderEdits).toHaveBeenCalledWith('openrouter');
+        expect(section.setProviderModelListStatus).toHaveBeenCalledWith('modelListFetching');
+        expect(dedicatedApiRefreshModels.disabled).toBe(true);
+        expect(sendToBackground).toHaveBeenCalledWith({
+            action: 'GET_PROVIDER_MODELS',
+            provider: 'openrouter',
+            baseUrl: 'https://openrouter.ai/api/v1',
+            apiKey: 'openrouter-key',
         });
     });
 });

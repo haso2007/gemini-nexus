@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { sendOfficialMessage } from '../../../services/providers/official.js';
 import { sendOpenAIMessage } from '../../../services/providers/openai_compatible.js';
+import { sendAnthropicMessage } from '../../../services/providers/anthropic.js';
 import { sendWebMessage } from '../../../services/providers/web.js';
 import { prepareManagedContext } from './context_manager.js';
 import { getHistory } from './history_store.js';
@@ -12,6 +13,10 @@ vi.mock('../../../services/providers/official.js', () => ({
 
 vi.mock('../../../services/providers/openai_compatible.js', () => ({
     sendOpenAIMessage: vi.fn(),
+}));
+
+vi.mock('../../../services/providers/anthropic.js', () => ({
+    sendAnthropicMessage: vi.fn(),
 }));
 
 vi.mock('../../../services/providers/web.js', () => ({
@@ -240,6 +245,281 @@ describe('RequestDispatcher response mapping', () => {
                 null
             )
         ).resolves.toEqual(expect.objectContaining({ status: 'success' }));
+    });
+
+    it('routes the dedicated DeepSeek provider through Chat Completions with reasoning settings', async () => {
+        sendOpenAIMessage.mockResolvedValue({
+            text: 'deepseek text',
+            thoughts: 'deepseek thoughts',
+            sources: [],
+            images: [],
+        });
+        const dispatcher = new RequestDispatcher({});
+
+        await expect(
+            dispatcher.dispatch(
+                { text: 'hello', sessionId: null },
+                {
+                    provider: 'deepseek',
+                    dedicatedApiProviders: {
+                        deepseek: {
+                            baseUrl: 'https://api.deepseek.com',
+                            apiKey: 'deepseek-key',
+                            model: 'deepseek-v4-pro',
+                            thinkingLevel: 'high',
+                        },
+                    },
+                },
+                [],
+                vi.fn(),
+                null
+            )
+        ).resolves.toEqual(expect.objectContaining({ text: 'deepseek text' }));
+
+        expect(sendOpenAIMessage).toHaveBeenCalledWith(
+            'hello',
+            'system',
+            [],
+            expect.objectContaining({
+                baseUrl: 'https://api.deepseek.com',
+                apiKey: 'deepseek-key',
+                model: 'deepseek-v4-pro',
+                reasoningEffort: 'high',
+                useResponsesApi: false,
+            }),
+            [],
+            null,
+            expect.any(Function)
+        );
+    });
+
+    it('routes OpenRouter with provider routing and native reasoning payloads', async () => {
+        sendOpenAIMessage.mockResolvedValue({
+            text: 'openrouter text',
+            thoughts: 'openrouter thoughts',
+            sources: [],
+            images: [],
+        });
+        const dispatcher = new RequestDispatcher({});
+
+        await dispatcher.dispatch(
+            { text: 'hello', model: 'anthropic/claude-sonnet-4.5', sessionId: null },
+            {
+                provider: 'openrouter',
+                dedicatedApiProviders: {
+                    openrouter: {
+                        baseUrl: 'https://openrouter.ai/api/v1',
+                        apiKey: 'openrouter-key',
+                        model: 'openai/gpt-5.2, anthropic/claude-sonnet-4.5',
+                        thinkingLevel: 'medium',
+                        providerRouting: '{"order":["anthropic"],"allow_fallbacks":false}',
+                    },
+                },
+            },
+            [],
+            vi.fn(),
+            null
+        );
+
+        expect(sendOpenAIMessage).toHaveBeenCalledWith(
+            'hello',
+            'system',
+            [],
+            expect.objectContaining({
+                baseUrl: 'https://openrouter.ai/api/v1',
+                apiKey: 'openrouter-key',
+                model: 'anthropic/claude-sonnet-4.5',
+                reasoningEffort: null,
+                headers: { 'X-Title': 'Gemini Nexus' },
+                chatPayload: {
+                    reasoning: { effort: 'medium', exclude: false },
+                    provider: { order: ['anthropic'], allow_fallbacks: false },
+                },
+            }),
+            [],
+            null,
+            expect.any(Function)
+        );
+    });
+
+    it('routes DashScope through OpenAI-compatible Chat Completions with Qwen thinking controls', async () => {
+        sendOpenAIMessage.mockResolvedValue({
+            text: 'qwen text',
+            thoughts: null,
+            sources: [],
+            images: [],
+        });
+        const dispatcher = new RequestDispatcher({});
+
+        await dispatcher.dispatch(
+            { text: 'hello', sessionId: null },
+            {
+                provider: 'dashscope',
+                dedicatedApiProviders: {
+                    dashscope: {
+                        baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+                        apiKey: 'dashscope-key',
+                        model: 'qwen3-vl-plus, qwen-plus',
+                        thinkingLevel: 'minimal',
+                    },
+                },
+            },
+            [],
+            vi.fn(),
+            null
+        );
+
+        expect(sendOpenAIMessage).toHaveBeenCalledWith(
+            'hello',
+            'system',
+            [],
+            expect.objectContaining({
+                baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+                apiKey: 'dashscope-key',
+                model: 'qwen3-vl-plus',
+                reasoningEffort: null,
+                chatPayload: {
+                    enable_thinking: false,
+                    stream_options: { include_usage: true },
+                },
+            }),
+            [],
+            null,
+            expect.any(Function)
+        );
+    });
+
+    it('routes the dedicated Anthropic provider through the Messages API adapter', async () => {
+        sendAnthropicMessage.mockResolvedValue({
+            text: 'claude text',
+            thoughts: 'claude thoughts',
+            sources: [],
+            images: [],
+        });
+        const dispatcher = new RequestDispatcher({});
+
+        await expect(
+            dispatcher.dispatch(
+                { text: 'hello', sessionId: null },
+                {
+                    provider: 'anthropic',
+                    dedicatedApiProviders: {
+                        anthropic: {
+                            baseUrl: 'https://api.anthropic.com/v1',
+                            apiKey: 'anthropic-key',
+                            model: 'claude-sonnet-4-5',
+                            thinkingLevel: 'medium',
+                        },
+                    },
+                },
+                [],
+                vi.fn(),
+                null
+            )
+        ).resolves.toEqual(expect.objectContaining({ text: 'claude text' }));
+
+        expect(sendAnthropicMessage).toHaveBeenCalledWith(
+            'hello',
+            'system',
+            [],
+            expect.objectContaining({
+                baseUrl: 'https://api.anthropic.com/v1',
+                apiKey: 'anthropic-key',
+                model: 'claude-sonnet-4-5',
+                thinkingLevel: 'medium',
+            }),
+            [],
+            null,
+            expect.any(Function)
+        );
+    });
+
+    it('routes the dedicated OpenAI official provider through Responses API', async () => {
+        sendOpenAIMessage.mockResolvedValue({
+            text: 'openai official text',
+            thoughts: null,
+            sources: [],
+            images: [],
+        });
+        const dispatcher = new RequestDispatcher({});
+
+        await dispatcher.dispatch(
+            { text: 'hello', model: 'gpt-5.1', sessionId: null },
+            {
+                provider: 'openai_official',
+                dedicatedApiProviders: {
+                    openai_official: {
+                        baseUrl: 'https://api.openai.com/v1',
+                        apiKey: 'openai-key',
+                        model: 'gpt-5.1',
+                        thinkingLevel: 'medium',
+                        webSearch: true,
+                    },
+                },
+            },
+            [],
+            vi.fn(),
+            null
+        );
+
+        expect(sendOpenAIMessage).toHaveBeenCalledWith(
+            'hello',
+            'system',
+            [],
+            expect.objectContaining({
+                baseUrl: 'https://api.openai.com/v1',
+                apiKey: 'openai-key',
+                model: 'gpt-5.1',
+                useResponsesApi: true,
+                webSearch: true,
+            }),
+            [],
+            null,
+            expect.any(Function)
+        );
+    });
+
+    it('adds native Zhipu thinking controls for the dedicated Zhipu provider', async () => {
+        sendOpenAIMessage.mockResolvedValue({
+            text: 'zhipu text',
+            thoughts: null,
+            sources: [],
+            images: [],
+        });
+        const dispatcher = new RequestDispatcher({});
+
+        await dispatcher.dispatch(
+            { text: 'hello', sessionId: null },
+            {
+                provider: 'zhipu',
+                dedicatedApiProviders: {
+                    zhipu: {
+                        baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+                        apiKey: 'zhipu-key',
+                        model: 'glm-4.5',
+                        thinkingLevel: 'high',
+                    },
+                },
+            },
+            [],
+            vi.fn(),
+            null
+        );
+
+        expect(sendOpenAIMessage).toHaveBeenCalledWith(
+            'hello',
+            'system',
+            [],
+            expect.objectContaining({
+                baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+                apiKey: 'zhipu-key',
+                model: 'glm-4.5',
+                chatPayload: { thinking: { type: 'enabled' } },
+            }),
+            [],
+            null,
+            expect.any(Function)
+        );
     });
 
     it('maps web provider responses without persisting Web auth context into chat history', async () => {

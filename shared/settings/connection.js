@@ -13,6 +13,13 @@ import {
 import { createPrefixedId } from '../utils/index.js';
 import { DEFAULT_WEB_THINKING_LEVEL, normalizeWebThinkingLevel } from '../models/web_thinking.js';
 import { normalizeOpenAIWebSearchSettings } from './openai.js';
+import {
+    DEDICATED_API_STORAGE_KEYS,
+    createDedicatedApiSettingsPayload,
+    createDedicatedApiStorageUpdate,
+    getDedicatedApiSelectedModel,
+    isDedicatedApiProvider,
+} from './dedicated_providers.js';
 
 export const CONNECTION_STORAGE_KEYS = [
     'geminiProvider',
@@ -38,6 +45,7 @@ export const CONNECTION_STORAGE_KEYS = [
     'geminiMcpServerUrl',
     'geminiMcpServers',
     'geminiMcpActiveServerId',
+    ...DEDICATED_API_STORAGE_KEYS,
 ];
 
 export const GEMINI_OPENAI_WEB_SEARCH_KEYS = {
@@ -75,6 +83,10 @@ export function getSelectedModelForProvider(
         );
     }
 
+    if (isDedicatedApiProvider(provider)) {
+        return getDedicatedApiSelectedModel(storageData, provider);
+    }
+
     return storageData.geminiModel || DEFAULT_STORED_GEMINI_MODEL;
 }
 
@@ -104,6 +116,7 @@ export function createConnectionSettingsPayload(storageData = {}, options = {}) 
         openaiThinkingLevel: storageData.geminiOpenaiThinkingLevel || DEFAULT_THINKING_LEVEL,
         openaiUseResponsesApi: openaiSettings.useResponsesApi,
         openaiWebSearch: openaiSettings.webSearch,
+        dedicatedApiProviders: createDedicatedApiSettingsPayload(storageData),
         mcpEnabled: storageData.geminiMcpEnabled === true,
         mcpTransport: storageData.geminiMcpTransport || DEFAULT_MCP_TRANSPORT,
         mcpServerUrl: storageData.geminiMcpServerUrl || DEFAULT_MCP_HTTP_URL,
@@ -131,6 +144,7 @@ export function createConnectionStorageUpdate(payload = {}) {
         geminiOpenaiThinkingLevel: payload.openaiThinkingLevel || DEFAULT_THINKING_LEVEL,
         geminiOpenaiUseResponsesApi: payload.openaiUseResponsesApi === true,
         geminiOpenaiWebSearch: payload.openaiWebSearch === true,
+        ...createDedicatedApiStorageUpdate(payload.dedicatedApiProviders),
         geminiMcpEnabled: payload.mcpEnabled === true,
         geminiMcpTransport: payload.mcpTransport || DEFAULT_MCP_TRANSPORT,
         geminiMcpServerUrl: payload.mcpServerUrl || '',

@@ -4,9 +4,14 @@ import {
     handleInitiateCapture,
     handleProcessCropInSidePanel,
 } from './ui_capture.js';
-import { handleFetchGeneratedImage, handleFetchImage } from './ui_image_fetching.js';
+import {
+    handleFetchGeminiWatermarkImage,
+    handleFetchGeneratedImage,
+    handleFetchImage,
+} from './ui_image_fetching.js';
 import { handleMcpListTools, handleMcpTestConnection } from './ui_mcp_tools.js';
 import { handleCheckPageContext, handleGetActiveSelection } from './ui_page_context.js';
+import { handleProviderModelList } from './ui_provider_models.js';
 import { handleOpenSidePanel, handleToggleSidePanelControl } from './ui_sidepanel.js';
 import { handleGetOpenTabs, handleSwitchTab } from './ui_tab_actions.js';
 
@@ -28,6 +33,11 @@ export class UIMessageHandler {
 
         if (request.action === 'FETCH_GENERATED_IMAGE') {
             handleFetchGeneratedImage(context, request, sender, sendResponse);
+            return true;
+        }
+
+        if (request.action === 'FETCH_GEMINI_WATERMARK_IMAGE') {
+            handleFetchGeminiWatermarkImage(context, request, sender, sendResponse);
             return true;
         }
 
@@ -73,6 +83,11 @@ export class UIMessageHandler {
 
         if (request.action === 'MCP_LIST_TOOLS') {
             handleMcpListTools(this.mcpManager, request, sendResponse);
+            return true;
+        }
+
+        if (request.action === 'GET_PROVIDER_MODELS') {
+            handleProviderModelList(request, sendResponse);
             return true;
         }
 
