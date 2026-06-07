@@ -59,15 +59,19 @@ export async function startAreaOcrForTab(tab, imageManager) {
         return;
     }
 
-    await sendMessageWithContentRefresh(
-        tab,
-        {
-            action: 'START_SELECTION',
-            image: capture.base64,
-            mode: 'ocr',
-            source: 'local',
-            targetSidePanelTabId: null,
-        },
-        'selection_started'
-    );
+    try {
+        await sendMessageWithContentRefresh(
+            tab,
+            {
+                action: 'START_SELECTION',
+                image: capture.base64,
+                mode: 'ocr',
+                source: 'local',
+                targetSidePanelTabId: null,
+            },
+            'selection_started'
+        );
+    } catch (error) {
+        await notifyTabError(tab, error?.message || CAPTURE_ERROR);
+    }
 }

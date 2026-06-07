@@ -14,6 +14,13 @@ function appendSystemInstruction(request, instruction) {
     return [existing, instruction].filter(Boolean).join('\n\n');
 }
 
+function createErrorResult(error) {
+    return {
+        status: 'error',
+        text: error?.message || String(error),
+    };
+}
+
 export class QuickAskHandler {
     constructor(sessionManager, imageHandler) {
         this.sessionManager = sessionManager;
@@ -76,73 +83,84 @@ export class QuickAskHandler {
 
     async handleQuickAsk(request, sender) {
         const tabId = sender.tab ? sender.tab.id : null;
-        const promptRequest = await this._withPageContext(request, tabId);
 
-        if (!promptRequest.sessionId) {
-            await this.sessionManager.resetContext();
-        } else {
-            await this.sessionManager.ensureInitialized();
+        try {
+            const promptRequest = await this._withPageContext(request, tabId);
+
+            if (!promptRequest.sessionId) {
+                await this.sessionManager.resetContext();
+            } else {
+                await this.sessionManager.ensureInitialized();
+            }
+
+            const onUpdate = this._createStreamUpdateHandler(tabId, request);
+            const result = await this.sessionManager.handleSendPrompt(promptRequest, onUpdate);
+            const savedSession = await this._saveSuccessfulResult(
+                request.text,
+                result,
+                null,
+                promptRequest.sessionId || null
+            );
+            this._sendStreamDone(tabId, result, savedSession, request);
+        } catch (error) {
+            console.error('[Gemini Nexus] Quick ask failed:', error);
+            this._sendStreamDone(tabId, createErrorResult(error), undefined, request);
         }
-
-        const onUpdate = this._createStreamUpdateHandler(tabId, request);
-        const result = await this.sessionManager.handleSendPrompt(promptRequest, onUpdate);
-        const savedSession = await this._saveSuccessfulResult(
-            request.text,
-            result,
-            null,
-            promptRequest.sessionId || null
-        );
-        this._sendStreamDone(tabId, result, savedSession, request);
     }
 
     async handleQuickAskImage(request, sender) {
         const tabId = sender.tab ? sender.tab.id : null;
 
-        const imgRes = await this.imageHandler.fetchImage(request.url);
+        try {
+            const imgRes = await this.imageHandler.fetchImage(request.url);
 
-        if (imgRes.error) {
-            this._sendStreamDone(
-                tabId,
-                {
-                    status: 'error',
-                    text: 'Failed to load image: ' + imgRes.error,
-                },
-                undefined,
-                request
+            if (imgRes.error) {
+                this._sendStreamDone(
+                    tabId,
+                    {
+                        status: 'error',
+                        text: 'Failed to load image: ' + imgRes.error,
+                    },
+                    undefined,
+                    request
+                );
+                return;
+            }
+
+            const promptRequest = {
+                ...request,
+                text: request.text,
+                model: request.model,
+                sessionId: request.sessionId || null,
+                files: [
+                    {
+                        base64: imgRes.base64,
+                        type: imgRes.type,
+                        name: imgRes.name,
+                    },
+                ],
+            };
+
+            if (!promptRequest.sessionId) {
+                await this.sessionManager.resetContext();
+            } else {
+                await this.sessionManager.ensureInitialized();
+            }
+
+            const onUpdate = this._createStreamUpdateHandler(tabId, request);
+            const result = await this.sessionManager.handleSendPrompt(promptRequest, onUpdate);
+            const normalizedResult = this._normalizeImageQuickAskResult(request, result);
+            const savedSession = await this._saveSuccessfulResult(
+                request.text,
+                normalizedResult,
+                [{ base64: imgRes.base64 }],
+                promptRequest.sessionId || null
             );
-            return;
+            this._sendStreamDone(tabId, normalizedResult, savedSession, request);
+        } catch (error) {
+            console.error('[Gemini Nexus] Image quick ask failed:', error);
+            this._sendStreamDone(tabId, createErrorResult(error), undefined, request);
         }
-
-        const promptRequest = {
-            ...request,
-            text: request.text,
-            model: request.model,
-            sessionId: request.sessionId || null,
-            files: [
-                {
-                    base64: imgRes.base64,
-                    type: imgRes.type,
-                    name: imgRes.name,
-                },
-            ],
-        };
-
-        if (!promptRequest.sessionId) {
-            await this.sessionManager.resetContext();
-        } else {
-            await this.sessionManager.ensureInitialized();
-        }
-
-        const onUpdate = this._createStreamUpdateHandler(tabId, request);
-        const result = await this.sessionManager.handleSendPrompt(promptRequest, onUpdate);
-        const normalizedResult = this._normalizeImageQuickAskResult(request, result);
-        const savedSession = await this._saveSuccessfulResult(
-            request.text,
-            normalizedResult,
-            [{ base64: imgRes.base64 }],
-            promptRequest.sessionId || null
-        );
-        this._sendStreamDone(tabId, normalizedResult, savedSession, request);
     }
 
     async _withPageContext(request, tabId) {

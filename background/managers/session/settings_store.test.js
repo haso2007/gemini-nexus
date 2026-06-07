@@ -48,6 +48,28 @@ describe('getConnectionSettings', () => {
         expect(chrome.storage.local.set).toHaveBeenCalledWith({ geminiApiKeyPointer: 1 });
     });
 
+    it('continues with the selected official API key when pointer persistence fails', async () => {
+        storedSettings = {
+            geminiProvider: 'official',
+            geminiApiKey: 'key-a,key-b',
+            geminiApiKeyPointer: 0,
+        };
+        chrome.storage.local.set.mockRejectedValueOnce(new Error('Storage quota exceeded'));
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        try {
+            const settings = await getConnectionSettings();
+
+            expect(settings.apiKey).toBe('key-a');
+            expect(warnSpy).toHaveBeenCalledWith(
+                '[Gemini Nexus] Failed to persist Official API key rotation pointer:',
+                expect.any(Error)
+            );
+        } finally {
+            warnSpy.mockRestore();
+        }
+    });
+
     it('restores Gemini Web thinking level with a fast default', async () => {
         storedSettings = {
             geminiProvider: 'web',

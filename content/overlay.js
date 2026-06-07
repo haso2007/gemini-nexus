@@ -74,6 +74,17 @@ function ensureOverlayStyles() {
     (document.head || document.documentElement).appendChild(style);
 }
 
+function sendRuntimeMessage(message) {
+    try {
+        const result = chrome.runtime.sendMessage(message);
+        result?.catch?.((error) => {
+            console.warn('Could not send selected capture area:', error);
+        });
+    } catch (error) {
+        console.warn('Could not send selected capture area:', error);
+    }
+}
+
 class SelectionOverlay {
     constructor() {
         this.overlay = null;
@@ -240,7 +251,7 @@ class SelectionOverlay {
         this.onCancelCallback = null;
 
         setTimeout(() => {
-            chrome.runtime.sendMessage({
+            sendRuntimeMessage({
                 action: 'AREA_SELECTED',
                 area: {
                     x: rect.left,

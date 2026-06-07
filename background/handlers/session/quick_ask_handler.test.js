@@ -165,6 +165,41 @@ describe('QuickAskHandler', () => {
         );
     });
 
+    it('streams a done error when a quick ask request fails before completion', async () => {
+        const error = new Error('Prompt failed');
+        const sessionManager = {
+            resetContext: vi.fn(async () => {}),
+            ensureInitialized: vi.fn(),
+            handleSendPrompt: vi.fn(async () => {
+                throw error;
+            }),
+        };
+        const handler = new QuickAskHandler(sessionManager, {});
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        try {
+            await handler.handleQuickAsk(
+                {
+                    text: 'hello',
+                    model: 'gemini-test',
+                    source: 'toolbar',
+                    requestId: 'quick-ask-1',
+                },
+                { tab: { id: 42 } }
+            );
+
+            expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(42, {
+                action: 'GEMINI_STREAM_DONE',
+                result: { status: 'error', text: 'Prompt failed' },
+                source: 'toolbar',
+                requestId: 'quick-ask-1',
+            });
+            expect(errorSpy).toHaveBeenCalledWith('[Gemini Nexus] Quick ask failed:', error);
+        } finally {
+            errorSpy.mockRestore();
+        }
+    });
+
     it('streams image quick ask errors as done messages', async () => {
         const sessionManager = {
             resetContext: vi.fn(),
@@ -185,6 +220,44 @@ describe('QuickAskHandler', () => {
             action: 'GEMINI_STREAM_DONE',
             result: { status: 'error', text: 'Failed to load image: not found' },
         });
+    });
+
+    it('streams a done error when image quick ask setup fails before completion', async () => {
+        const error = new Error('Image fetch crashed');
+        const sessionManager = {
+            resetContext: vi.fn(),
+            handleSendPrompt: vi.fn(),
+        };
+        const imageHandler = {
+            fetchImage: vi.fn(async () => {
+                throw error;
+            }),
+        };
+        const handler = new QuickAskHandler(sessionManager, imageHandler);
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        try {
+            await handler.handleQuickAskImage(
+                {
+                    text: 'describe',
+                    url: 'https://example.test/image.png',
+                    source: 'toolbar',
+                    requestId: 'image-quick-ask-1',
+                },
+                { tab: { id: 7 } }
+            );
+
+            expect(sessionManager.handleSendPrompt).not.toHaveBeenCalled();
+            expect(chrome.tabs.sendMessage).toHaveBeenCalledWith(7, {
+                action: 'GEMINI_STREAM_DONE',
+                result: { status: 'error', text: 'Image fetch crashed' },
+                source: 'toolbar',
+                requestId: 'image-quick-ask-1',
+            });
+            expect(errorSpy).toHaveBeenCalledWith('[Gemini Nexus] Image quick ask failed:', error);
+        } finally {
+            errorSpy.mockRestore();
+        }
     });
 
     it('preserves OpenAI-compatible provider and model metadata for image quick asks', async () => {

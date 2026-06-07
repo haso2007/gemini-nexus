@@ -1,3 +1,4 @@
+import '../../vendor/gemini-watermark-remover/page_process_runtime.js';
 import './watermark_remover_global.js';
 
 export class WatermarkRemover {

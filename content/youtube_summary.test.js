@@ -561,4 +561,50 @@ describe('YouTube summary content script', () => {
         pending.resolve({ status: 'completed' });
         await Promise.resolve();
     });
+
+    it('shows a panel error when continuing the summary chat cannot open the side panel', async () => {
+        const pending = deferred();
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const sendMessage = vi.fn((request) =>
+            request.action === RUNTIME_ACTIONS.openSidePanel
+                ? Promise.resolve({ status: 'error', error: 'Cannot open side panel' })
+                : pending.promise
+        );
+        try {
+            const dom = createPage(TEST_WATCH_URL, createWatchMetadataHtml());
+            const { dispatchRuntimeMessage } = installScript(dom, sendMessage);
+
+            clickSummaryButton(dom);
+            await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+
+            dispatchRuntimeMessage({
+                action: RUNTIME_ACTIONS.streamDone,
+                source: REQUEST_SOURCE,
+                requestId: sendMessage.mock.calls[0][0].requestId,
+                sessionId: SUMMARY_SESSION_ID,
+                result: {
+                    status: 'success',
+                    text: 'Ready to continue',
+                },
+            });
+
+            getContinueButton(dom).dispatchEvent(
+                new dom.window.MouseEvent('click', { bubbles: true, cancelable: true })
+            );
+
+            await vi.waitFor(() => {
+                expect(getSummaryPanel(dom).textContent).toContain('Cannot open side panel');
+                expect(getContinueButton(dom).disabled).toBe(true);
+            });
+            expect(warnSpy).toHaveBeenCalledWith(
+                'Failed to continue YouTube summary chat:',
+                expect.objectContaining({ message: 'Cannot open side panel' })
+            );
+
+            pending.resolve({ status: 'completed' });
+            await Promise.resolve();
+        } finally {
+            warnSpy.mockRestore();
+        }
+    });
 });

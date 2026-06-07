@@ -67,6 +67,26 @@ describe('page shortcut tab actions', () => {
         });
     });
 
+    it('shows a refreshed page error when OCR selection cannot start after capture', async () => {
+        const tab = { id: 9, windowId: 4, url: 'https://example.com/' };
+        const imageManager = {
+            captureScreenshot: vi.fn(() =>
+                Promise.resolve({ base64: 'data:image/png;base64,AAAA' })
+            ),
+        };
+        chrome.tabs.sendMessage
+            .mockRejectedValueOnce(new Error('Receiving end does not exist'))
+            .mockRejectedValueOnce(new Error('Still unavailable'))
+            .mockResolvedValueOnce({ status: 'ok' });
+
+        await startAreaOcrForTab(tab, imageManager);
+
+        expect(chrome.tabs.sendMessage).toHaveBeenLastCalledWith(9, {
+            action: 'SHOW_EXTENSION_ERROR',
+            message: 'Still unavailable',
+        });
+    });
+
     it('shows a refreshed page error when OCR screenshot capture fails', async () => {
         const tab = { id: 9, windowId: 4, url: 'https://example.com/' };
         const imageManager = {

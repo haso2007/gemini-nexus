@@ -65,6 +65,60 @@ describe('UIMessageHandler browser control tab ownership', () => {
         expect(sendResponse).toHaveBeenCalledWith({ status: 'processed' });
     });
 
+    it('reports browser control enable failures to the requester', async () => {
+        const error = new Error('Debugger attach failed');
+        controlManager.enableControl = vi.fn(() => Promise.reject(error));
+        const sendResponse = vi.fn();
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        try {
+            const handled = handler.handle(
+                {
+                    action: 'TOGGLE_BROWSER_CONTROL',
+                    enabled: true,
+                    sidePanelTabId: 123,
+                },
+                {},
+                sendResponse
+            );
+
+            expect(handled).toBe(true);
+            await vi.waitFor(() =>
+                expect(sendResponse).toHaveBeenCalledWith({
+                    status: 'error',
+                    error: 'Debugger attach failed',
+                })
+            );
+            expect(errorSpy).toHaveBeenCalledWith('Browser control toggle failed', error);
+        } finally {
+            errorSpy.mockRestore();
+        }
+    });
+
+    it('reports browser control enable attempts that resolve without attaching', async () => {
+        controlManager.enableControl = vi.fn(() => Promise.resolve(false));
+        controlManager.lastControlError = 'No controllable browser tab is selected.';
+        const sendResponse = vi.fn();
+
+        const handled = handler.handle(
+            {
+                action: 'TOGGLE_BROWSER_CONTROL',
+                enabled: true,
+                sidePanelTabId: 123,
+            },
+            {},
+            sendResponse
+        );
+
+        expect(handled).toBe(true);
+        await vi.waitFor(() =>
+            expect(sendResponse).toHaveBeenCalledWith({
+                status: 'error',
+                error: 'No controllable browser tab is selected.',
+            })
+        );
+    });
+
     it('scopes manual tab switching broadcasts to the requesting side panel tab', async () => {
         const sendResponse = vi.fn();
 
@@ -229,6 +283,42 @@ describe('UIMessageHandler browser control tab ownership', () => {
         });
     });
 
+    it('reports open-tabs result delivery failures to the requester', async () => {
+        const deliveryError = new Error('Side panel unavailable');
+        globalThis.chrome = {
+            runtime: {
+                sendMessage: vi.fn(() => Promise.reject(deliveryError)),
+            },
+            tabs: {
+                query: vi.fn(() =>
+                    Promise.resolve([{ id: 1, title: 'Inside', url: 'https://inside.test/' }])
+                ),
+            },
+        };
+        controlManager.getTargetTabId = vi.fn(() => 1);
+        const sendResponse = vi.fn();
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        try {
+            const handled = handler.handle(
+                { action: 'GET_OPEN_TABS', sidePanelTabId: 123 },
+                {},
+                sendResponse
+            );
+
+            expect(handled).toBe(true);
+            await vi.waitFor(() =>
+                expect(sendResponse).toHaveBeenCalledWith({
+                    status: 'error',
+                    error: 'Side panel unavailable',
+                })
+            );
+            expect(errorSpy).toHaveBeenCalledWith('Open tabs delivery error', deliveryError);
+        } finally {
+            errorSpy.mockRestore();
+        }
+    });
+
     it('reports side panel open failures to the requesting content script', async () => {
         vi.spyOn(console, 'error').mockImplementation(() => {});
         globalThis.chrome = {
@@ -333,6 +423,41 @@ describe('UIMessageHandler browser control tab ownership', () => {
         ]);
     });
 
+    it('continues opening the side panel when pending action storage fails', async () => {
+        vi.spyOn(console, 'warn').mockImplementation(() => {});
+        globalThis.chrome = {
+            storage: {
+                local: {
+                    set: vi.fn(() => Promise.reject(new Error('Pending storage unavailable'))),
+                    remove: vi.fn(() => Promise.resolve()),
+                },
+            },
+            runtime: {
+                sendMessage: vi.fn(() => Promise.resolve()),
+            },
+            sidePanel: {
+                open: vi.fn(() => Promise.resolve()),
+                setOptions: vi.fn(() => Promise.resolve()),
+            },
+        };
+        const sendResponse = vi.fn();
+        const handler = new UIMessageHandler({}, controlManager, null, null);
+
+        const handled = handler.handle(
+            { action: 'OPEN_SIDE_PANEL', sessionId: 'session-1', mode: 'browser_control' },
+            { tab: { id: 9, windowId: 4 } },
+            sendResponse
+        );
+
+        expect(handled).toBe(true);
+        await vi.waitFor(() => expect(sendResponse).toHaveBeenCalledWith({ status: 'opened' }));
+        expect(chrome.sidePanel.open).toHaveBeenCalledWith({ tabId: 9, windowId: 4 });
+        expect(console.warn).toHaveBeenCalledWith(
+            'Could not store pending side panel actions:',
+            expect.any(Error)
+        );
+    });
+
     it('reports browser control side panel open failures to the requester', async () => {
         vi.spyOn(console, 'error').mockImplementation(() => {});
         globalThis.chrome = {
@@ -409,6 +534,81 @@ describe('UIMessageHandler browser control tab ownership', () => {
         });
     });
 
+    it('reports active selection result delivery failures to the requester', async () => {
+        const deliveryError = new Error('Side panel unavailable');
+        globalThis.chrome = {
+            runtime: {
+                sendMessage: vi.fn(() => Promise.reject(deliveryError)),
+            },
+            tabs: {
+                get: vi.fn(() =>
+                    Promise.resolve({
+                        id: 123,
+                        title: 'Side panel owner',
+                        windowId: 8,
+                        url: 'https://owner.test/',
+                    })
+                ),
+                query: vi.fn(() => Promise.resolve([])),
+                sendMessage: vi.fn(() => Promise.resolve({ selection: 'selected from owner' })),
+            },
+        };
+        const sendResponse = vi.fn();
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const handler = new UIMessageHandler({}, controlManager, null, null);
+
+        try {
+            const handled = handler.handle(
+                { action: 'GET_ACTIVE_SELECTION', sidePanelTabId: 123 },
+                {},
+                sendResponse
+            );
+
+            expect(handled).toBe(true);
+            await vi.waitFor(() =>
+                expect(sendResponse).toHaveBeenCalledWith({
+                    status: 'error',
+                    error: 'Side panel unavailable',
+                })
+            );
+            expect(errorSpy).toHaveBeenCalledWith('Active selection lookup error', deliveryError);
+        } finally {
+            errorSpy.mockRestore();
+        }
+    });
+
+    it('returns an empty active selection result when no target tab is available', async () => {
+        globalThis.chrome = {
+            runtime: {
+                sendMessage: vi.fn(() => Promise.resolve()),
+            },
+            tabs: {
+                get: vi.fn(() => Promise.reject(new Error('Tab not found'))),
+                query: vi.fn(() => Promise.resolve([])),
+                sendMessage: vi.fn(),
+            },
+        };
+        const sendResponse = vi.fn();
+        const handler = new UIMessageHandler({}, controlManager, null, null);
+
+        const handled = handler.handle(
+            { action: 'GET_ACTIVE_SELECTION', sidePanelTabId: 123 },
+            {},
+            sendResponse
+        );
+
+        expect(handled).toBe(true);
+        await vi.waitFor(() =>
+            expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
+                action: 'SELECTION_RESULT',
+                tabId: 123,
+                text: '',
+            })
+        );
+        expect(chrome.tabs.sendMessage).not.toHaveBeenCalled();
+        expect(sendResponse).toHaveBeenCalledWith({ status: 'completed' });
+    });
+
     it('starts area capture on the requesting side panel tab instead of the active tab', async () => {
         const imageHandler = {
             captureScreenshot: vi.fn(() =>
@@ -457,6 +657,54 @@ describe('UIMessageHandler browser control tab ownership', () => {
             source: 'sidepanel',
             targetSidePanelTabId: 123,
         });
+    });
+
+    it('reports side panel area capture overlay start failures after screenshot capture succeeds', async () => {
+        const imageHandler = {
+            captureScreenshot: vi.fn(() =>
+                Promise.resolve({
+                    base64: 'data:image/png;base64,AAAA',
+                })
+            ),
+        };
+        globalThis.chrome = {
+            runtime: {
+                sendMessage: vi.fn(() => Promise.resolve()),
+            },
+            tabs: {
+                get: vi.fn(() =>
+                    Promise.resolve({
+                        id: 123,
+                        title: 'Side panel owner',
+                        windowId: 8,
+                        url: 'https://owner.test/',
+                    })
+                ),
+                query: vi.fn(() => Promise.resolve([])),
+                sendMessage: vi.fn(() => Promise.reject(new Error('Content script unavailable'))),
+            },
+        };
+        const handler = new UIMessageHandler(imageHandler, controlManager, null, null);
+
+        const handled = handler.handle(
+            {
+                action: 'INITIATE_CAPTURE',
+                mode: 'snip',
+                source: 'sidepanel',
+                sidePanelTabId: 123,
+            },
+            {},
+            vi.fn()
+        );
+
+        expect(handled).toBe(false);
+        await vi.waitFor(() =>
+            expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
+                action: 'SCREEN_CAPTURE_ERROR',
+                error: 'Content script unavailable',
+                tabId: 123,
+            })
+        );
     });
 
     it('reports side panel area capture start failures without opening the selection overlay', async () => {
@@ -580,13 +828,213 @@ describe('UIMessageHandler browser control tab ownership', () => {
         expect(sendResponse).toHaveBeenCalledWith({ status: 'completed' });
     });
 
-    it('fetches Gemini watermark image URLs only for Gemini page senders', async () => {
+    it('reports area crop delivery failures to the selected area requester', async () => {
+        const imageHandler = {
+            captureArea: vi.fn(() =>
+                Promise.resolve({
+                    action: 'CROP_SCREENSHOT',
+                    image: 'data:image/png;base64,BBBB',
+                    area: { x: 1, y: 2, width: 10, height: 20 },
+                })
+            ),
+        };
+        const deliveryError = new Error('Content script unavailable');
+        globalThis.chrome = {
+            tabs: {
+                sendMessage: vi.fn(() => Promise.reject(deliveryError)),
+            },
+        };
+        const sendResponse = vi.fn();
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const handler = new UIMessageHandler(imageHandler, controlManager, null, null);
+
+        try {
+            const handled = handler.handle(
+                {
+                    action: 'AREA_SELECTED',
+                    area: { x: 1, y: 2, width: 10, height: 20 },
+                },
+                { tab: { id: 9, windowId: 4 } },
+                sendResponse
+            );
+
+            expect(handled).toBe(true);
+            await vi.waitFor(() =>
+                expect(sendResponse).toHaveBeenCalledWith({
+                    status: 'error',
+                    error: 'Content script unavailable',
+                })
+            );
+            expect(errorSpy).toHaveBeenCalledWith('Area capture error', deliveryError);
+        } finally {
+            errorSpy.mockRestore();
+        }
+    });
+
+    it('reports crop forwarding failures to the content script bridge', async () => {
+        const deliveryError = new Error('Side panel unavailable');
+        globalThis.chrome = {
+            runtime: {
+                sendMessage: vi.fn(() => Promise.reject(deliveryError)),
+            },
+        };
+        const sendResponse = vi.fn();
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const handler = new UIMessageHandler({}, controlManager, null, null);
+
+        try {
+            const handled = handler.handle(
+                {
+                    action: 'PROCESS_CROP_IN_SIDEPANEL',
+                    payload: {
+                        action: 'CROP_SCREENSHOT',
+                        image: 'data:image/png;base64,BBBB',
+                    },
+                    sidePanelTabId: 123,
+                },
+                {},
+                sendResponse
+            );
+
+            expect(handled).toBe(true);
+            await vi.waitFor(() =>
+                expect(sendResponse).toHaveBeenCalledWith({
+                    status: 'error',
+                    error: 'Side panel unavailable',
+                })
+            );
+            expect(errorSpy).toHaveBeenCalledWith('Crop forwarding error', deliveryError);
+        } finally {
+            errorSpy.mockRestore();
+        }
+    });
+
+    it('returns fetched image results directly to extension page senders', async () => {
+        globalThis.chrome = {
+            runtime: {
+                sendMessage: vi.fn(() => Promise.resolve()),
+            },
+        };
         const sendResponse = vi.fn();
 
         const handled = handler.handle(
             {
-                action: 'FETCH_GEMINI_WATERMARK_IMAGE',
-                url: 'https://lh3.googleusercontent.com/gg/sample=s0-rw',
+                action: 'FETCH_IMAGE',
+                url: 'https://example.test/image.png',
+                sidePanelTabId: 123,
+            },
+            {},
+            sendResponse
+        );
+
+        expect(handled).toBe(true);
+        await vi.waitFor(() =>
+            expect(sendResponse).toHaveBeenCalledWith({
+                action: 'FETCH_IMAGE_RESULT',
+                base64: 'data:image/jpeg;base64,abc',
+                type: 'image/jpeg',
+                tabId: 123,
+            })
+        );
+        expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('returns generated image results directly to extension page senders', async () => {
+        globalThis.chrome = {
+            runtime: {
+                sendMessage: vi.fn(() => Promise.resolve()),
+            },
+        };
+        const sendResponse = vi.fn();
+
+        const handled = handler.handle(
+            {
+                action: 'FETCH_GENERATED_IMAGE',
+                url: 'https://example.test/generated.png',
+                reqId: 'req-1',
+                sidePanelTabId: 123,
+            },
+            {},
+            sendResponse
+        );
+
+        expect(handled).toBe(true);
+        await vi.waitFor(() =>
+            expect(sendResponse).toHaveBeenCalledWith({
+                action: 'GENERATED_IMAGE_RESULT',
+                tabId: 123,
+                reqId: 'req-1',
+                base64: 'data:image/jpeg;base64,abc',
+                error: undefined,
+            })
+        );
+        expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it('reports generated image result delivery failures to tab senders', async () => {
+        const deliveryError = new Error('Content script unavailable');
+        globalThis.chrome = {
+            tabs: {
+                sendMessage: vi.fn(() => Promise.reject(deliveryError)),
+            },
+        };
+        const sendResponse = vi.fn();
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        try {
+            const handled = handler.handle(
+                {
+                    action: 'FETCH_GENERATED_IMAGE',
+                    url: 'https://example.test/generated.png',
+                    reqId: 'req-1',
+                },
+                { tab: { id: 7 } },
+                sendResponse
+            );
+
+            expect(handled).toBe(true);
+            await vi.waitFor(() =>
+                expect(sendResponse).toHaveBeenCalledWith({
+                    status: 'error',
+                    error: 'Content script unavailable',
+                })
+            );
+            expect(warnSpy).toHaveBeenCalledWith(
+                'Could not send UI result to request source:',
+                expect.any(Error)
+            );
+            expect(errorSpy).toHaveBeenCalledWith('Fetch generated image error', deliveryError);
+        } finally {
+            warnSpy.mockRestore();
+            errorSpy.mockRestore();
+        }
+    });
+
+    it('proxies GWR XHR requests from Gemini page senders as response bytes', async () => {
+        vi.stubGlobal(
+            'fetch',
+            vi.fn(() =>
+                Promise.resolve(
+                    new Response(new Uint8Array([1, 2, 3]), {
+                        status: 201,
+                        statusText: 'Created',
+                        headers: { 'content-type': 'image/png' },
+                    })
+                )
+            )
+        );
+        const sendResponse = vi.fn();
+
+        const handled = handler.handle(
+            {
+                action: 'GWR_EXTENSION_GM_XHR_REQUEST',
+                request: {
+                    method: 'POST',
+                    url: 'https://lh3.googleusercontent.com/gg/sample=s0-rw',
+                    headers: { 'x-test': '1' },
+                    data: 'payload',
+                },
             },
             { tab: { id: 7, url: 'https://gemini.google.com/app' } },
             sendResponse
@@ -595,24 +1043,68 @@ describe('UIMessageHandler browser control tab ownership', () => {
         expect(handled).toBe(true);
         await vi.waitFor(() =>
             expect(sendResponse).toHaveBeenCalledWith({
-                status: 'completed',
-                base64: 'data:image/jpeg;base64,abc',
-                type: 'image/jpeg',
-                error: null,
+                ok: true,
+                finalUrl: '',
+                status: 201,
+                statusText: 'Created',
+                headers: { 'content-type': 'image/png' },
+                bytes: [1, 2, 3],
             })
         );
-        expect(imageHandler.fetchImage).toHaveBeenCalledWith(
-            'https://lh3.googleusercontent.com/gg/sample=s0-rw'
-        );
+        expect(fetch).toHaveBeenCalledWith('https://lh3.googleusercontent.com/gg/sample=s0-rw', {
+            method: 'POST',
+            headers: { 'x-test': '1' },
+            body: 'payload',
+            credentials: 'omit',
+            redirect: 'follow',
+        });
+        expect(imageHandler.fetchImage).not.toHaveBeenCalled();
     });
 
-    it('rejects Gemini watermark image proxy requests from non-Gemini pages', async () => {
+    it('allows GWR XHR requests from business Gemini page senders', async () => {
+        vi.stubGlobal(
+            'fetch',
+            vi.fn(() =>
+                Promise.resolve(
+                    new Response(new Uint8Array([4, 5]), {
+                        status: 200,
+                        statusText: 'OK',
+                    })
+                )
+            )
+        );
         const sendResponse = vi.fn();
 
         const handled = handler.handle(
             {
-                action: 'FETCH_GEMINI_WATERMARK_IMAGE',
-                url: 'https://lh3.googleusercontent.com/gg/sample=s0-rw',
+                action: 'GWR_EXTENSION_GM_XHR_REQUEST',
+                request: { url: 'https://googleusercontent.com/generated' },
+            },
+            { tab: { id: 7, url: 'https://business.gemini.google/app' } },
+            sendResponse
+        );
+
+        expect(handled).toBe(true);
+        await vi.waitFor(() =>
+            expect(sendResponse).toHaveBeenCalledWith({
+                ok: true,
+                finalUrl: '',
+                status: 200,
+                statusText: 'OK',
+                headers: {},
+                bytes: [4, 5],
+            })
+        );
+    });
+
+    it('rejects GWR XHR requests from non-Gemini page senders', async () => {
+        vi.stubGlobal('fetch', vi.fn());
+        const sendResponse = vi.fn();
+
+        const handled = handler.handle(
+            {
+                action: 'GWR_EXTENSION_GM_XHR_REQUEST',
+                request: { url: 'https://lh3.googleusercontent.com/gg/sample=s0-rw' },
             },
             { tab: { id: 7, url: 'https://example.com/' } },
             sendResponse
@@ -621,20 +1113,29 @@ describe('UIMessageHandler browser control tab ownership', () => {
         expect(handled).toBe(true);
         await vi.waitFor(() =>
             expect(sendResponse).toHaveBeenCalledWith({
-                status: 'error',
+                ok: false,
+                finalUrl: 'https://lh3.googleusercontent.com/gg/sample=s0-rw',
+                status: 0,
+                statusText: '',
+                headers: {},
+                bytes: [],
                 error: 'Unsupported sender',
             })
         );
-        expect(imageHandler.fetchImage).not.toHaveBeenCalled();
+        expect(fetch).not.toHaveBeenCalled();
     });
 
-    it('rejects non-Gemini image URLs for the Gemini watermark proxy', async () => {
+    it('returns GWR XHR network errors in the source-extension response shape', async () => {
+        vi.stubGlobal(
+            'fetch',
+            vi.fn(() => Promise.reject(new Error('Network down')))
+        );
         const sendResponse = vi.fn();
 
         const handled = handler.handle(
             {
-                action: 'FETCH_GEMINI_WATERMARK_IMAGE',
-                url: 'https://example.com/image.png',
+                action: 'GWR_EXTENSION_GM_XHR_REQUEST',
+                request: { url: 'https://lh3.googleusercontent.com/gg/sample=s0-rw' },
             },
             { tab: { id: 7, url: 'https://gemini.google.com/app' } },
             sendResponse
@@ -643,10 +1144,14 @@ describe('UIMessageHandler browser control tab ownership', () => {
         expect(handled).toBe(true);
         await vi.waitFor(() =>
             expect(sendResponse).toHaveBeenCalledWith({
-                status: 'error',
-                error: 'Unsupported image URL',
+                ok: false,
+                finalUrl: 'https://lh3.googleusercontent.com/gg/sample=s0-rw',
+                status: 0,
+                statusText: '',
+                headers: {},
+                bytes: [],
+                error: 'Network down',
             })
         );
-        expect(imageHandler.fetchImage).not.toHaveBeenCalled();
     });
 });

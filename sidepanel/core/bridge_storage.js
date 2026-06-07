@@ -8,6 +8,10 @@ export function getRuntimeLastError() {
     return message ? new Error(message) : null;
 }
 
+function logSessionBindingWriteError(error) {
+    console.warn('Unable to save side panel session binding after storage write failed:', error);
+}
+
 export function restoreConnectionSettings(frame) {
     chrome.storage.local.get(CONNECTION_STORAGE_KEYS, (result) => {
         const readError = getRuntimeLastError();
@@ -70,6 +74,13 @@ export function saveSidePanelSessionBinding(payload) {
         } else {
             delete bindings[tabId];
         }
-        chrome.storage.session.set({ geminiSidePanelSessionBindings: bindings });
+        try {
+            const writeResult = chrome.storage.session.set({
+                geminiSidePanelSessionBindings: bindings,
+            });
+            writeResult?.catch?.(logSessionBindingWriteError);
+        } catch (error) {
+            logSessionBindingWriteError(error);
+        }
     });
 }

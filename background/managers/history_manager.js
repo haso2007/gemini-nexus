@@ -40,6 +40,27 @@ function createAiHistoryMessage(result) {
     };
 }
 
+function normalizeDeletedSessionIds(value) {
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function isDeletedSessionId(sessionId, deletedSessionIds) {
+    return Boolean(sessionId && deletedSessionIds?.[sessionId]);
+}
+
+function mergeCurrentSessionMetadata(currentSession, sessionSnapshot) {
+    if (!currentSession) return sessionSnapshot;
+
+    const nextSession = { ...sessionSnapshot };
+    if (Object.prototype.hasOwnProperty.call(currentSession, 'isPinned')) {
+        nextSession.isPinned = currentSession.isPinned === true;
+    }
+    if (Object.prototype.hasOwnProperty.call(currentSession, 'groupId')) {
+        nextSession.groupId = currentSession.groupId || null;
+    }
+    return nextSession;
+}
+
 /**
  * Saves a completed interaction to the chat history in local storage.
  * @param {string} text - The user's prompt.
@@ -259,12 +280,26 @@ export async function replaceSessionSnapshot(sessionSnapshot) {
             return false;
         }
 
-        const { geminiSessions = [] } = await chrome.storage.local.get(['geminiSessions']);
+        const { geminiSessions = [], geminiDeletedSessionIds } = await chrome.storage.local.get([
+            'geminiSessions',
+            'geminiDeletedSessionIds',
+        ]);
         const sessionIndex = geminiSessions.findIndex(
             (storedSession) => storedSession.id === sessionSnapshot.id
         );
+        if (
+            sessionIndex === -1 &&
+            isDeletedSessionId(
+                sessionSnapshot.id,
+                normalizeDeletedSessionIds(geminiDeletedSessionIds)
+            )
+        ) {
+            return false;
+        }
+
+        const currentSession = sessionIndex !== -1 ? geminiSessions[sessionIndex] : null;
         const nextSession = {
-            ...sessionSnapshot,
+            ...mergeCurrentSessionMetadata(currentSession, sessionSnapshot),
             timestamp: sessionSnapshot.timestamp || Date.now(),
         };
 

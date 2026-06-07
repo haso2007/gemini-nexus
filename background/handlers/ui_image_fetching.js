@@ -1,52 +1,94 @@
 import { respondWithUiTask } from './ui_async.js';
 
-const GEMINI_IMAGE_PATTERN = /^https:\/\/lh3\.googleusercontent\.com\/(?:rd-)?gg(?:-dl)?\/.+=s.*/;
+const GEMINI_PAGE_ORIGINS = new Set([
+    'https://gemini.google.com',
+    'https://business.gemini.google',
+]);
 
 function isGeminiPageSender(sender) {
     try {
-        return new URL(sender?.tab?.url || '').origin === 'https://gemini.google.com';
+        return GEMINI_PAGE_ORIGINS.has(new URL(sender?.tab?.url || '').origin);
     } catch {
         return false;
     }
+}
+
+function isExtensionPageSender(sender) {
+    return !sender?.tab;
 }
 
 export function handleFetchImage(context, request, sender, sendResponse) {
     respondWithUiTask(
         sendResponse,
         async () => {
-            const result = await context.imageHandler.fetchImage(request.url);
-            chrome.runtime
-                .sendMessage({
-                    ...result,
-                    tabId: context.getTargetSidePanelTabId(request, sender),
-                })
-                .catch(() => {});
+            const payload = {
+                ...(await context.imageHandler.fetchImage(request.url)),
+                tabId: context.getTargetSidePanelTabId(request, sender),
+            };
+
+            if (isExtensionPageSender(sender)) return payload;
+
+            await context.sendToRequestSource(sender, payload);
         },
-        { errorLabel: 'Fetch image error', errorResponse: { status: 'completed' } }
+        { errorLabel: 'Fetch image error' }
     );
 }
 
-export function handleFetchGeminiWatermarkImage(context, request, sender, sendResponse) {
+function normalizeRequestHeaders(headers = {}) {
+    if (!headers || typeof headers !== 'object') return {};
+
+    return Object.fromEntries(
+        Object.entries(headers)
+            .filter(([name, value]) => name && value != null)
+            .map(([name, value]) => [name, String(value)])
+    );
+}
+
+function createGwrErrorResponse(request, error) {
+    return {
+        ok: false,
+        finalUrl: request?.url || '',
+        status: 0,
+        statusText: '',
+        headers: {},
+        bytes: [],
+        error: error?.message || String(error),
+    };
+}
+
+export function handleGwrExtensionXhrRequest(context, request, sender, sendResponse) {
     respondWithUiTask(
         sendResponse,
         async () => {
+            const xhrRequest = request.request || {};
+
             if (!isGeminiPageSender(sender)) {
-                return { status: 'error', error: 'Unsupported sender' };
+                return createGwrErrorResponse(xhrRequest, new Error('Unsupported sender'));
             }
 
-            if (!GEMINI_IMAGE_PATTERN.test(request.url || '')) {
-                return { status: 'error', error: 'Unsupported image URL' };
-            }
+            try {
+                const response = await fetch(xhrRequest.url, {
+                    method: xhrRequest.method || 'GET',
+                    headers: normalizeRequestHeaders(xhrRequest.headers),
+                    body: xhrRequest.data ?? undefined,
+                    credentials: 'omit',
+                    redirect: 'follow',
+                });
+                const bytes = Array.from(new Uint8Array(await response.arrayBuffer()));
 
-            const result = await context.imageHandler.fetchImage(request.url);
-            return {
-                status: result.error ? 'error' : 'completed',
-                base64: result.base64 || null,
-                type: result.type || null,
-                error: result.error || null,
-            };
+                return {
+                    ok: response.ok,
+                    finalUrl: response.url || '',
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: Object.fromEntries(response.headers.entries()),
+                    bytes,
+                };
+            } catch (error) {
+                return createGwrErrorResponse(xhrRequest, error);
+            }
         },
-        { errorLabel: 'Fetch Gemini watermark image error' }
+        { errorLabel: 'GWR extension XHR request error' }
     );
 }
 
@@ -55,26 +97,18 @@ export function handleFetchGeneratedImage(context, request, sender, sendResponse
         sendResponse,
         async () => {
             const result = await context.imageHandler.fetchImage(request.url);
-
-            context.sendToRequestSource(sender, {
+            const payload = {
                 action: 'GENERATED_IMAGE_RESULT',
                 tabId: context.getTargetSidePanelTabId(request, sender),
                 reqId: request.reqId,
                 base64: result.base64,
                 error: result.error,
-            });
+            };
+
+            if (isExtensionPageSender(sender)) return payload;
+
+            await context.sendToRequestSource(sender, payload);
         },
-        {
-            errorLabel: 'Fetch generated image error',
-            errorResponse: { status: 'completed' },
-            onError: (error) => {
-                context.sendToRequestSource(sender, {
-                    action: 'GENERATED_IMAGE_RESULT',
-                    tabId: context.getTargetSidePanelTabId(request, sender),
-                    reqId: request.reqId,
-                    error: error.message || String(error),
-                });
-            },
-        }
+        { errorLabel: 'Fetch generated image error' }
     );
 }

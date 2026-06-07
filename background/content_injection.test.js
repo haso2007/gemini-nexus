@@ -24,7 +24,15 @@ const testManifest = {
         },
         {
             matches: ['https://gemini.google.com/*'],
-            js: ['content/gemini_watermark_page.js'],
+            js: ['content/gemini_watermark_bridge.js'],
+            run_at: 'document_start',
+        },
+        {
+            matches: ['https://gemini.google.com/*'],
+            js: [
+                'content/gemini_watermark_page.js',
+                'vendor/gemini-watermark-remover/content_main.js',
+            ],
             run_at: 'document_start',
             world: 'MAIN',
         },
@@ -67,7 +75,9 @@ describe('content script startup injection', () => {
             'content/page_guard.js',
             'content/index.js',
             'content/shortcut_frame_bridge.js',
+            'content/gemini_watermark_bridge.js',
             'content/gemini_watermark_page.js',
+            'vendor/gemini-watermark-remover/content_main.js',
         ]);
     });
 
@@ -98,7 +108,14 @@ describe('content script startup injection', () => {
                 world: 'ISOLATED',
             }),
             expect.objectContaining({
-                js: ['content/gemini_watermark_page.js'],
+                js: ['content/gemini_watermark_bridge.js'],
+                world: 'ISOLATED',
+            }),
+            expect.objectContaining({
+                js: [
+                    'content/gemini_watermark_page.js',
+                    'vendor/gemini-watermark-remover/content_main.js',
+                ],
                 world: 'MAIN',
             }),
         ]);
@@ -133,6 +150,8 @@ describe('content script startup injection', () => {
             .mockResolvedValueOnce([{ result: false }])
             .mockResolvedValueOnce([{ result: undefined }])
             .mockResolvedValueOnce([{ result: false }])
+            .mockResolvedValueOnce([{ result: undefined }])
+            .mockResolvedValueOnce([{ result: false }])
             .mockResolvedValueOnce([{ result: undefined }]);
 
         const result = await injectContentScriptsIntoTab({
@@ -151,17 +170,28 @@ describe('content script startup injection', () => {
         });
         expect(chrome.scripting.executeScript).toHaveBeenNthCalledWith(5, {
             target: { tabId: 12 },
-            world: 'MAIN',
             func: expect.any(Function),
         });
         expect(chrome.scripting.executeScript).toHaveBeenNthCalledWith(6, {
             target: { tabId: 12 },
-            files: ['content/gemini_watermark_page.js'],
+            files: ['content/gemini_watermark_bridge.js'],
+        });
+        expect(chrome.scripting.executeScript).toHaveBeenNthCalledWith(7, {
+            target: { tabId: 12 },
+            world: 'MAIN',
+            func: expect.any(Function),
+        });
+        expect(chrome.scripting.executeScript).toHaveBeenNthCalledWith(8, {
+            target: { tabId: 12 },
+            files: [
+                'content/gemini_watermark_page.js',
+                'vendor/gemini-watermark-remover/content_main.js',
+            ],
             world: 'MAIN',
         });
     });
 
-    it('adds the Gemini main-world script when the normal content script is already present', async () => {
+    it('adds Gemini watermark scripts when the normal content script is already present', async () => {
         chrome.scripting.executeScript
             .mockResolvedValueOnce([{ result: true }])
             .mockResolvedValueOnce([{ result: false }])
@@ -185,12 +215,23 @@ describe('content script startup injection', () => {
         });
         expect(chrome.scripting.executeScript).toHaveBeenNthCalledWith(4, {
             target: { tabId: 12 },
-            world: 'MAIN',
             func: expect.any(Function),
         });
         expect(chrome.scripting.executeScript).toHaveBeenNthCalledWith(5, {
             target: { tabId: 12 },
-            files: ['content/gemini_watermark_page.js'],
+            files: ['content/gemini_watermark_bridge.js'],
+        });
+        expect(chrome.scripting.executeScript).toHaveBeenNthCalledWith(6, {
+            target: { tabId: 12 },
+            world: 'MAIN',
+            func: expect.any(Function),
+        });
+        expect(chrome.scripting.executeScript).toHaveBeenNthCalledWith(7, {
+            target: { tabId: 12 },
+            files: [
+                'content/gemini_watermark_page.js',
+                'vendor/gemini-watermark-remover/content_main.js',
+            ],
             world: 'MAIN',
         });
     });

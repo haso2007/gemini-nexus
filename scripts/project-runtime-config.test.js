@@ -89,6 +89,7 @@ describe('project runtime config', () => {
         expect(knipConfig.entry).toContain('content/**/*.js');
         expect(knipConfig.entry).toContain('shared/ui/**/*.js');
         expect(knipConfig.entry).toContain('shared/dom/**/*.js');
+        expect(knipConfig.entry).toContain('vendor/gemini-watermark-remover/**/*.js');
         expect(knipConfig.entry).toEqual(
             expect.arrayContaining([
                 'background/index.js',

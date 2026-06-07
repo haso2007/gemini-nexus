@@ -243,6 +243,7 @@ export class SessionFlowController {
         saveSessionsToStorage(this.sessionManager.getPersistableSessions(), {
             type: 'updateSessionMetadata',
             sessionId,
+            fields: ['title'],
         });
         this.refreshHistoryUI();
     }
@@ -253,6 +254,7 @@ export class SessionFlowController {
         saveSessionsToStorage(this.sessionManager.getPersistableSessions(), {
             type: 'updateSessionMetadata',
             sessionId,
+            fields: ['isPinned'],
         });
         this.refreshHistoryUI();
     }

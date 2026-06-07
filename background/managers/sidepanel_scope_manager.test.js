@@ -72,6 +72,22 @@ describe('SidePanelScopeManager tab-scoped paths', () => {
         expect(chrome.sidePanel.open).toHaveBeenCalledWith({ tabId: 123, windowId: 456 });
     });
 
+    it('continues opening remembered-tab panels when enabled-tab persistence fails', async () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        chrome.storage.session.set.mockRejectedValueOnce(new Error('Session storage unavailable'));
+        const manager = new SidePanelScopeManager();
+
+        await expect(manager.openForTab(123, 456)).resolves.toBeUndefined();
+
+        expect(chrome.sidePanel.open).toHaveBeenCalledWith({ tabId: 123, windowId: 456 });
+        expect(manager.isOpenForTab(123)).toBe(true);
+        expect(warnSpy).toHaveBeenCalledWith(
+            '[SidePanelScopeManager] Failed to persist remembered tab state:',
+            expect.any(Error)
+        );
+        warnSpy.mockRestore();
+    });
+
     it('starts opening remembered-tab panels without waiting for async setup', async () => {
         const calls = [];
         let resolveSetOptions;

@@ -40,6 +40,34 @@ function getRuntimeLastErrorMessage() {
     return chrome.runtime?.lastError?.message || null;
 }
 
+function logStorageWriteError(error) {
+    console.warn('Failed to save side panel state:', error?.message || error);
+}
+
+function safeSetStorage(storageArea, update) {
+    try {
+        const writeResult = storageArea.set(update);
+        writeResult?.catch?.(logStorageWriteError);
+    } catch (error) {
+        logStorageWriteError(error);
+    }
+}
+
+function safeRemoveStorage(storageArea, keys) {
+    try {
+        const writeResult = storageArea.remove(keys);
+        writeResult?.catch?.(logStorageWriteError);
+    } catch (error) {
+        logStorageWriteError(error);
+    }
+}
+
+function applyLocalPreferenceSideEffects(key, value) {
+    if (key === 'geminiTheme') localStorage.setItem('geminiTheme', value);
+    if (key === 'geminiLanguage') localStorage.setItem('geminiLanguage', value);
+    if (key === 'geminiSidebarExpanded') cacheSidebarExpandedPreference(value);
+}
+
 export class StateManager {
     constructor(frameManager) {
         this.frame = frameManager;
@@ -187,19 +215,20 @@ export class StateManager {
     }
 
     trySendInitData() {
+        if (this.hasInitialized) return;
         if (
-            (!this.uiIsReady && !this.hasInitialized) ||
+            !this.uiIsReady ||
             !this.localStorageData ||
             this.sessionStorageData === null ||
             this.currentTabId === undefined
         )
             return;
 
-        this.hasInitialized = true;
-        this.frame.reveal();
-
         const frameWindow = this.frame.getWindow();
         if (!frameWindow) return;
+
+        this.hasInitialized = true;
+        this.frame.reveal();
 
         const restoreMessages = createInitialRestoreMessages(this.localStorageData, {
             theme: localStorage.getItem('geminiTheme') || 'system',
@@ -221,7 +250,7 @@ export class StateManager {
                     sessionId: this.localStorageData.pendingSessionId,
                 },
             });
-            chrome.storage.local.remove('pendingSessionId');
+            safeRemoveStorage(chrome.storage.local, 'pendingSessionId');
             delete this.localStorageData.pendingSessionId;
         }
 
@@ -230,7 +259,7 @@ export class StateManager {
                 action: 'BACKGROUND_MESSAGE',
                 payload: this.localStorageData.pendingImage,
             });
-            chrome.storage.local.remove('pendingImage');
+            safeRemoveStorage(chrome.storage.local, 'pendingImage');
             delete this.localStorageData.pendingImage;
         }
 
@@ -239,7 +268,7 @@ export class StateManager {
                 action: 'BACKGROUND_MESSAGE',
                 payload: { action: 'ACTIVATE_BROWSER_CONTROL' },
             });
-            chrome.storage.local.remove('pendingMode');
+            safeRemoveStorage(chrome.storage.local, 'pendingMode');
             delete this.localStorageData.pendingMode;
         }
 
@@ -285,11 +314,18 @@ export class StateManager {
 
         const update = {};
         update[key] = value;
-        chrome.storage.local.set(update);
+        safeSetStorage(chrome.storage.local, update);
+        applyLocalPreferenceSideEffects(key, value);
+    }
 
-        if (key === 'geminiTheme') localStorage.setItem('geminiTheme', value);
-        if (key === 'geminiLanguage') localStorage.setItem('geminiLanguage', value);
-        if (key === 'geminiSidebarExpanded') cacheSidebarExpandedPreference(value);
+    saveMany(update) {
+        if (!update || typeof update !== 'object' || Array.isArray(update)) return;
+
+        for (const [key, value] of Object.entries(update)) {
+            if (this.localStorageData) this.localStorageData[key] = value;
+            applyLocalPreferenceSideEffects(key, value);
+        }
+        safeSetStorage(chrome.storage.local, update);
     }
 
     getCurrentTabId() {
@@ -397,6 +433,6 @@ export class StateManager {
         const nextBindings = { ...sessionBindings };
         delete nextBindings[tabId];
         this.sessionStorageData = { geminiSidePanelSessionBindings: nextBindings };
-        chrome.storage.session.set({ geminiSidePanelSessionBindings: nextBindings });
+        safeSetStorage(chrome.storage.session, { geminiSidePanelSessionBindings: nextBindings });
     }
 }

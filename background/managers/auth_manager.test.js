@@ -12,7 +12,9 @@ describe('AuthManager', () => {
         globalThis.chrome = {
             storage: {
                 local: {
+                    get: vi.fn(async () => ({})),
                     set: vi.fn(async () => {}),
+                    remove: vi.fn(async () => {}),
                 },
             },
         };
@@ -114,5 +116,110 @@ describe('AuthManager', () => {
         });
         expect(chrome.storage.local.set.mock.calls[0][0]).not.toHaveProperty('geminiModel');
         expect(manager.currentContext).toEqual(expectedContext);
+    });
+
+    it('continues account rotation when pointer persistence fails', async () => {
+        chrome.storage.local.get.mockResolvedValueOnce({
+            geminiAccountIndices: '0,1',
+        });
+        const storageError = new Error('Storage quota exceeded');
+        chrome.storage.local.set.mockRejectedValueOnce(storageError);
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        const manager = new AuthManager();
+
+        try {
+            await expect(manager.rotateAccount()).resolves.toBe('1');
+
+            expect(manager.currentAccountPointer).toBe(1);
+            expect(chrome.storage.local.set).toHaveBeenCalledWith({ geminiAccountPointer: 1 });
+            expect(warnSpy).toHaveBeenCalledWith(
+                '[Gemini Nexus] Failed to persist account rotation pointer:',
+                storageError
+            );
+        } finally {
+            warnSpy.mockRestore();
+        }
+    });
+
+    it('continues account rotation with cached indices when storage refresh fails', async () => {
+        const storageError = new Error('Storage read failed');
+        chrome.storage.local.get.mockRejectedValueOnce(storageError);
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const manager = new AuthManager();
+        manager.accountIndices = ['0', '1'];
+
+        try {
+            await expect(manager.rotateAccount()).resolves.toBe('1');
+
+            expect(manager.currentAccountPointer).toBe(1);
+            expect(chrome.storage.local.set).toHaveBeenCalledWith({ geminiAccountPointer: 1 });
+            expect(warnSpy).toHaveBeenCalledWith(
+                '[Gemini Nexus] Failed to refresh account indices before rotation:',
+                storageError
+            );
+        } finally {
+            warnSpy.mockRestore();
+        }
+    });
+
+    it('keeps refreshed Web auth context in memory when persistence fails', async () => {
+        const storageError = new Error('Storage quota exceeded');
+        chrome.storage.local.set.mockRejectedValueOnce(storageError);
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const manager = new AuthManager();
+        const context = {
+            atValue: 'at-token',
+            blValue: 'bl-token',
+            fSid: 'fsid-token',
+            locale: 'zh-CN',
+            authUser: '0',
+            uploadPushId: 'feeds/upload-dynamic',
+            uploadClientPctx: 'client-pctx-token',
+        };
+
+        try {
+            await expect(manager.updateContext(context)).resolves.toBeUndefined();
+
+            expect(manager.currentContext).toEqual(context);
+            expect(chrome.storage.local.set).toHaveBeenCalledWith({
+                geminiContext: context,
+            });
+            expect(warnSpy).toHaveBeenCalledWith(
+                '[Gemini Nexus] Failed to persist Web auth context:',
+                storageError
+            );
+        } finally {
+            warnSpy.mockRestore();
+        }
+    });
+
+    it('keeps Web auth context reset in memory when storage cleanup fails', async () => {
+        const storageError = new Error('Storage cleanup failed');
+        chrome.storage.local.remove.mockRejectedValueOnce(storageError);
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const manager = new AuthManager();
+        manager.currentContext = {
+            atValue: 'at-token',
+            blValue: 'bl-token',
+            fSid: 'fsid-token',
+            locale: 'zh-CN',
+            authUser: '0',
+            uploadPushId: 'feeds/upload-dynamic',
+            uploadClientPctx: 'client-pctx-token',
+        };
+
+        try {
+            await expect(manager.resetContext()).resolves.toBeUndefined();
+
+            expect(manager.currentContext).toBeNull();
+            expect(chrome.storage.local.remove).toHaveBeenCalledWith(['geminiContext']);
+            expect(warnSpy).toHaveBeenCalledWith(
+                '[Gemini Nexus] Failed to clear Web auth context:',
+                storageError
+            );
+        } finally {
+            warnSpy.mockRestore();
+        }
     });
 });

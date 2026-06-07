@@ -205,6 +205,40 @@ describe('ToolbarActions', () => {
         );
     });
 
+    it('shows an error when a quick ask message cannot reach the background script', async () => {
+        chrome.runtime.sendMessage.mockRejectedValueOnce(
+            new Error('Extension context invalidated')
+        );
+        const ui = {
+            hide: vi.fn(),
+            showAskWindow: vi.fn(async () => {}),
+            showLoading: vi.fn(),
+            showError: vi.fn(),
+            setInputValue: vi.fn(),
+        };
+        const actions = new window.GeminiToolbarActions(ui);
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        try {
+            await actions.handleQuickAction(
+                'summarize',
+                'Long text',
+                { x: 1, y: 2 },
+                'gemini-3-pro'
+            );
+            await Promise.resolve();
+
+            expect(ui.showLoading).toHaveBeenCalledWith('loading summarize');
+            expect(ui.showError).toHaveBeenCalledWith('Extension context invalidated');
+            expect(warnSpy).toHaveBeenCalledWith(
+                'Gemini toolbar background message failed:',
+                expect.any(Error)
+            );
+        } finally {
+            warnSpy.mockRestore();
+        }
+    });
+
     it('passes the current Web thinking level with selected-text quick asks', async () => {
         const ui = {
             hide: vi.fn(),

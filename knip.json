@@ -12,6 +12,7 @@
         "shared/ui/**/*.js",
         "shared/dom/**/*.js",
         "shared/media/**/*.js",
+        "vendor/gemini-watermark-remover/**/*.js",
         "scripts/*.mjs",
         "scripts/*.test.js"
     ],

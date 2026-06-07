@@ -386,12 +386,16 @@
         async continueChat(sessionId) {
             if (!sessionId) return;
             try {
-                await chrome.runtime.sendMessage({
+                const response = await chrome.runtime.sendMessage({
                     action: RUNTIME_ACTIONS.openSidePanel,
                     sessionId,
                 });
+                if (response?.status === 'error') {
+                    throw new Error(response.error || getStrings().failed);
+                }
             } catch (error) {
                 console.warn('Failed to continue YouTube summary chat:', error);
+                this.showPanel(error?.message || getStrings().failed, { isError: true });
             }
         }
 

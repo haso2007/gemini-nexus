@@ -99,6 +99,7 @@
                 "content/toolbar/view/index.js",
                 "content/toolbar/events.js",
                 "content/toolbar/ui/grammar.js",
+                "vendor/gemini-watermark-remover/page_process_runtime.js",
                 "shared/media/watermark_remover_global.js",
                 "content/toolbar/ui/renderer.js",
                 "content/toolbar/ui/actions_delegate.js",
@@ -138,9 +139,18 @@
             "match_about_blank": true
         },
         {
-            "matches": ["https://gemini.google.com/*"],
+            "matches": ["https://gemini.google.com/*", "https://business.gemini.google/*"],
             "exclude_globs": ["*.mhtml*", "*.mht*", "*.MHTML*", "*.MHT*"],
-            "js": ["content/gemini_watermark_page.js"],
+            "js": ["content/gemini_watermark_bridge.js"],
+            "run_at": "document_start"
+        },
+        {
+            "matches": ["https://gemini.google.com/*", "https://business.gemini.google/*"],
+            "exclude_globs": ["*.mhtml*", "*.mht*", "*.MHTML*", "*.MHT*"],
+            "js": [
+                "content/gemini_watermark_page.js",
+                "vendor/gemini-watermark-remover/content_main.js"
+            ],
             "run_at": "document_start",
             "world": "MAIN"
         }

@@ -64,6 +64,7 @@ export class PromptHandler {
         if (!run || run.cancelled) return false;
 
         run.cancelled = true;
+        this.sessionManager?.cancelCurrentRequest?.();
         if (notify) {
             sendRuntimeMessage(this.createCancellationReply(run.request));
         }
@@ -102,7 +103,10 @@ export class PromptHandler {
                     if (provider === 'web') {
                         throw new Error('History editing is not supported for Gemini Web Client.');
                     }
-                    await replaceSessionSnapshot(request.sessionSnapshot);
+                    const snapshotSaved = await replaceSessionSnapshot(request.sessionSnapshot);
+                    if (!snapshotSaved) {
+                        throw new Error('Could not save edited session before sending prompt.');
+                    }
                 }
 
                 // AUTO-LOCK: If browser control enabled and no tab locked, lock to active tab

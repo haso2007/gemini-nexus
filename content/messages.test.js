@@ -74,6 +74,48 @@ describe('GeminiMessageRouter capture routing', () => {
         expect(sendResponse).toHaveBeenLastCalledWith({ status: 'ok' });
     });
 
+    it('logs side panel crop failure forwarding errors without keeping stale routing state', async () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const router = await installMessageRouter();
+        chrome.runtime.sendMessage.mockRejectedValueOnce(new Error('Background unavailable'));
+        const { overlay, toolbar } = createHarness();
+        router.init(toolbar, overlay);
+        const sendResponse = vi.fn();
+
+        try {
+            router.handle(
+                {
+                    action: 'START_SELECTION',
+                    image: 'data:image/png;base64,AAAA',
+                    mode: 'snip',
+                    source: 'sidepanel',
+                    targetSidePanelTabId: 123,
+                },
+                {},
+                sendResponse
+            );
+            router.handle(
+                {
+                    action: 'CROP_SCREENSHOT_FAILED',
+                    error: 'Capture failed',
+                },
+                {},
+                sendResponse
+            );
+            await Promise.resolve();
+
+            expect(warnSpy).toHaveBeenCalledWith(
+                'Could not forward side panel capture message:',
+                expect.any(Error)
+            );
+            expect(router.captureSource).toBeNull();
+            expect(router.captureTargetSidePanelTabId).toBeNull();
+            expect(sendResponse).toHaveBeenLastCalledWith({ status: 'ok' });
+        } finally {
+            warnSpy.mockRestore();
+        }
+    });
+
     it('shows local crop failures in the floating toolbar', async () => {
         const router = await installMessageRouter();
         const { overlay, toolbar } = createHarness();
@@ -170,5 +212,49 @@ describe('GeminiMessageRouter capture routing', () => {
             image: 'data:image/png;base64,BBBB',
             area: { x: 1, y: 2, width: 10, height: 20 },
         });
+    });
+
+    it('logs side panel crop result forwarding errors without keeping stale routing state', async () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const router = await installMessageRouter();
+        chrome.runtime.sendMessage.mockRejectedValueOnce(new Error('Background unavailable'));
+        const { overlay, toolbar } = createHarness();
+        router.init(toolbar, overlay);
+        const sendResponse = vi.fn();
+
+        try {
+            router.handle(
+                {
+                    action: 'START_SELECTION',
+                    image: 'data:image/png;base64,AAAA',
+                    mode: 'snip',
+                    source: 'sidepanel',
+                    targetSidePanelTabId: 123,
+                },
+                {},
+                sendResponse
+            );
+            router.handle(
+                {
+                    action: 'CROP_SCREENSHOT',
+                    image: 'data:image/png;base64,BBBB',
+                    area: { x: 1, y: 2, width: 10, height: 20 },
+                },
+                {},
+                sendResponse
+            );
+            await Promise.resolve();
+
+            expect(warnSpy).toHaveBeenCalledWith(
+                'Could not forward side panel capture message:',
+                expect.any(Error)
+            );
+            expect(router.captureSource).toBeNull();
+            expect(router.captureTargetSidePanelTabId).toBeNull();
+            expect(toolbar.handleCropResult).not.toHaveBeenCalled();
+            expect(sendResponse).toHaveBeenLastCalledWith({ status: 'ok' });
+        } finally {
+            warnSpy.mockRestore();
+        }
     });
 });

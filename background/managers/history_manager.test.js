@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { appendAiMessageIfDisplayable, appendTurnToHistory } from './history_manager.js';
+import {
+    appendAiMessageIfDisplayable,
+    appendTurnToHistory,
+    replaceSessionSnapshot,
+} from './history_manager.js';
 
 describe('history_manager', () => {
     beforeEach(() => {
@@ -183,6 +187,96 @@ describe('history_manager', () => {
         });
         expect(chrome.storage.local.set).toHaveBeenCalledWith({
             geminiSessions: [sessions[0]],
+        });
+    });
+
+    it('does not revive a tombstoned session when replacing an edited snapshot', async () => {
+        globalThis.chrome = {
+            runtime: {
+                sendMessage: vi.fn(() => Promise.resolve()),
+            },
+            storage: {
+                local: {
+                    get: vi.fn(async () => ({
+                        geminiSessions: [],
+                        geminiDeletedSessionIds: { 'session-1': 123 },
+                    })),
+                    set: vi.fn(async () => {}),
+                },
+            },
+        };
+
+        await expect(
+            replaceSessionSnapshot({
+                id: 'session-1',
+                title: 'Edited',
+                messages: [{ role: 'user', text: 'Edited prompt' }],
+                context: null,
+            })
+        ).resolves.toBe(false);
+
+        expect(chrome.storage.local.get).toHaveBeenCalledWith([
+            'geminiSessions',
+            'geminiDeletedSessionIds',
+        ]);
+        expect(chrome.storage.local.set).not.toHaveBeenCalled();
+    });
+
+    it('preserves current pin and group metadata when replacing an edited snapshot', async () => {
+        const sessions = [
+            {
+                id: 'session-1',
+                title: 'Current title',
+                timestamp: 100,
+                isPinned: true,
+                groupId: 'group-1',
+                messages: [
+                    { role: 'user', text: 'Original prompt' },
+                    { role: 'ai', text: 'Old answer' },
+                ],
+                context: ['old-context'],
+                contextSummary: { sourceMessageCount: 2 },
+            },
+        ];
+        globalThis.chrome = {
+            runtime: {
+                sendMessage: vi.fn(() => Promise.resolve()),
+            },
+            storage: {
+                local: {
+                    get: vi.fn(async () => ({
+                        geminiSessions: sessions,
+                        geminiDeletedSessionIds: {},
+                    })),
+                    set: vi.fn(async () => {}),
+                },
+            },
+        };
+
+        await expect(
+            replaceSessionSnapshot({
+                id: 'session-1',
+                title: 'Edited title',
+                timestamp: 200,
+                messages: [{ role: 'user', text: 'Edited prompt' }],
+                context: null,
+                contextSummary: null,
+            })
+        ).resolves.toBe(true);
+
+        expect(chrome.storage.local.set).toHaveBeenCalledWith({
+            geminiSessions: [
+                expect.objectContaining({
+                    id: 'session-1',
+                    title: 'Edited title',
+                    timestamp: 200,
+                    isPinned: true,
+                    groupId: 'group-1',
+                    messages: [{ role: 'user', text: 'Edited prompt' }],
+                    context: null,
+                    contextSummary: null,
+                }),
+            ],
         });
     });
 });

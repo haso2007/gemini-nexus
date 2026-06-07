@@ -25,6 +25,8 @@ function setupChrome(activeTab = 33) {
         storage: {
             local: {
                 get: vi.fn((keys, callback) => callback({})),
+                set: vi.fn(),
+                remove: vi.fn(),
             },
             session: {
                 get: vi.fn((keys, callback) => callback({ geminiSidePanelSessionBindings: {} })),
@@ -281,6 +283,48 @@ describe('StateManager tab ownership', () => {
         });
     });
 
+    it('does not replay initial restore data when UI_READY is repeated', () => {
+        setupChromeWithLocalData({
+            geminiSessions: [{ id: 'session-1', title: 'First session', messages: [] }],
+            pendingSessionId: 'session-1',
+        });
+        const frame = createFrame();
+        const manager = new StateManager(frame);
+
+        manager.init();
+        manager.markUiReady();
+        frame.postMessage.mockClear();
+
+        manager.markUiReady();
+
+        expect(frame.postMessage).not.toHaveBeenCalled();
+    });
+
+    it('logs storage failures when clearing consumed pending actions', async () => {
+        setupChromeWithLocalData({
+            pendingSessionId: 'session-1',
+        });
+        chrome.storage.local.remove.mockRejectedValueOnce(
+            new Error('Pending action cleanup failed')
+        );
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const manager = new StateManager(createFrame());
+
+        try {
+            manager.init();
+            manager.markUiReady();
+            await Promise.resolve();
+
+            expect(chrome.storage.local.remove).toHaveBeenCalledWith('pendingSessionId');
+            expect(warnSpy).toHaveBeenCalledWith(
+                'Failed to save side panel state:',
+                'Pending action cleanup failed'
+            );
+        } finally {
+            warnSpy.mockRestore();
+        }
+    });
+
     it('continues initialization with default state when local storage cannot be read', () => {
         setupChrome(33);
         chrome.storage.local.get.mockImplementation((keys, callback) => {
@@ -471,5 +515,74 @@ describe('StateManager tab ownership', () => {
                 officialModel: 'gemini-2.5-pro',
             }),
         });
+    });
+
+    it('logs storage write failures when saving side panel state', async () => {
+        setupChrome(33);
+        chrome.storage.local.set.mockRejectedValueOnce(new Error('Storage quota exceeded'));
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const manager = new StateManager(createFrame());
+
+        try {
+            manager.save('geminiTheme', 'dark');
+            await Promise.resolve();
+
+            expect(chrome.storage.local.set).toHaveBeenCalledWith({ geminiTheme: 'dark' });
+            expect(warnSpy).toHaveBeenCalledWith(
+                'Failed to save side panel state:',
+                'Storage quota exceeded'
+            );
+        } finally {
+            warnSpy.mockRestore();
+        }
+    });
+
+    it('saves multiple side panel state keys with one storage write', () => {
+        setupChromeWithLocalData({
+            geminiSessions: [],
+            geminiDeletedSessionIds: {},
+        });
+        const manager = new StateManager(createFrame());
+
+        manager.init();
+        manager.markUiReady();
+        chrome.storage.local.set.mockClear();
+        manager.saveMany({
+            geminiSessions: [{ id: 'session-2', messages: [] }],
+            geminiDeletedSessionIds: { 'session-1': 123 },
+        });
+
+        expect(chrome.storage.local.set).toHaveBeenCalledTimes(1);
+        expect(chrome.storage.local.set).toHaveBeenCalledWith({
+            geminiSessions: [{ id: 'session-2', messages: [] }],
+            geminiDeletedSessionIds: { 'session-1': 123 },
+        });
+    });
+
+    it('logs storage write failures when removing closed-tab session bindings', async () => {
+        const listeners = setupChrome(33);
+        chrome.storage.session.get.mockImplementation((keys, callback) =>
+            callback({ geminiSidePanelSessionBindings: { 44: 'session-44' } })
+        );
+        chrome.storage.session.set.mockRejectedValueOnce(new Error('Session storage write failed'));
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const manager = new StateManager(createFrame());
+
+        try {
+            manager.init();
+            manager.markUiReady();
+            listeners.removed(44);
+            await Promise.resolve();
+
+            expect(chrome.storage.session.set).toHaveBeenCalledWith({
+                geminiSidePanelSessionBindings: {},
+            });
+            expect(warnSpy).toHaveBeenCalledWith(
+                'Failed to save side panel state:',
+                'Session storage write failed'
+            );
+        } finally {
+            warnSpy.mockRestore();
+        }
     });
 });

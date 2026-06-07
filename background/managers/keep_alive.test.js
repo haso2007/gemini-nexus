@@ -72,4 +72,22 @@ describe('KeepAliveManager alarm listener', () => {
         expect(fetch).toHaveBeenCalledTimes(1);
         expect(storageData.geminiKeepAliveLastRotationAttempt).toBe(now);
     });
+
+    it('does not let expired context cleanup failures escape error handling', async () => {
+        const storageError = new Error('Session storage unavailable');
+        chrome.storage.local.remove.mockRejectedValueOnce(storageError);
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+        try {
+            await expect(keepAliveManager._handleError(401)).resolves.toBeUndefined();
+
+            expect(chrome.storage.local.remove).toHaveBeenCalledWith(['geminiContext']);
+            expect(warnSpy).toHaveBeenCalledWith(
+                '[Gemini Nexus] Keep-Alive: Failed to clear expired context:',
+                storageError
+            );
+        } finally {
+            warnSpy.mockRestore();
+        }
+    });
 });

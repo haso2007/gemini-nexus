@@ -1,6 +1,17 @@
 (function () {
     window.GeminiMessageRouter?.destroy?.();
 
+    function forwardSidePanelCaptureMessage(message) {
+        try {
+            const result = chrome.runtime.sendMessage(message);
+            result?.catch?.((error) => {
+                console.warn('Could not forward side panel capture message:', error);
+            });
+        } catch (error) {
+            console.warn('Could not forward side panel capture message:', error);
+        }
+    }
+
     class MessageRouter {
         constructor() {
             this.toolbarController = null;
@@ -39,7 +50,7 @@
             const message = request.error || 'Capture failed';
 
             if (this.captureSource === 'sidepanel') {
-                chrome.runtime.sendMessage({
+                forwardSidePanelCaptureMessage({
                     action: 'SCREEN_CAPTURE_ERROR',
                     error: message,
                     tabId: this.captureTargetSidePanelTabId,
@@ -101,7 +112,7 @@
             if (request.action === 'CROP_SCREENSHOT') {
                 if (this.captureSource === 'sidepanel') {
                     // Forward back to sidepanel via background
-                    chrome.runtime.sendMessage({
+                    forwardSidePanelCaptureMessage({
                         action: 'PROCESS_CROP_IN_SIDEPANEL',
                         payload: {
                             ...request,

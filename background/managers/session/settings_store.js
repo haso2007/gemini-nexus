@@ -56,7 +56,14 @@ export async function getConnectionSettings(options = {}) {
             activeApiKey = apiKeys[pointer];
 
             const nextPointer = (pointer + 1) % apiKeys.length;
-            await chrome.storage.local.set({ geminiApiKeyPointer: nextPointer });
+            try {
+                await chrome.storage.local.set({ geminiApiKeyPointer: nextPointer });
+            } catch (error) {
+                console.warn(
+                    '[Gemini Nexus] Failed to persist Official API key rotation pointer:',
+                    error
+                );
+            }
 
             debugLog(`[Gemini Nexus] Rotating Official API Key (Index: ${pointer})`);
         }

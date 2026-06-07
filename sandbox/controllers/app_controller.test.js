@@ -56,6 +56,7 @@ function createUi() {
         updateWebThinkingToggle: vi.fn(),
         setBrowserControlCallbacks: vi.fn(),
         updateModelList: vi.fn(),
+        openTabSelector: vi.fn(),
         updateStatus: vi.fn(),
     };
 }
@@ -305,6 +306,70 @@ describe('AppController session restore behavior', () => {
             enabled: true,
             hostIsTab: true,
         });
+    });
+
+    it('rolls back optimistic browser control UI when background enable fails', async () => {
+        const { app, ui } = createAppHarness();
+        const button = document.createElement('button');
+        button.id = 'browser-control-btn';
+        document.body.appendChild(button);
+
+        app.toggleBrowserControl(true);
+        expect(app.browserControlActive).toBe(true);
+        expect(button.classList.contains('active')).toBe(true);
+
+        await app.handleIncomingMessage({
+            data: {
+                action: 'BACKGROUND_MESSAGE',
+                payload: {
+                    action: 'BROWSER_CONTROL_TOGGLE_RESULT',
+                    enabled: true,
+                    status: 'error',
+                    error: 'No controllable browser tab is selected.',
+                },
+            },
+        });
+
+        expect(app.browserControlActive).toBe(false);
+        expect(button.classList.contains('active')).toBe(false);
+        expect(ui.setBrowserControlVisible).toHaveBeenLastCalledWith(false);
+        expect(ui.updateStatus).toHaveBeenCalledWith('No controllable browser tab is selected.');
+    });
+
+    it('shows generic background request errors from the side panel bridge', async () => {
+        const { app, ui } = createAppHarness();
+
+        await app.handleIncomingMessage({
+            data: {
+                action: 'BACKGROUND_MESSAGE',
+                payload: {
+                    action: 'BACKGROUND_REQUEST_ERROR',
+                    requestAction: 'GET_OPEN_TABS',
+                    error: 'Side panel unavailable',
+                },
+            },
+        });
+
+        expect(ui.updateStatus).toHaveBeenCalledWith('Side panel unavailable');
+    });
+
+    it('shows open-tabs result errors instead of opening an empty selector', async () => {
+        const { app, ui } = createAppHarness();
+
+        await app.handleIncomingMessage({
+            data: {
+                action: 'BACKGROUND_MESSAGE',
+                payload: {
+                    action: 'OPEN_TABS_RESULT',
+                    tabs: [],
+                    lockedTabId: 1,
+                    error: 'Tabs unavailable',
+                },
+            },
+        });
+
+        expect(ui.updateStatus).toHaveBeenCalledWith('Tabs unavailable');
+        expect(ui.openTabSelector).not.toHaveBeenCalled();
     });
 
     it('forwards locked tab updates to the browser control bar state', async () => {

@@ -76,15 +76,17 @@ export function handleInitiateCapture(context, request, sender) {
             return;
         }
 
-        chrome.tabs
-            .sendMessage(tab.id, {
+        try {
+            await chrome.tabs.sendMessage(tab.id, {
                 action: 'START_SELECTION',
                 image: capture.base64,
                 mode: request.mode,
                 source: request.source,
                 targetSidePanelTabId: context.getTargetSidePanelTabId(request, sender),
-            })
-            .catch(() => {});
+            });
+        } catch (error) {
+            notifyCaptureStartFailure(context, request, sender, tab, getCaptureError(error));
+        }
     }, 'Capture initiation error');
 }
 
@@ -95,7 +97,7 @@ export function handleAreaSelected(context, request, sender, sendResponse) {
             const windowId = sender.tab ? sender.tab.windowId : null;
             const result = await context.imageHandler.captureArea(request.area, windowId);
             if (result && sender.tab) {
-                chrome.tabs.sendMessage(sender.tab.id, result).catch(() => {});
+                await chrome.tabs.sendMessage(sender.tab.id, result);
                 return;
             }
 
@@ -103,18 +105,24 @@ export function handleAreaSelected(context, request, sender, sendResponse) {
         },
         {
             errorLabel: 'Area capture error',
-            errorResponse: { status: 'completed' },
             onError: (error) => notifyAreaCaptureFailure(sender, error),
         }
     );
 }
 
 export function handleProcessCropInSidePanel(context, request, sender, sendResponse) {
-    chrome.runtime
-        .sendMessage({
-            ...request.payload,
-            tabId: request.payload?.tabId || context.getTargetSidePanelTabId(request, sender),
-        })
-        .catch(() => {});
-    sendResponse({ status: 'forwarded' });
+    respondWithUiTask(
+        sendResponse,
+        async () => {
+            await chrome.runtime.sendMessage({
+                ...request.payload,
+                tabId: request.payload?.tabId || context.getTargetSidePanelTabId(request, sender),
+            });
+
+            return { status: 'forwarded' };
+        },
+        {
+            errorLabel: 'Crop forwarding error',
+        }
+    );
 }

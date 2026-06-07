@@ -90,6 +90,44 @@ describe('RequestDispatcher response mapping', () => {
         });
     });
 
+    it('falls back to configured Official API models when a stale request model is invalid', async () => {
+        sendOfficialMessage.mockResolvedValue({
+            text: 'official text',
+            thoughts: null,
+            sources: [],
+            images: [],
+        });
+        const dispatcher = new RequestDispatcher({});
+
+        await dispatcher.dispatch(
+            { text: 'hello', model: '56fdd199312815e2', sessionId: null },
+            {
+                provider: 'official',
+                apiKey: 'key',
+                officialBaseUrl: 'https://api.example.test',
+                officialModel: 'gemini-3-flash-preview, gemini-3.1-pro-preview',
+            },
+            [],
+            vi.fn(),
+            null
+        );
+
+        expect(sendOfficialMessage).toHaveBeenCalledWith(
+            'hello',
+            'system',
+            [],
+            expect.objectContaining({
+                model: 'gemini-3-flash-preview',
+                configuredModels: 'gemini-3-flash-preview, gemini-3.1-pro-preview',
+            }),
+            undefined,
+            [],
+            false,
+            null,
+            expect.any(Function)
+        );
+    });
+
     it('maps OpenAI provider responses into the common Gemini reply shape', async () => {
         sendOpenAIMessage.mockResolvedValue({
             text: 'openai text',
@@ -163,6 +201,81 @@ describe('RequestDispatcher response mapping', () => {
                 model: 'grok-4.3',
             }),
             files,
+            null,
+            expect.any(Function)
+        );
+    });
+
+    it('falls back to configured OpenAI models when a stale request model is invalid', async () => {
+        sendOpenAIMessage.mockResolvedValue({
+            text: 'openai text',
+            thoughts: null,
+            sources: [],
+            images: [],
+        });
+        const dispatcher = new RequestDispatcher({});
+
+        await dispatcher.dispatch(
+            { text: 'hello', model: '56fdd199312815e2', sessionId: null },
+            {
+                provider: 'openai',
+                openaiBaseUrl: 'https://api.openai.com/v1',
+                openaiApiKey: 'key',
+                openaiModel: 'gpt-5.1, gpt-4o',
+            },
+            [],
+            vi.fn(),
+            null
+        );
+
+        expect(sendOpenAIMessage).toHaveBeenCalledWith(
+            'hello',
+            'system',
+            [],
+            expect.objectContaining({
+                model: 'gpt-5.1',
+            }),
+            [],
+            null,
+            expect.any(Function)
+        );
+    });
+
+    it('does not send the OpenAI custom-model placeholder as a real model id', async () => {
+        sendOpenAIMessage.mockImplementation(async (prompt, systemInstruction, history, config) => {
+            if (!config.model) throw new Error('Model ID is missing.');
+            return {
+                text: 'openai text',
+                thoughts: null,
+                sources: [],
+                images: [],
+            };
+        });
+        const dispatcher = new RequestDispatcher({});
+
+        await expect(
+            dispatcher.dispatch(
+                { text: 'hello', model: 'openai_custom', sessionId: null },
+                {
+                    provider: 'openai',
+                    openaiBaseUrl: 'https://api.openai.com/v1',
+                    openaiApiKey: 'key',
+                    openaiModel: '',
+                },
+                [],
+                vi.fn(),
+                null
+            )
+        ).rejects.toThrow(/Model ID is missing/);
+
+        expect(sendOpenAIMessage).toHaveBeenCalledWith(
+            'hello',
+            'system',
+            [],
+            expect.objectContaining({
+                model: '',
+            }),
+            [],
             null,
             expect.any(Function)
         );
@@ -286,6 +399,127 @@ describe('RequestDispatcher response mapping', () => {
                 model: 'deepseek-v4-pro',
                 reasoningEffort: 'high',
                 useResponsesApi: false,
+            }),
+            [],
+            null,
+            expect.any(Function)
+        );
+    });
+
+    it('falls back to configured dedicated provider models when a stale request model is invalid', async () => {
+        sendOpenAIMessage.mockResolvedValue({
+            text: 'deepseek text',
+            thoughts: null,
+            sources: [],
+            images: [],
+        });
+        const dispatcher = new RequestDispatcher({});
+
+        await dispatcher.dispatch(
+            { text: 'hello', model: 'gpt-5-from-previous-provider', sessionId: null },
+            {
+                provider: 'deepseek',
+                dedicatedApiProviders: {
+                    deepseek: {
+                        baseUrl: 'https://api.deepseek.com',
+                        apiKey: 'deepseek-key',
+                        model: 'deepseek-v4-pro, deepseek-chat',
+                        thinkingLevel: 'high',
+                    },
+                },
+            },
+            [],
+            vi.fn(),
+            null
+        );
+
+        expect(sendOpenAIMessage).toHaveBeenCalledWith(
+            'hello',
+            'system',
+            [],
+            expect.objectContaining({
+                model: 'deepseek-v4-pro',
+            }),
+            [],
+            null,
+            expect.any(Function)
+        );
+    });
+
+    it('uses a dedicated provider selected model when the request model is stale', async () => {
+        sendOpenAIMessage.mockResolvedValue({
+            text: 'deepseek text',
+            thoughts: null,
+            sources: [],
+            images: [],
+        });
+        const dispatcher = new RequestDispatcher({});
+
+        await dispatcher.dispatch(
+            { text: 'hello', model: 'gpt-5-from-previous-provider', sessionId: null },
+            {
+                provider: 'deepseek',
+                dedicatedApiProviders: {
+                    deepseek: {
+                        baseUrl: 'https://api.deepseek.com',
+                        apiKey: 'deepseek-key',
+                        model: 'deepseek-v4-pro, deepseek-chat',
+                        selectedModel: 'deepseek-chat',
+                        thinkingLevel: 'high',
+                    },
+                },
+            },
+            [],
+            vi.fn(),
+            null
+        );
+
+        expect(sendOpenAIMessage).toHaveBeenCalledWith(
+            'hello',
+            'system',
+            [],
+            expect.objectContaining({
+                model: 'deepseek-chat',
+            }),
+            [],
+            null,
+            expect.any(Function)
+        );
+    });
+
+    it('keeps an explicitly requested dedicated provider default model when it is configured', async () => {
+        sendOpenAIMessage.mockResolvedValue({
+            text: 'deepseek text',
+            thoughts: null,
+            sources: [],
+            images: [],
+        });
+        const dispatcher = new RequestDispatcher({});
+
+        await dispatcher.dispatch(
+            { text: 'hello', model: 'deepseek-v4-pro', sessionId: null },
+            {
+                provider: 'deepseek',
+                dedicatedApiProviders: {
+                    deepseek: {
+                        baseUrl: 'https://api.deepseek.com',
+                        apiKey: 'deepseek-key',
+                        model: 'deepseek-chat, deepseek-v4-pro',
+                        thinkingLevel: 'high',
+                    },
+                },
+            },
+            [],
+            vi.fn(),
+            null
+        );
+
+        expect(sendOpenAIMessage).toHaveBeenCalledWith(
+            'hello',
+            'system',
+            [],
+            expect.objectContaining({
+                model: 'deepseek-v4-pro',
             }),
             [],
             null,

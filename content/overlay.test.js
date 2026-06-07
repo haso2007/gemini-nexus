@@ -91,4 +91,29 @@ describe('SelectionOverlay capture lifecycle', () => {
             },
         });
     });
+
+    it('logs selected area message failures after cleaning up the overlay', async () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const Overlay = await installOverlay();
+        chrome.runtime.sendMessage.mockRejectedValueOnce(
+            new Error('Extension context invalidated')
+        );
+        const overlay = new Overlay();
+
+        try {
+            overlay.start('data:image/png;base64,SCREEN');
+            overlay.onMouseDown(createPointerEvent({ clientX: 10, clientY: 10 }));
+            setSelectionRect(overlay, { left: 10, top: 10, width: 30, height: 40 });
+            overlay.onMouseUp(createPointerEvent({ clientX: 40, clientY: 50 }));
+            await vi.advanceTimersByTimeAsync(60);
+
+            expect(document.getElementById('gemini-nexus-overlay')).toBeNull();
+            expect(warnSpy).toHaveBeenCalledWith(
+                'Could not send selected capture area:',
+                expect.any(Error)
+            );
+        } finally {
+            warnSpy.mockRestore();
+        }
+    });
 });

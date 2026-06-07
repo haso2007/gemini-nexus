@@ -90,6 +90,17 @@
         return globalThis.GeminiNexusWebThinking || window.GeminiNexusWebThinking || null;
     }
 
+    function saveToolbarSettings(update) {
+        try {
+            const writeResult = chrome.storage.local.set(update);
+            writeResult?.catch?.((error) => {
+                console.warn('Failed to save toolbar settings:', error?.message || error);
+            });
+        } catch (error) {
+            console.warn('Failed to save toolbar settings:', error?.message || error);
+        }
+    }
+
     class ToolbarController {
         constructor() {
             this.ui = new window.GeminiToolbarUI();
@@ -239,7 +250,26 @@
                 this.currentSelection = window.getSelection?.().toString().trim() || '';
                 this.readSelectionAloud();
             } else {
-                chrome.runtime.sendMessage({ action: 'INITIATE_CAPTURE' });
+                this.sendCaptureInitiationRequest();
+            }
+        }
+
+        sendCaptureInitiationRequest() {
+            try {
+                const result = chrome.runtime.sendMessage({ action: 'INITIATE_CAPTURE' });
+                result
+                    ?.then?.((response) => {
+                        if (response?.status === 'error') {
+                            this.showExtensionError(
+                                response.error || 'Could not start screen capture.'
+                            );
+                        }
+                    })
+                    ?.catch?.((error) => {
+                        this.showExtensionError(error?.message || String(error));
+                    });
+            } catch (error) {
+                this.showExtensionError(error?.message || String(error));
             }
         }
 
@@ -315,17 +345,17 @@
                 this.syncWebThinkingForModel(model, { saveIfChanged: true });
             }
             if (provider === 'openai') {
-                chrome.storage.local.set({ [TOOLBAR_OPENAI_MODEL_STORAGE_KEY]: model });
+                saveToolbarSettings({ [TOOLBAR_OPENAI_MODEL_STORAGE_KEY]: model });
                 return;
             }
 
             const dedicatedKeys = getDedicatedProviderStorageKeys(provider);
             if (dedicatedKeys) {
-                chrome.storage.local.set({ [dedicatedKeys.selectedModel]: model });
+                saveToolbarSettings({ [dedicatedKeys.selectedModel]: model });
                 return;
             }
 
-            chrome.storage.local.set({ [TOOLBAR_MODEL_STORAGE_KEY]: model });
+            saveToolbarSettings({ [TOOLBAR_MODEL_STORAGE_KEY]: model });
         }
 
         handleProviderChange(provider) {
@@ -336,7 +366,7 @@
                     saveIfChanged: false,
                 });
             }
-            chrome.storage.local.set({ [TOOLBAR_PROVIDER_STORAGE_KEY]: provider });
+            saveToolbarSettings({ [TOOLBAR_PROVIDER_STORAGE_KEY]: provider });
         }
 
         syncWebThinkingForModel(
@@ -358,7 +388,7 @@
             this.ui.setWebThinkingLevel?.(nextLevel);
 
             if (saveIfChanged && previousLevel && previousLevel !== nextLevel) {
-                chrome.storage.local.set({ geminiWebThinkingLevel: nextLevel });
+                saveToolbarSettings({ geminiWebThinkingLevel: nextLevel });
             }
 
             return nextLevel;
@@ -379,7 +409,7 @@
                 this.ui.getWebThinkingLevel?.() || webThinking.DEFAULT_WEB_THINKING_LEVEL;
             const nextLevel = webThinking.getNextWebThinkingLevel(model, currentLevel);
             this.ui.setWebThinkingLevel?.(nextLevel);
-            chrome.storage.local.set({ geminiWebThinkingLevel: nextLevel });
+            saveToolbarSettings({ geminiWebThinkingLevel: nextLevel });
         }
 
         handleAction(actionType, data) {

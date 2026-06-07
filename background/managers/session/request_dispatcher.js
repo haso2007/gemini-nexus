@@ -5,6 +5,7 @@ import { sendAnthropicMessage } from '../../../services/providers/anthropic.js';
 import {
     DEFAULT_CONTEXT_MODE,
     DEFAULT_CONTEXT_RECENT_TURNS,
+    DEFAULT_OFFICIAL_MODEL,
     DEFAULT_OPENAI_MODEL,
 } from '../../../shared/config/constants.js';
 import { normalizeWebThinkingLevelForModel } from '../../../shared/models/web_thinking.js';
@@ -204,11 +205,39 @@ function parseConfiguredModels(rawModels) {
         .filter(Boolean);
 }
 
+function selectConfiguredModel(
+    requestedModels,
+    rawConfiguredModels,
+    fallbackModel = '',
+    { placeholderModels = [] } = {}
+) {
+    const requestedList = Array.isArray(requestedModels) ? requestedModels : [requestedModels];
+    const fallback = String(fallbackModel || '').trim();
+    const configured = parseConfiguredModels(rawConfiguredModels);
+    const placeholders = new Set(
+        placeholderModels.map((model) => String(model || '').trim()).filter(Boolean)
+    );
+
+    for (const requestedModel of requestedList) {
+        const requested = String(requestedModel || '').trim();
+        if (
+            requested &&
+            !placeholders.has(requested) &&
+            (configured.length === 0 || configured.includes(requested))
+        ) {
+            return requested;
+        }
+    }
+
+    return configured[0] || fallback;
+}
+
 function getSelectedDedicatedModel(request, providerSettings, provider) {
-    const requestedModel = request.model;
-    if (requestedModel) return requestedModel;
-    const configured = parseConfiguredModels(providerSettings?.model);
-    return configured[0] || getDedicatedApiDefaultModel(provider);
+    return selectConfiguredModel(
+        [request.model, providerSettings?.selectedModel],
+        providerSettings?.model,
+        getDedicatedApiDefaultModel(provider)
+    );
 }
 
 async function resolveRequestHistory(request, files = request.files) {
@@ -346,7 +375,11 @@ export class RequestDispatcher {
             {
                 baseUrl: settings.officialBaseUrl,
                 apiKey: settings.apiKey,
-                model: request.model,
+                model: selectConfiguredModel(
+                    request.model,
+                    settings.officialModel,
+                    DEFAULT_OFFICIAL_MODEL
+                ),
                 configuredModels: settings.officialModel,
                 officialUserParts: request.officialUserParts,
             },
@@ -366,13 +399,9 @@ export class RequestDispatcher {
     }
 
     async _handleOpenAIRequest(request, settings, files, onUpdate, signal) {
-        // Determine model: prioritize the one selected in UI (request.model)
-        // If request.model is the legacy fallback, grab the first one from settings.
-        let targetModel = request.model;
-        if (!targetModel || targetModel === DEFAULT_OPENAI_MODEL) {
-            const configuredModels = settings.openaiModel ? settings.openaiModel.split(',') : [];
-            targetModel = configuredModels.length > 0 ? configuredModels[0].trim() : '';
-        }
+        const targetModel = selectConfiguredModel(request.model, settings.openaiModel, '', {
+            placeholderModels: [DEFAULT_OPENAI_MODEL],
+        });
 
         const config = {
             baseUrl: settings.openaiBaseUrl,

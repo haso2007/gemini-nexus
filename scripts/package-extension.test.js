@@ -6,6 +6,7 @@ import {
     createPackagedManifest,
     findMissingPackagedAssetReferences,
     formatContentBundle,
+    getUnbundledContentScriptFiles,
     shouldExcludeFromPackage,
 } from './package-extension.mjs';
 
@@ -42,7 +43,15 @@ describe('package-extension', () => {
                 },
                 {
                     matches: ['https://gemini.google.com/*'],
-                    js: ['content/gemini_watermark_page.js'],
+                    js: ['content/gemini_watermark_bridge.js'],
+                    run_at: 'document_start',
+                },
+                {
+                    matches: ['https://gemini.google.com/*'],
+                    js: [
+                        'content/gemini_watermark_page.js',
+                        'vendor/gemini-watermark-remover/content_main.js',
+                    ],
                     run_at: 'document_start',
                     world: 'MAIN',
                 },
@@ -63,7 +72,15 @@ describe('package-extension', () => {
             },
             {
                 matches: ['https://gemini.google.com/*'],
-                js: ['content/gemini_watermark_page.js'],
+                js: ['content/gemini_watermark_bridge.js'],
+                run_at: 'document_start',
+            },
+            {
+                matches: ['https://gemini.google.com/*'],
+                js: [
+                    'content/gemini_watermark_page.js',
+                    'vendor/gemini-watermark-remover/content_main.js',
+                ],
                 run_at: 'document_start',
                 world: 'MAIN',
             },
@@ -82,6 +99,41 @@ describe('package-extension', () => {
             bundle.indexOf('window.second = window.first;')
         );
         expect(bundle.endsWith('\n')).toBe(true);
+    });
+
+    it('does not copy vendored content scripts twice when packaging unbundled entries', () => {
+        expect(
+            getUnbundledContentScriptFiles({
+                content_scripts: [
+                    {
+                        matches: ['<all_urls>'],
+                        js: ['content/index.js'],
+                    },
+                    {
+                        matches: ['<all_urls>'],
+                        js: ['content/shortcut_frame_bridge.js'],
+                        all_frames: true,
+                    },
+                    {
+                        matches: ['https://gemini.google.com/*'],
+                        js: ['content/gemini_watermark_bridge.js'],
+                        run_at: 'document_start',
+                    },
+                    {
+                        matches: ['https://gemini.google.com/*'],
+                        js: [
+                            'content/gemini_watermark_page.js',
+                            'vendor/gemini-watermark-remover/content_main.js',
+                        ],
+                        world: 'MAIN',
+                    },
+                ],
+            })
+        ).toEqual([
+            'content/shortcut_frame_bridge.js',
+            'content/gemini_watermark_bridge.js',
+            'content/gemini_watermark_page.js',
+        ]);
     });
 
     it('reports missing packaged Vite assets referenced by extension HTML', async () => {

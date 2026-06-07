@@ -314,6 +314,44 @@ describe('ShortcutManager', () => {
         expect(controller.showExtensionError).toHaveBeenCalledWith('No side panel');
     });
 
+    it('shows toolbar feedback when browser control shortcut fails', async () => {
+        chrome.runtime.sendMessage = vi.fn(() =>
+            Promise.resolve({ status: 'error', error: 'No controllable tab' })
+        );
+        const controller = {
+            showExtensionError: vi.fn(),
+        };
+        window.GeminiShortcuts.setController(controller);
+
+        document.dispatchEvent(createKeyboardEvent('B', { ctrlKey: true }));
+        await Promise.resolve();
+
+        expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
+            action: 'TOGGLE_SIDE_PANEL_CONTROL',
+        });
+        expect(controller.showExtensionError).toHaveBeenCalledWith('No controllable tab');
+    });
+
+    it('shows toolbar feedback when OCR capture shortcut fails', async () => {
+        chrome.runtime.sendMessage = vi.fn(() =>
+            Promise.resolve({ status: 'error', error: 'Capture unavailable' })
+        );
+        const controller = {
+            showExtensionError: vi.fn(),
+        };
+        window.GeminiShortcuts.setController(controller);
+
+        document.dispatchEvent(createKeyboardEvent('O', { altKey: true }));
+        await Promise.resolve();
+
+        expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
+            action: 'START_AREA_OCR_FROM_SHORTCUT',
+            mode: 'ocr',
+            source: 'local',
+        });
+        expect(controller.showExtensionError).toHaveBeenCalledWith('Capture unavailable');
+    });
+
     it('does not attach shortcut listeners when the page guard disables the content script', async () => {
         vi.resetModules();
         window.GeminiNexusPageGuard = { isDisabled: true, reason: 'mhtml' };

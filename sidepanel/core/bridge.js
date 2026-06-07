@@ -5,16 +5,20 @@ import {
 import { createConnectionStorageUpdate } from '../../shared/settings/connection.js';
 import { getDedicatedApiStorageKeys } from '../../shared/settings/dedicated_providers.js';
 import {
-    buildHistoryImportStorageUpdate,
-    buildSettingsImportStorageUpdate,
-} from '../../shared/data_management/index.js';
-import {
     mergeSessionSaveWithCurrent,
     normalizeDeletedSessionIds,
     normalizeSessionSavePayload,
 } from './session_merge.js';
 import { captureDisplayStill } from './screen_capture.js';
 import { handleWindowMessageAction } from './window_actions.js';
+import {
+    forwardToBackground as forwardPayloadToBackground,
+    isMessageForCurrentTab,
+} from './background_forwarding.js';
+import {
+    importHistoryData as importHistoryDataPayload,
+    importSettingsData as importSettingsDataPayload,
+} from './data_import.js';
 import {
     getRuntimeLastError,
     restoreConnectionSettings,
@@ -38,22 +42,6 @@ function getModelSaveValue(payload) {
     }
 
     return payload;
-}
-
-const FORWARDED_RESPONSE_ACTIONS = new Set([
-    'GET_LOGS',
-    'CHECK_PAGE_CONTEXT',
-    'MCP_TEST_CONNECTION',
-    'MCP_LIST_TOOLS',
-    'GET_PROVIDER_MODELS',
-]);
-
-const HOST_ROUTED_ACTIONS = new Set(['GET_OPEN_TABS', 'SWITCH_TAB', 'TOGGLE_BROWSER_CONTROL']);
-
-function shouldRouteToHostTab(payload) {
-    if (!payload || typeof payload !== 'object') return false;
-    if (HOST_ROUTED_ACTIONS.has(payload.action)) return true;
-    return payload.action === 'SEND_PROMPT' && payload.enableBrowserControl === true;
 }
 
 export class MessageBridge {
@@ -136,15 +124,7 @@ export class MessageBridge {
     }
 
     forwardToBackground(payload) {
-        const scopedPayload = this._attachCurrentTabContext(payload);
-        chrome.runtime
-            .sendMessage(scopedPayload)
-            .then((response) => {
-                if (response && FORWARDED_RESPONSE_ACTIONS.has(scopedPayload.action)) {
-                    this.postBackgroundMessage(response);
-                }
-            })
-            .catch((error) => console.warn('Error forwarding to background:', error));
+        forwardPayloadToBackground(this, payload);
     }
 
     restoreConnectionSettings() {
@@ -171,72 +151,38 @@ export class MessageBridge {
     }
 
     saveContextSettings(payload) {
-        this.state.save(
-            'geminiContextMode',
-            payload?.mode === 'recent' ? 'recent' : DEFAULT_CONTEXT_MODE
-        );
-        this.state.save(
-            'geminiContextRecentTurns',
-            normalizeContextRecentTurns(payload?.recentTurns)
-        );
+        const storageUpdate = {
+            geminiContextMode: payload?.mode === 'recent' ? 'recent' : DEFAULT_CONTEXT_MODE,
+            geminiContextRecentTurns: normalizeContextRecentTurns(payload?.recentTurns),
+        };
+        if (typeof this.state.saveMany === 'function') {
+            this.state.saveMany(storageUpdate);
+            return;
+        }
+
+        for (const [key, value] of Object.entries(storageUpdate)) {
+            this.state.save(key, value);
+        }
     }
 
     saveConnectionSettings(payload) {
         const storageUpdate = createConnectionStorageUpdate(payload);
+        if (typeof this.state.saveMany === 'function') {
+            this.state.saveMany(storageUpdate);
+            return;
+        }
+
         for (const [key, value] of Object.entries(storageUpdate)) {
             this.state.save(key, value);
         }
     }
 
     importHistoryData(payload) {
-        chrome.storage.local.get(
-            ['geminiSessions', 'geminiGroups', 'geminiDeletedSessionIds'],
-            (result) => {
-                const readError = getRuntimeLastError();
-                if (readError) {
-                    this.postDataImportResult('history', false, readError);
-                    return;
-                }
-
-                try {
-                    const storageUpdate = buildHistoryImportStorageUpdate(payload, result || {});
-                    this.writeImportedStorage('history', storageUpdate);
-                } catch (error) {
-                    this.postDataImportResult('history', false, error);
-                }
-            }
-        );
+        importHistoryDataPayload(this.frame, payload);
     }
 
     importSettingsData(payload) {
-        try {
-            const storageUpdate = buildSettingsImportStorageUpdate(payload);
-            this.writeImportedStorage('settings', storageUpdate);
-        } catch (error) {
-            this.postDataImportResult('settings', false, error);
-        }
-    }
-
-    writeImportedStorage(kind, storageUpdate) {
-        try {
-            chrome.storage.local.set(storageUpdate, () => {
-                const writeError = getRuntimeLastError();
-                this.postDataImportResult(kind, !writeError, writeError);
-            });
-        } catch (error) {
-            this.postDataImportResult(kind, false, error);
-        }
-    }
-
-    postDataImportResult(kind, ok, error = null) {
-        this.frame.postMessage({
-            action: 'DATA_IMPORT_RESULT',
-            payload: {
-                kind,
-                ok,
-                error: error?.message || null,
-            },
-        });
+        importSettingsDataPayload(this.frame, payload);
     }
 
     postBackgroundMessage(payload) {
@@ -271,13 +217,24 @@ export class MessageBridge {
                 mutation,
                 deletedSessionIds
             );
+            if (
+                mutation?.type === 'deleteSession' &&
+                mutation.sessionId &&
+                typeof this.state.saveMany === 'function'
+            ) {
+                this.state.saveMany({
+                    geminiSessions: merged,
+                    geminiDeletedSessionIds: deletedSessionIds,
+                });
+                return;
+            }
+
             this.state.save('geminiSessions', merged);
-            chrome.storage.local.set({ geminiDeletedSessionIds: deletedSessionIds });
         });
     }
 
     handleRuntimeMessage(message) {
-        if (!this._isMessageForCurrentTab(message)) return;
+        if (!isMessageForCurrentTab(this.state, message)) return;
 
         if (message.action === 'SESSIONS_UPDATED') {
             this.state.updateSessions(message.sessions);
@@ -292,38 +249,5 @@ export class MessageBridge {
             action: 'BACKGROUND_MESSAGE',
             payload: message,
         });
-    }
-
-    _attachCurrentTabContext(payload) {
-        if (!payload || typeof payload !== 'object' || payload.sidePanelTabId != null) {
-            return payload;
-        }
-
-        const tabId = shouldRouteToHostTab(payload)
-            ? this._getMessageTargetTabId()
-            : this.state.getCurrentTabId();
-        if (!Number.isInteger(tabId) || tabId <= 0) {
-            return payload;
-        }
-
-        return {
-            ...payload,
-            sidePanelTabId: tabId,
-        };
-    }
-
-    _getMessageTargetTabId() {
-        return typeof this.state.getMessageTargetTabId === 'function'
-            ? this.state.getMessageTargetTabId()
-            : this.state.getCurrentTabId();
-    }
-
-    _isMessageForCurrentTab(message) {
-        if (!message || !Object.prototype.hasOwnProperty.call(message, 'tabId')) {
-            return true;
-        }
-
-        const messageTargetTabId = this._getMessageTargetTabId();
-        return message.tabId == null || message.tabId === messageTargetTabId;
     }
 }

@@ -22,13 +22,36 @@ import {
 import { downloadText } from '../sidepanel/core/downloads.js';
 
 function getLocalStorageData(keys) {
-    return new Promise((resolve) => {
-        chrome.storage.local.get(keys, (result) => resolve(result || {}));
+    return new Promise((resolve, reject) => {
+        try {
+            chrome.storage.local.get(keys, (result) => {
+                const readError = getRuntimeLastError();
+                if (readError) {
+                    reject(readError);
+                    return;
+                }
+                resolve(result || {});
+            });
+        } catch (error) {
+            reject(error);
+        }
     });
 }
 
 function setLocalStorageData(storageUpdate) {
-    chrome.storage.local.set(storageUpdate);
+    try {
+        const writeResult = chrome.storage.local.set(storageUpdate);
+        writeResult?.catch?.((error) => {
+            console.warn('Unable to save standalone settings:', error);
+        });
+    } catch (error) {
+        console.warn('Unable to save standalone settings:', error);
+    }
+}
+
+function getRuntimeLastError() {
+    const message = chrome.runtime?.lastError?.message;
+    return message ? new Error(message) : null;
 }
 
 function setLocalStorageDataAsync(storageUpdate) {
@@ -37,6 +60,11 @@ function setLocalStorageDataAsync(storageUpdate) {
         const complete = () => {
             if (settled) return;
             settled = true;
+            const writeError = getRuntimeLastError();
+            if (writeError) {
+                reject(writeError);
+                return;
+            }
             resolve();
         };
 
@@ -71,7 +99,13 @@ export class StandaloneSettingsBridge {
     }
 
     async restoreInitialState() {
-        const localStorageData = await getLocalStorageData(SETTINGS_STORAGE_KEYS);
+        let localStorageData;
+        try {
+            localStorageData = await getLocalStorageData(SETTINGS_STORAGE_KEYS);
+        } catch (error) {
+            console.warn('Unable to restore settings from extension storage:', error);
+            localStorageData = {};
+        }
         const shortcuts = normalizeShortcutDefaults(localStorageData.geminiShortcuts);
 
         this.controller.updateShortcuts(shortcuts);
@@ -188,23 +222,31 @@ export class StandaloneSettingsBridge {
     }
 
     async exportHistoryData() {
-        const storageData = await getLocalStorageData(HISTORY_STORAGE_KEYS);
-        const payload = buildHistoryExportPayload(storageData);
-        downloadText(
-            JSON.stringify(payload, null, 2),
-            buildDataExportFilename('history'),
-            'application/json'
-        );
+        try {
+            const storageData = await getLocalStorageData(HISTORY_STORAGE_KEYS);
+            const payload = buildHistoryExportPayload(storageData);
+            downloadText(
+                JSON.stringify(payload, null, 2),
+                buildDataExportFilename('history'),
+                'application/json'
+            );
+        } catch (error) {
+            console.warn('Unable to export history data:', error);
+        }
     }
 
     async exportSettingsData() {
-        const storageData = await getLocalStorageData(SETTINGS_STORAGE_KEYS);
-        const payload = buildSettingsExportPayload(storageData);
-        downloadText(
-            JSON.stringify(payload, null, 2),
-            buildDataExportFilename('settings'),
-            'application/json'
-        );
+        try {
+            const storageData = await getLocalStorageData(SETTINGS_STORAGE_KEYS);
+            const payload = buildSettingsExportPayload(storageData);
+            downloadText(
+                JSON.stringify(payload, null, 2),
+                buildDataExportFilename('settings'),
+                'application/json'
+            );
+        } catch (error) {
+            console.warn('Unable to export settings data:', error);
+        }
     }
 
     async importHistoryData(payload) {

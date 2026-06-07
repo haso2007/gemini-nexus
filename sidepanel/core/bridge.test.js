@@ -18,6 +18,7 @@ function createState() {
         getMessageTargetTabId: vi.fn(() => null),
         markUiReady: vi.fn(),
         save: vi.fn(),
+        saveMany: vi.fn(),
         setHostTabId: vi.fn(),
         updateSessions: vi.fn(),
     };
@@ -167,6 +168,36 @@ describe('MessageBridge model persistence', () => {
         warn.mockRestore();
     });
 
+    it('logs side panel session binding write failures', async () => {
+        const frame = createFrame();
+        const state = createState();
+        const bridge = new MessageBridge(frame, state);
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        chrome.storage.session.get.mockImplementation((keys, callback) =>
+            callback({ geminiSidePanelSessionBindings: {} })
+        );
+        chrome.storage.session.set.mockRejectedValueOnce(new Error('Session storage write failed'));
+
+        bridge.handleWindowMessage({
+            source: frame.getWindow(),
+            data: {
+                action: 'SAVE_SIDE_PANEL_SESSION_BINDING',
+                payload: {
+                    tabId: 42,
+                    sessionId: 'session-42',
+                },
+            },
+        });
+        await Promise.resolve();
+
+        expect(warn).toHaveBeenCalledWith(
+            'Unable to save side panel session binding after storage write failed:',
+            expect.any(Error)
+        );
+
+        warn.mockRestore();
+    });
+
     it('publishes tab host context when the sandbox UI is ready', async () => {
         const frame = createFrame();
         const state = createState();
@@ -230,6 +261,86 @@ describe('MessageBridge model persistence', () => {
             hostIsTab: true,
             sidePanelTabId: 777,
         });
+    });
+
+    it('forwards browser control toggle failures back to the sandbox', async () => {
+        const frame = createFrame();
+        const state = createState();
+        state.getMessageTargetTabId.mockReturnValue(777);
+        chrome.runtime.sendMessage.mockResolvedValueOnce({
+            status: 'error',
+            error: 'No controllable browser tab is selected.',
+        });
+        const bridge = new MessageBridge(frame, state);
+
+        bridge.forwardToBackground({
+            action: 'TOGGLE_BROWSER_CONTROL',
+            enabled: true,
+            hostIsTab: true,
+        });
+
+        await vi.waitFor(() =>
+            expect(frame.postMessage).toHaveBeenCalledWith({
+                action: 'BACKGROUND_MESSAGE',
+                payload: {
+                    action: 'BROWSER_CONTROL_TOGGLE_RESULT',
+                    enabled: true,
+                    status: 'error',
+                    error: 'No controllable browser tab is selected.',
+                },
+            })
+        );
+    });
+
+    it('forwards generic background request errors back to the sandbox', async () => {
+        const frame = createFrame();
+        const state = createState();
+        state.getMessageTargetTabId.mockReturnValue(777);
+        chrome.runtime.sendMessage.mockResolvedValueOnce({
+            status: 'error',
+            error: 'Side panel unavailable',
+        });
+        const bridge = new MessageBridge(frame, state);
+
+        bridge.forwardToBackground({
+            action: 'GET_OPEN_TABS',
+            hostIsTab: true,
+        });
+
+        await vi.waitFor(() =>
+            expect(frame.postMessage).toHaveBeenCalledWith({
+                action: 'BACKGROUND_MESSAGE',
+                payload: {
+                    action: 'BACKGROUND_REQUEST_ERROR',
+                    requestAction: 'GET_OPEN_TABS',
+                    error: 'Side panel unavailable',
+                },
+            })
+        );
+    });
+
+    it('forwards generic background request rejections back to the sandbox', async () => {
+        const frame = createFrame();
+        const state = createState();
+        state.getMessageTargetTabId.mockReturnValue(777);
+        chrome.runtime.sendMessage.mockRejectedValueOnce(new Error('Background unavailable'));
+        const bridge = new MessageBridge(frame, state);
+
+        bridge.forwardToBackground({
+            action: 'GET_ACTIVE_SELECTION',
+            hostIsTab: true,
+        });
+
+        await vi.waitFor(() =>
+            expect(frame.postMessage).toHaveBeenCalledWith({
+                action: 'BACKGROUND_MESSAGE',
+                payload: {
+                    action: 'BACKGROUND_REQUEST_ERROR',
+                    requestAction: 'GET_ACTIVE_SELECTION',
+                    error: 'Background unavailable',
+                },
+            })
+        );
     });
 
     it('routes browser-control prompts through the standalone host tab id', () => {
@@ -601,7 +712,30 @@ describe('MessageBridge model persistence', () => {
         });
     });
 
-    it('saves connection settings through the shared storage mapping', () => {
+    it('saves context settings through one shared storage update', () => {
+        const frame = createFrame();
+        const state = createState();
+        const bridge = new MessageBridge(frame, state);
+
+        bridge.handleWindowMessage({
+            source: frame.getWindow(),
+            data: {
+                action: 'SAVE_CONTEXT_SETTINGS',
+                payload: {
+                    mode: 'recent',
+                    recentTurns: 999,
+                },
+            },
+        });
+
+        expect(state.saveMany).toHaveBeenCalledWith({
+            geminiContextMode: 'recent',
+            geminiContextRecentTurns: 50,
+        });
+        expect(state.save).not.toHaveBeenCalled();
+    });
+
+    it('saves connection settings through one shared storage update', () => {
         const frame = createFrame();
         const state = createState();
         const bridge = new MessageBridge(frame, state);
@@ -621,15 +755,18 @@ describe('MessageBridge model persistence', () => {
             },
         });
 
-        expect(state.save).toHaveBeenCalledWith('geminiProvider', 'official');
-        expect(state.save).toHaveBeenCalledWith('geminiUseOfficialApi', true);
-        expect(state.save).toHaveBeenCalledWith('geminiOfficialModel', 'gemini-test');
-        expect(state.save).toHaveBeenCalledWith('geminiApiKey', 'key-test');
-        expect(state.save).toHaveBeenCalledWith('geminiMcpEnabled', true);
-        expect(state.save).toHaveBeenCalledWith('geminiMcpServers', [
-            { id: 'srv', url: 'http://localhost/mcp' },
-        ]);
-        expect(state.save).toHaveBeenCalledWith('geminiMcpActiveServerId', 'srv');
+        expect(state.saveMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                geminiProvider: 'official',
+                geminiUseOfficialApi: true,
+                geminiOfficialModel: 'gemini-test',
+                geminiApiKey: 'key-test',
+                geminiMcpEnabled: true,
+                geminiMcpServers: [{ id: 'srv', url: 'http://localhost/mcp' }],
+                geminiMcpActiveServerId: 'srv',
+            })
+        );
+        expect(state.save).not.toHaveBeenCalled();
     });
 
     it('does not let a stale full-session save truncate a session updated in storage', async () => {
@@ -820,6 +957,56 @@ describe('MessageBridge model persistence', () => {
         );
     });
 
+    it('preserves newer pin state when a stale window only renames a session', async () => {
+        const frame = createFrame();
+        const state = createState();
+        const bridge = new MessageBridge(frame, state);
+        chrome.storage.local.get.mockImplementation((keys, callback) =>
+            callback({
+                geminiSessions: [
+                    {
+                        id: 'session-1',
+                        title: 'Current',
+                        isPinned: true,
+                        messages: [{ role: 'user', text: 'Hi' }],
+                    },
+                ],
+                geminiDeletedSessionIds: {},
+            })
+        );
+
+        bridge.handleWindowMessage({
+            source: frame.getWindow(),
+            data: {
+                action: 'SAVE_SESSIONS',
+                payload: {
+                    sessions: [
+                        {
+                            id: 'session-1',
+                            title: 'Renamed from stale window',
+                            messages: [{ role: 'user', text: 'Hi' }],
+                        },
+                    ],
+                    mutation: {
+                        type: 'updateSessionMetadata',
+                        sessionId: 'session-1',
+                        fields: ['title'],
+                    },
+                },
+            },
+        });
+
+        await vi.waitFor(() =>
+            expect(state.save).toHaveBeenCalledWith('geminiSessions', [
+                expect.objectContaining({
+                    id: 'session-1',
+                    title: 'Renamed from stale window',
+                    isPinned: true,
+                }),
+            ])
+        );
+    });
+
     it('applies delete-session mutations against current storage and records a tombstone', async () => {
         const frame = createFrame();
         const state = createState();
@@ -860,11 +1047,15 @@ describe('MessageBridge model persistence', () => {
         });
 
         await vi.waitFor(() =>
-            expect(state.save).toHaveBeenCalledWith('geminiSessions', [
-                expect.objectContaining({ id: 'session-2' }),
-            ])
+            expect(state.saveMany).toHaveBeenCalledWith({
+                geminiSessions: [expect.objectContaining({ id: 'session-2' })],
+                geminiDeletedSessionIds: expect.objectContaining({
+                    'session-1': expect.any(Number),
+                }),
+            })
         );
-        expect(chrome.storage.local.set).toHaveBeenCalledWith({
+        expect(state.save).not.toHaveBeenCalledWith('geminiSessions', expect.any(Array));
+        expect(chrome.storage.local.set).not.toHaveBeenCalledWith({
             geminiDeletedSessionIds: expect.objectContaining({
                 'session-1': expect.any(Number),
             }),
@@ -1006,6 +1197,31 @@ describe('MessageBridge model persistence', () => {
         );
     });
 
+    it('reports promise-based settings import write failures', async () => {
+        const frame = createFrame();
+        const state = createState();
+        const bridge = new MessageBridge(frame, state);
+        chrome.storage.local.set.mockRejectedValueOnce(new Error('Storage quota exceeded'));
+
+        bridge.importSettingsData({
+            type: 'GeminiNexus-Settings',
+            settings: {
+                geminiTheme: 'dark',
+            },
+        });
+
+        await vi.waitFor(() =>
+            expect(frame.postMessage).toHaveBeenCalledWith({
+                action: 'DATA_IMPORT_RESULT',
+                payload: {
+                    kind: 'settings',
+                    ok: false,
+                    error: 'Storage quota exceeded',
+                },
+            })
+        );
+    });
+
     it('captures a selected display and forwards a still frame to the sandbox', async () => {
         const frame = createFrame();
         const state = createState();
@@ -1065,5 +1281,62 @@ describe('MessageBridge model persistence', () => {
         });
         expect(drawImage).toHaveBeenCalledWith(video, 0, 0, 640, 360);
         expect(track.stop).toHaveBeenCalled();
+    });
+
+    it('forwards fetched image responses from the background to the sandbox', async () => {
+        const frame = createFrame();
+        const state = createState();
+        const bridge = new MessageBridge(frame, state);
+        chrome.runtime.sendMessage.mockResolvedValueOnce({
+            action: 'FETCH_IMAGE_RESULT',
+            base64: 'data:image/png;base64,AAAA',
+            type: 'image/png',
+            name: 'drop.png',
+        });
+
+        bridge.forwardToBackground({
+            action: 'FETCH_IMAGE',
+            url: 'https://example.test/drop.png',
+        });
+
+        await vi.waitFor(() =>
+            expect(frame.postMessage).toHaveBeenCalledWith({
+                action: 'BACKGROUND_MESSAGE',
+                payload: {
+                    action: 'FETCH_IMAGE_RESULT',
+                    base64: 'data:image/png;base64,AAAA',
+                    type: 'image/png',
+                    name: 'drop.png',
+                },
+            })
+        );
+    });
+
+    it('forwards generated image fetch errors from the background to the sandbox image', async () => {
+        const frame = createFrame();
+        const state = createState();
+        const bridge = new MessageBridge(frame, state);
+        chrome.runtime.sendMessage.mockResolvedValueOnce({
+            action: 'GENERATED_IMAGE_RESULT',
+            reqId: 'gen_img_1',
+            error: 'Image unavailable',
+        });
+
+        bridge.forwardToBackground({
+            action: 'FETCH_GENERATED_IMAGE',
+            url: 'https://example.test/generated.png',
+            reqId: 'gen_img_1',
+        });
+
+        await vi.waitFor(() =>
+            expect(frame.postMessage).toHaveBeenCalledWith({
+                action: 'BACKGROUND_MESSAGE',
+                payload: {
+                    action: 'GENERATED_IMAGE_RESULT',
+                    reqId: 'gen_img_1',
+                    error: 'Image unavailable',
+                },
+            })
+        );
     });
 });

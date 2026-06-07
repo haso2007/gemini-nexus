@@ -102,7 +102,14 @@ export class GeminiSessionManager {
             // Handle common user-facing errors
             if (isUnavailableWebAuthError(errorMessage)) {
                 this.auth.forceContextRefresh();
-                await chrome.storage.local.remove(['geminiContext']);
+                try {
+                    await chrome.storage.local.remove(['geminiContext']);
+                } catch (storageError) {
+                    console.warn(
+                        '[Gemini Nexus] Failed to clear stale Web auth context:',
+                        storageError
+                    );
+                }
 
                 const currentIndex = this.auth.getCurrentIndex();
                 const authLink = createGeminiAuthLink(currentIndex);

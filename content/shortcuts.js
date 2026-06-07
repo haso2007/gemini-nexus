@@ -106,11 +106,25 @@
         return '';
     }
 
-    function sendRuntimeMessage(message) {
+    function sendRuntimeMessage(message, onError = null) {
         try {
             const result = chrome.runtime.sendMessage(message);
-            result?.catch?.(() => {});
-        } catch {}
+            result
+                ?.then?.((response) => {
+                    if (response?.status === 'error' && typeof onError === 'function') {
+                        onError(response.error || 'Gemini Nexus shortcut failed');
+                    }
+                })
+                ?.catch?.((error) => {
+                    if (typeof onError === 'function') {
+                        onError(error?.message || 'Gemini Nexus shortcut failed');
+                    }
+                });
+        } catch (error) {
+            if (typeof onError === 'function') {
+                onError(error?.message || 'Gemini Nexus shortcut failed');
+            }
+        }
     }
 
     class ShortcutManager {
@@ -173,11 +187,17 @@
             if (this.match(event, this.appShortcuts.ocrCapture)) {
                 event.preventDefault();
                 event.stopPropagation();
-                sendRuntimeMessage({
-                    action: 'START_AREA_OCR_FROM_SHORTCUT',
-                    mode: 'ocr',
-                    source: 'local',
-                });
+                sendRuntimeMessage(
+                    {
+                        action: 'START_AREA_OCR_FROM_SHORTCUT',
+                        mode: 'ocr',
+                        source: 'local',
+                    },
+                    (message) =>
+                        this.toolbarController?.showExtensionError?.(
+                            message || 'Could not start OCR capture'
+                        )
+                );
                 return;
             }
 
@@ -205,7 +225,19 @@
             if (this.match(event, this.appShortcuts.browserControl)) {
                 event.preventDefault();
                 event.stopPropagation();
-                chrome.runtime.sendMessage({ action: 'TOGGLE_SIDE_PANEL_CONTROL' });
+                Promise.resolve(chrome.runtime.sendMessage({ action: 'TOGGLE_SIDE_PANEL_CONTROL' }))
+                    .then((response) => {
+                        if (response?.status === 'error') {
+                            this.toolbarController?.showExtensionError?.(
+                                response.error || 'Could not start browser control'
+                            );
+                        }
+                    })
+                    .catch((error) => {
+                        this.toolbarController?.showExtensionError?.(
+                            error?.message || 'Could not start browser control'
+                        );
+                    });
                 return;
             }
         }

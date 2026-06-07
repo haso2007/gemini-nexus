@@ -301,14 +301,14 @@ describe('SessionFlowController', () => {
         expect(sessionManager.getSessionById('session-1').title).toBe('Research Notes');
         expect(saveSessionsToStorage).toHaveBeenLastCalledWith(
             [expect.objectContaining({ id: 'session-1', title: 'Research Notes' })],
-            { type: 'updateSessionMetadata', sessionId: 'session-1' }
+            { type: 'updateSessionMetadata', sessionId: 'session-1', fields: ['title'] }
         );
 
         controller.handleTogglePinSession('session-1');
         expect(sessionManager.getSessionById('session-1').isPinned).toBe(true);
         expect(saveSessionsToStorage).toHaveBeenLastCalledWith(
             [expect.objectContaining({ id: 'session-1', isPinned: true })],
-            { type: 'updateSessionMetadata', sessionId: 'session-1' }
+            { type: 'updateSessionMetadata', sessionId: 'session-1', fields: ['isPinned'] }
         );
 
         controller.handleDuplicateSession('session-1');

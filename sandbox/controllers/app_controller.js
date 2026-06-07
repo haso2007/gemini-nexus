@@ -71,13 +71,8 @@ export class AppController {
         sendToBackground({ action: 'CHECK_PAGE_CONTEXT' });
     }
 
-    toggleBrowserControl(forceState = null) {
-        if (forceState !== null) {
-            if (this.browserControlActive === forceState) return;
-            this.browserControlActive = forceState;
-        } else {
-            this.browserControlActive = !this.browserControlActive;
-        }
+    setBrowserControlActiveState(active) {
+        this.browserControlActive = active === true;
 
         const browserControlButton = document.getElementById('browser-control-btn');
         if (browserControlButton) {
@@ -85,6 +80,15 @@ export class AppController {
         }
 
         this.ui.setBrowserControlVisible(this.browserControlActive);
+    }
+
+    toggleBrowserControl(forceState = null) {
+        if (forceState !== null) {
+            if (this.browserControlActive === forceState) return;
+            this.setBrowserControlActiveState(forceState);
+        } else {
+            this.setBrowserControlActiveState(!this.browserControlActive);
+        }
 
         // Signal background to start/stop debugger session immediately
         sendToBackground({
@@ -390,7 +394,31 @@ export class AppController {
                 if (this.ui.inputFn) this.ui.inputFn.focus();
                 return;
             }
+            if (payload.action === 'BROWSER_CONTROL_TOGGLE_RESULT') {
+                if (payload.status === 'error' && this.browserControlActive === payload.enabled) {
+                    this.setBrowserControlActiveState(!payload.enabled);
+                    this.ui.updateStatus(payload.error || 'Browser control could not be updated.');
+                    setTimeout(() => {
+                        if (!this.isGenerating) this.ui.updateStatus('');
+                    }, 3000);
+                }
+                return;
+            }
+            if (payload.action === 'BACKGROUND_REQUEST_ERROR') {
+                this.ui.updateStatus(payload.error || 'Background request failed.');
+                setTimeout(() => {
+                    if (!this.isGenerating) this.ui.updateStatus('');
+                }, 3000);
+                return;
+            }
             if (payload.action === 'OPEN_TABS_RESULT') {
+                if (payload.error) {
+                    this.ui.updateStatus(payload.error);
+                    setTimeout(() => {
+                        if (!this.isGenerating) this.ui.updateStatus('');
+                    }, 3000);
+                    return;
+                }
                 this.ui.openTabSelector(
                     payload.tabs,
                     (tabId, shouldSwitch) => this.handleTabSelected(tabId, shouldSwitch),

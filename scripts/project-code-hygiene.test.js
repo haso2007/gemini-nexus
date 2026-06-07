@@ -1055,7 +1055,7 @@ describe('project code hygiene', () => {
         expect(downloads.match(/document\.body\.removeChild\(/g) ?? []).toHaveLength(1);
     });
 
-    it('uses descriptive fallback UUID and sampled color variable names', async () => {
+    it('uses descriptive fallback UUID names and the vendored Gemini watermark runtime wrapper', async () => {
         const utils = await readProjectFile('shared/utils/index.js');
         const watermarkRemover = await readProjectFile('shared/media/watermark_remover_global.js');
 
@@ -1064,12 +1064,11 @@ describe('project code hygiene', () => {
         expect(utils).not.toMatch(/\.replace\(\s*\/\[xy\]\/g,\s*\(c\)\s*=>/);
         expect(utils).not.toMatch(/\bconst\s+(?:r|v)\s*=/);
 
-        expect(watermarkRemover).toContain('redTotal');
-        expect(watermarkRemover).toContain('greenTotal');
-        expect(watermarkRemover).toContain('blueTotal');
-        expect(watermarkRemover).toContain('watermarkX');
-        expect(watermarkRemover).toContain('watermarkY');
-        expect(watermarkRemover).not.toMatch(/\blet\s+(?:r|g|b)\s*=/);
-        expect(watermarkRemover).not.toMatch(/\bconst\s+\{\s*r,\s*g,\s*b\s*\}/);
+        expect(watermarkRemover).toContain('__gwrPageProcessRuntimeInstalled__');
+        expect(watermarkRemover).toContain('removeWatermarkFromBlob');
+        expect(watermarkRemover).not.toContain('redTotal');
+        expect(watermarkRemover).not.toContain('watermarkX');
+        expect(watermarkRemover).not.toContain('SAMPLE_SIZE');
+        expect(watermarkRemover).not.toContain('fillRect');
     });
 });

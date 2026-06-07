@@ -63,17 +63,28 @@ export class AuthManager {
      */
     async rotateAccount() {
         // Refresh list from storage in case it changed
-        const stored = await chrome.storage.local.get(['geminiAccountIndices']);
-        if (stored.geminiAccountIndices) {
-            this.accountIndices = stored.geminiAccountIndices
-                .split(',')
-                .map((accountIndex) => accountIndex.trim())
-                .filter((accountIndex) => accountIndex !== '');
+        try {
+            const stored = await chrome.storage.local.get(['geminiAccountIndices']);
+            if (stored.geminiAccountIndices) {
+                this.accountIndices = stored.geminiAccountIndices
+                    .split(',')
+                    .map((accountIndex) => accountIndex.trim())
+                    .filter((accountIndex) => accountIndex !== '');
+            }
+        } catch (error) {
+            console.warn(
+                '[Gemini Nexus] Failed to refresh account indices before rotation:',
+                error
+            );
         }
         if (this.accountIndices.length === 0) this.accountIndices = ['0'];
 
         this.currentAccountPointer = (this.currentAccountPointer + 1) % this.accountIndices.length;
-        await chrome.storage.local.set({ geminiAccountPointer: this.currentAccountPointer });
+        try {
+            await chrome.storage.local.set({ geminiAccountPointer: this.currentAccountPointer });
+        } catch (error) {
+            console.warn('[Gemini Nexus] Failed to persist account rotation pointer:', error);
+        }
 
         debugLog(
             `[Gemini Nexus] Rotated to account index: ${this.accountIndices[this.currentAccountPointer]}`
@@ -123,15 +134,23 @@ export class AuthManager {
     async updateContext(newContext) {
         this.currentContext = createAuthContext(newContext);
 
-        await chrome.storage.local.set({
-            geminiContext: this.currentContext,
-        });
+        try {
+            await chrome.storage.local.set({
+                geminiContext: this.currentContext,
+            });
+        } catch (error) {
+            console.warn('[Gemini Nexus] Failed to persist Web auth context:', error);
+        }
     }
 
     async resetContext() {
         this.currentContext = null;
         // Do not remove geminiModel to preserve user preference in UI
-        await chrome.storage.local.remove(['geminiContext']);
+        try {
+            await chrome.storage.local.remove(['geminiContext']);
+        } catch (error) {
+            console.warn('[Gemini Nexus] Failed to clear Web auth context:', error);
+        }
 
         // Rotate to spread load on reset
         if (this.accountIndices.length > 1) {

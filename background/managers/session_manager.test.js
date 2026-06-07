@@ -140,6 +140,50 @@ describe('GeminiSessionManager cancellation', () => {
         expect(result.text).not.toContain('style=');
     });
 
+    it('keeps the Web auth login prompt when clearing stale context fails', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const storageError = new Error('Storage write failed');
+        chrome.storage.local.remove.mockRejectedValueOnce(storageError);
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        getConnectionSettings.mockResolvedValue({ provider: 'web' });
+        const manager = new GeminiSessionManager();
+        manager.ensureInitialized = vi.fn(async () => {});
+        manager.auth = {
+            forceContextRefresh: vi.fn(),
+            getCurrentIndex: vi.fn(() => '1'),
+        };
+        manager.dispatcher = {
+            dispatch: vi.fn(async () => {
+                throw new Error('Missing Gemini Web auth token: fSid');
+            }),
+        };
+
+        try {
+            const result = await manager.handleSendPrompt(
+                { text: 'hello', sessionId: 'session-web' },
+                vi.fn()
+            );
+
+            expect(manager.auth.forceContextRefresh).toHaveBeenCalledTimes(1);
+            expect(chrome.storage.local.remove).toHaveBeenCalledWith(['geminiContext']);
+            expect(warnSpy).toHaveBeenCalledWith(
+                '[Gemini Nexus] Failed to clear stale Web auth context:',
+                storageError
+            );
+            expect(result).toEqual(
+                expect.objectContaining({
+                    action: 'GEMINI_REPLY',
+                    sessionId: 'session-web',
+                    status: 'error',
+                    text: expect.stringContaining('Please log in'),
+                })
+            );
+            expect(result.text).toContain('gemini.google.com/u/1/');
+        } finally {
+            warnSpy.mockRestore();
+        }
+    });
+
     it('passes request provider overrides to connection settings lookup', async () => {
         getConnectionSettings.mockResolvedValue({ provider: 'openai' });
         const manager = new GeminiSessionManager();

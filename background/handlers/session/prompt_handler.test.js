@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { hasInlinePageSnapshot, PromptHandler } from './prompt_handler.js';
 import { buildToolContinuationPrompt } from './prompt/tool_loop.js';
-import { appendAiMessage } from '../../managers/history_manager.js';
+import { appendAiMessage, replaceSessionSnapshot } from '../../managers/history_manager.js';
 
 vi.mock('../../managers/history_manager.js', () => ({
     appendAiMessage: vi.fn(),
@@ -40,6 +40,7 @@ describe('PromptHandler concurrency', () => {
         const first = deferred();
         const second = deferred();
         const sessionManager = {
+            cancelCurrentRequest: vi.fn(),
             handleSendPrompt: vi
                 .fn()
                 .mockImplementationOnce(() => first.promise)
@@ -60,6 +61,7 @@ describe('PromptHandler concurrency', () => {
         );
         await vi.waitFor(() => expect(sessionManager.handleSendPrompt).toHaveBeenCalledTimes(1));
 
+        sessionManager.cancelCurrentRequest.mockClear();
         handler.handle(
             {
                 action: 'SEND_PROMPT',
@@ -69,6 +71,7 @@ describe('PromptHandler concurrency', () => {
             },
             secondResponse
         );
+        expect(sessionManager.cancelCurrentRequest).toHaveBeenCalled();
         await vi.waitFor(() => expect(sessionManager.handleSendPrompt).toHaveBeenCalledTimes(2));
 
         expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
@@ -223,6 +226,62 @@ describe('PromptHandler concurrency', () => {
         await vi.waitFor(() =>
             expect(controlManager.enableControl).toHaveBeenCalledWith({ createDefaultTab: true })
         );
+    });
+
+    it('does not send a prompt when edited session snapshot persistence fails', async () => {
+        globalThis.chrome = {
+            runtime: {
+                sendMessage: vi.fn(() => Promise.resolve()),
+            },
+            storage: {
+                local: {
+                    get: vi.fn(() => Promise.resolve({ geminiProvider: 'official' })),
+                },
+            },
+        };
+        replaceSessionSnapshot.mockResolvedValueOnce(false);
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const sessionManager = {
+            handleSendPrompt: vi.fn(() =>
+                Promise.resolve({
+                    action: 'GEMINI_REPLY',
+                    sessionId: 'session-1',
+                    status: 'success',
+                    text: 'done',
+                })
+            ),
+        };
+        const handler = new PromptHandler(sessionManager, null, null);
+        const sendResponse = vi.fn();
+
+        try {
+            handler.handle(
+                {
+                    action: 'SEND_PROMPT',
+                    text: 'Edited prompt',
+                    model: 'gemini-test',
+                    sessionId: 'session-1',
+                    sessionSnapshot: {
+                        id: 'session-1',
+                        messages: [{ role: 'user', text: 'Edited prompt' }],
+                    },
+                },
+                sendResponse
+            );
+
+            await vi.waitFor(() =>
+                expect(sendResponse).toHaveBeenCalledWith({ status: 'completed' })
+            );
+            expect(sessionManager.handleSendPrompt).not.toHaveBeenCalled();
+            expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
+                action: 'GEMINI_REPLY',
+                sessionId: 'session-1',
+                text: 'Error: Could not save edited session before sending prompt.',
+                status: 'error',
+            });
+        } finally {
+            errorSpy.mockRestore();
+        }
     });
 });
 

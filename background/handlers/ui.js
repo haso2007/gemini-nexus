@@ -5,9 +5,9 @@ import {
     handleProcessCropInSidePanel,
 } from './ui_capture.js';
 import {
-    handleFetchGeminiWatermarkImage,
     handleFetchGeneratedImage,
     handleFetchImage,
+    handleGwrExtensionXhrRequest,
 } from './ui_image_fetching.js';
 import { handleMcpListTools, handleMcpTestConnection } from './ui_mcp_tools.js';
 import { handleCheckPageContext, handleGetActiveSelection } from './ui_page_context.js';
@@ -18,6 +18,7 @@ import {
     handleToggleSidePanelControl,
 } from './ui_sidepanel.js';
 import { handleGetOpenTabs, handleSwitchTab } from './ui_tab_actions.js';
+import { createUiMessageContext } from './ui_context.js';
 
 export class UIMessageHandler {
     constructor(imageHandler, controlManager, mcpManager, sidePanelScopeManager) {
@@ -28,7 +29,7 @@ export class UIMessageHandler {
     }
 
     handle(request, sender, sendResponse) {
-        const context = this._createMessageContext();
+        const context = createUiMessageContext(this);
 
         if (request.action === 'FETCH_IMAGE') {
             handleFetchImage(context, request, sender, sendResponse);
@@ -40,8 +41,8 @@ export class UIMessageHandler {
             return true;
         }
 
-        if (request.action === 'FETCH_GEMINI_WATERMARK_IMAGE') {
-            handleFetchGeminiWatermarkImage(context, request, sender, sendResponse);
+        if (request.action === 'GWR_EXTENSION_GM_XHR_REQUEST') {
+            handleGwrExtensionXhrRequest(context, request, sender, sendResponse);
             return true;
         }
 
@@ -122,33 +123,5 @@ export class UIMessageHandler {
         }
 
         return false;
-    }
-
-    _sendToRequestSource(sender, payload) {
-        if (sender.tab) {
-            chrome.tabs.sendMessage(sender.tab.id, payload).catch(() => {});
-            return;
-        }
-
-        chrome.runtime.sendMessage(payload).catch(() => {});
-    }
-
-    _createMessageContext() {
-        return {
-            imageHandler: this.imageHandler,
-            controlManager: this.controlManager,
-            sidePanelScopeManager: this.sidePanelScopeManager,
-            getTargetSidePanelTabId: (request, sender) =>
-                this._getTargetSidePanelTabId(request, sender),
-            sendToRequestSource: (sender, payload) => this._sendToRequestSource(sender, payload),
-        };
-    }
-
-    _getTargetSidePanelTabId(request, sender) {
-        const requestTabId = request?.sidePanelTabId;
-        if (Number.isInteger(requestTabId) && requestTabId > 0) return requestTabId;
-
-        const senderTabId = sender?.tab?.id;
-        return Number.isInteger(senderTabId) && senderTabId > 0 ? senderTabId : null;
     }
 }

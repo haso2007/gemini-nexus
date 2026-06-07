@@ -37,7 +37,9 @@ const requiredPaths = [
     'dist/sidepanel/preload.js',
     'dist/sandbox/index.html',
     'dist/settings/index.html',
+    'vendor/gemini-watermark-remover',
 ];
+const directoryCopiedRuntimePrefixes = ['vendor/gemini-watermark-remover/'];
 
 /**
  * @param {string} relativePath
@@ -57,7 +59,11 @@ export function createPackagedManifest(manifest) {
     const contentScripts = [];
 
     for (const entry of manifest.content_scripts ?? []) {
-        if (entry.world === 'MAIN' || entry.all_frames === true) {
+        if (
+            entry.world === 'MAIN' ||
+            entry.all_frames === true ||
+            entry.js?.includes('content/gemini_watermark_bridge.js')
+        ) {
             contentScripts.push(entry);
             continue;
         }
@@ -87,6 +93,31 @@ export function formatContentBundle(segments) {
             )
             .join('\n\n') + '\n'
     );
+}
+
+/**
+ * @param {{ content_scripts?: Array<{ world?: string, all_frames?: boolean, js?: string[] }> }} manifest
+ * @returns {string[]}
+ */
+export function getUnbundledContentScriptFiles(manifest) {
+    return [
+        ...new Set(
+            (manifest.content_scripts ?? [])
+                .filter(
+                    (entry) =>
+                        entry.world === 'MAIN' ||
+                        entry.all_frames === true ||
+                        entry.js?.includes('content/gemini_watermark_bridge.js')
+                )
+                .flatMap((entry) => entry.js ?? [])
+                .filter(
+                    (relativePath) =>
+                        !directoryCopiedRuntimePrefixes.some((prefix) =>
+                            relativePath.startsWith(prefix)
+                        )
+                )
+        ),
+    ];
 }
 
 /**
@@ -210,13 +241,7 @@ async function writeContentBundle() {
 async function copyUnbundledContentScripts() {
     /** @type {{ content_scripts?: Array<{ world?: string, all_frames?: boolean, js?: string[] }> }} */
     const manifest = JSON.parse(await readFile(path.join(rootDir, 'manifest.json'), 'utf8'));
-    const files = [
-        ...new Set(
-            (manifest.content_scripts ?? [])
-                .filter((entry) => entry.world === 'MAIN' || entry.all_frames === true)
-                .flatMap((entry) => entry.js ?? [])
-        ),
-    ];
+    const files = getUnbundledContentScriptFiles(manifest);
 
     await Promise.all(files.map((relativePath) => copyIntoPackage(relativePath)));
 }
@@ -266,6 +291,7 @@ async function main() {
         copyUnbundledContentScripts(),
         copyIntoPackage('shared'),
         copyIntoPackage('services'),
+        copyIntoPackage('vendor/gemini-watermark-remover'),
         copyLocalDependencyAssets(),
         copyIntoPackage('dist/assets', 'assets'),
         copyIntoPackage('dist/sidepanel/index.html', 'sidepanel/index.html'),

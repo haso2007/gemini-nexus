@@ -421,6 +421,7 @@ describe('BrowserControlManager native tab group indicator', () => {
     });
 
     it('does not report a debugger connection as enabled when attach fails', async () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
         chrome.debugger.attach = vi.fn((target, version, callback) => {
             chrome.runtime.lastError = { message: 'Another debugger is already attached.' };
             callback();
@@ -430,11 +431,19 @@ describe('BrowserControlManager native tab group indicator', () => {
         manager.lockedTabId = 42;
         manager.connection.targetTabId = 42;
 
-        const enabled = await manager.ensureConnection();
+        try {
+            const enabled = await manager.ensureConnection();
 
-        expect(enabled).toBe(false);
-        expect(manager.connection.attached).toBe(false);
-        expect(manager.connection.currentTabId).toBeNull();
+            expect(enabled).toBe(false);
+            expect(manager.connection.attached).toBe(false);
+            expect(manager.connection.currentTabId).toBeNull();
+            expect(warnSpy).toHaveBeenCalledWith(
+                '[BrowserConnection] Attach failed:',
+                'Another debugger is already attached.'
+            );
+        } finally {
+            warnSpy.mockRestore();
+        }
     });
 
     it('returns true when the debugger is already attached to the requested tab', async () => {

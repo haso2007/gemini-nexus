@@ -32,6 +32,17 @@ function findIncomingSession(incomingSessions, sessionId) {
     return incomingSessions.find((session) => session?.id === sessionId) || null;
 }
 
+function getMetadataFields(mutation) {
+    if (!Array.isArray(mutation?.fields) || mutation.fields.length === 0) {
+        return null;
+    }
+
+    const fields = new Set(
+        mutation.fields.filter((field) => field === 'title' || field === 'isPinned')
+    );
+    return fields.size > 0 ? fields : null;
+}
+
 export function mergeSessionSaveWithCurrent(
     incomingSessions,
     currentSessions,
@@ -105,15 +116,19 @@ export function mergeSessionSaveWithCurrent(
     if (mutation?.type === 'updateSessionMetadata' && mutation.sessionId) {
         const incoming = findIncomingSession(cleanIncoming, mutation.sessionId);
         if (!incoming) return currentSessions;
+        const metadataFields = getMetadataFields(mutation);
 
         if (currentById.has(mutation.sessionId)) {
             return currentSessions.map((current) => {
                 if (current?.id !== mutation.sessionId) return current;
-                return {
-                    ...current,
-                    title: incoming.title || current.title,
-                    isPinned: incoming.isPinned === true,
-                };
+                const next = { ...current };
+                if (!metadataFields || metadataFields.has('title')) {
+                    next.title = incoming.title || current.title;
+                }
+                if (!metadataFields || metadataFields.has('isPinned')) {
+                    next.isPinned = incoming.isPinned === true;
+                }
+                return next;
             });
         }
 

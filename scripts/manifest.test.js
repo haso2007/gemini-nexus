@@ -121,11 +121,28 @@ describe('manifest content scripts', () => {
         );
 
         expect(geminiEntry).toMatchObject({
-            matches: ['https://gemini.google.com/*'],
-            js: ['content/gemini_watermark_page.js'],
+            matches: ['https://gemini.google.com/*', 'https://business.gemini.google/*'],
+            js: [
+                'content/gemini_watermark_page.js',
+                'vendor/gemini-watermark-remover/content_main.js',
+            ],
             run_at: 'document_start',
             world: 'MAIN',
         });
+    });
+
+    it('runs the Gemini watermark bridge in an isolated document-start script', async () => {
+        const manifest = JSON.parse(await readFile('manifest.json', 'utf8'));
+        const geminiBridgeEntry = manifest.content_scripts.find((entry) =>
+            entry.js?.includes('content/gemini_watermark_bridge.js')
+        );
+
+        expect(geminiBridgeEntry).toMatchObject({
+            matches: ['https://gemini.google.com/*', 'https://business.gemini.google/*'],
+            js: ['content/gemini_watermark_bridge.js'],
+            run_at: 'document_start',
+        });
+        expect(geminiBridgeEntry.world).toBeUndefined();
     });
 
     it('loads the page guard before any content script with side effects', async () => {
@@ -148,6 +165,8 @@ describe('manifest content scripts', () => {
         const runtimeContentFiles = [
             ...(await listJavaScriptFiles('content')),
             ...classicContentSupportFiles,
+            'vendor/gemini-watermark-remover/content_main.js',
+            'vendor/gemini-watermark-remover/page_process_runtime.js',
         ].sort();
 
         expect(listedFiles).toHaveLength(uniqueListedFiles.length);

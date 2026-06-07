@@ -209,7 +209,12 @@ export class SidePanelScopeManager {
             let persistPromise = Promise.resolve();
             if (!this.enabledTabs[tabId]) {
                 this.enabledTabs[tabId] = true;
-                persistPromise = this.persistEnabledTabs();
+                persistPromise = this.persistEnabledTabs().catch((error) => {
+                    console.warn(
+                        '[SidePanelScopeManager] Failed to persist remembered tab state:',
+                        error
+                    );
+                });
             }
 
             await this.openAfterSetup({ tabId, windowId }, [

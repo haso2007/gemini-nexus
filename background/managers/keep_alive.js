@@ -92,7 +92,7 @@ class KeepAliveManager {
                 debugLog('[Gemini Nexus] Keep-Alive: Rotation successful');
             } else {
                 this.consecutiveErrors++;
-                this._handleError(response.status);
+                await this._handleError(response.status);
             }
         } catch (error) {
             this.consecutiveErrors++;
@@ -109,7 +109,11 @@ class KeepAliveManager {
         // We clear the context so the next user action triggers a fresh auth check.
         if (status === 401 || status === 403) {
             debugLog('[Gemini Nexus] Session expired. Clearing local context.');
-            await chrome.storage.local.remove(['geminiContext']);
+            try {
+                await chrome.storage.local.remove(['geminiContext']);
+            } catch (error) {
+                console.warn('[Gemini Nexus] Keep-Alive: Failed to clear expired context:', error);
+            }
         }
 
         // If 429 Too Many Requests, do nothing, just wait for next interval.

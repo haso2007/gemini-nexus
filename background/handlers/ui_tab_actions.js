@@ -1,54 +1,72 @@
 import { toControlTabSummary } from '../control/tabs.js';
 import { respondWithUiTask } from './ui_async.js';
 
-function sendOpenTabsResult(context, request, sender, payload) {
-    chrome.runtime
-        .sendMessage({
-            action: 'OPEN_TABS_RESULT',
-            tabId: context.getTargetSidePanelTabId(request, sender),
-            ...payload,
-        })
-        .catch(() => {});
+function getErrorMessage(error) {
+    return error?.message || String(error);
+}
+
+async function sendOpenTabsResult(context, request, sender, payload) {
+    await chrome.runtime.sendMessage({
+        action: 'OPEN_TABS_RESULT',
+        tabId: context.getTargetSidePanelTabId(request, sender),
+        ...payload,
+    });
+}
+
+function getLockedTabId(context) {
+    return context.controlManager ? context.controlManager.getTargetTabId() : null;
+}
+
+async function queryOpenTabs(context) {
+    const tabQuery = { currentWindow: true };
+    const groupId = context.controlManager?.getControlledGroupId?.();
+    const windowId = context.controlManager?.getControlledWindowId?.();
+    if (Number.isInteger(windowId) && windowId > 0) {
+        delete tabQuery.currentWindow;
+        tabQuery.windowId = windowId;
+    }
+    if (Number.isInteger(groupId) && groupId >= 0) {
+        tabQuery.groupId = groupId;
+    }
+
+    const tabs = await chrome.tabs.query(tabQuery);
+    return {
+        tabs: tabs.map((tab) => toControlTabSummary(tab)),
+        lockedTabId: getLockedTabId(context),
+    };
 }
 
 export function handleGetOpenTabs(context, request, sender, sendResponse) {
-    respondWithUiTask(
-        sendResponse,
-        async () => {
-            const tabQuery = { currentWindow: true };
-            const groupId = context.controlManager?.getControlledGroupId?.();
-            const windowId = context.controlManager?.getControlledWindowId?.();
-            if (Number.isInteger(windowId) && windowId > 0) {
-                delete tabQuery.currentWindow;
-                tabQuery.windowId = windowId;
+    (async () => {
+        let payload;
+        try {
+            payload = await queryOpenTabs(context);
+        } catch (error) {
+            console.error('Open tabs lookup error', error);
+            payload = {
+                tabs: [],
+                lockedTabId: getLockedTabId(context),
+                error: getErrorMessage(error),
+            };
+            try {
+                await sendOpenTabsResult(context, request, sender, payload);
+            } catch (deliveryError) {
+                console.error('Open tabs delivery error', deliveryError);
+                sendResponse({ status: 'error', error: getErrorMessage(deliveryError) });
+                return;
             }
-            if (Number.isInteger(groupId) && groupId >= 0) {
-                tabQuery.groupId = groupId;
-            }
-
-            const tabs = await chrome.tabs.query(tabQuery);
-            const safeTabs = tabs.map((tab) => toControlTabSummary(tab));
-            const lockedTabId = context.controlManager
-                ? context.controlManager.getTargetTabId()
-                : null;
-
-            sendOpenTabsResult(context, request, sender, {
-                tabs: safeTabs,
-                lockedTabId,
-            });
-        },
-        {
-            errorLabel: 'Open tabs lookup error',
-            onError: (error) =>
-                sendOpenTabsResult(context, request, sender, {
-                    tabs: [],
-                    lockedTabId: context.controlManager
-                        ? context.controlManager.getTargetTabId()
-                        : null,
-                    error: error?.message || String(error),
-                }),
+            sendResponse({ status: 'error', error: getErrorMessage(error) });
+            return;
         }
-    );
+
+        try {
+            await sendOpenTabsResult(context, request, sender, payload);
+            sendResponse({ status: 'completed' });
+        } catch (error) {
+            console.error('Open tabs delivery error', error);
+            sendResponse({ status: 'error', error: getErrorMessage(error) });
+        }
+    })();
 }
 
 export function handleSwitchTab(context, request, sender, sendResponse) {

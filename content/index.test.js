@@ -170,12 +170,10 @@ describe('content index text selection blacklist', () => {
         });
 
         expect(controller.setGeneratedImageWatermarkRemovalEnabled).toHaveBeenCalledWith(false);
-        expect(postMessageSpy).toHaveBeenCalledWith(
-            {
-                source: 'GeminiNexus',
+        expect(postMessageSpy).not.toHaveBeenCalledWith(
+            expect.objectContaining({
                 type: 'GEMINI_NEXUS_WATERMARK_REMOVAL_ENABLED',
-                enabled: false,
-            },
+            }),
             '*'
         );
 
@@ -187,12 +185,10 @@ describe('content index text selection blacklist', () => {
         );
 
         expect(controller.setGeneratedImageWatermarkRemovalEnabled).toHaveBeenLastCalledWith(true);
-        expect(postMessageSpy).toHaveBeenLastCalledWith(
-            {
-                source: 'GeminiNexus',
+        expect(postMessageSpy).not.toHaveBeenCalledWith(
+            expect.objectContaining({
                 type: 'GEMINI_NEXUS_WATERMARK_REMOVAL_ENABLED',
-                enabled: true,
-            },
+            }),
             '*'
         );
     });

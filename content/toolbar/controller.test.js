@@ -162,6 +162,24 @@ describe('GeminiToolbarController model persistence', () => {
         });
     });
 
+    it('logs toolbar setting save failures', async () => {
+        chrome.storage.local.set.mockRejectedValueOnce(new Error('Storage quota exceeded'));
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const controller = new window.GeminiToolbarController();
+
+        try {
+            controller.handleModelChange('toolbar-model-2');
+            await Promise.resolve();
+
+            expect(warnSpy).toHaveBeenCalledWith(
+                'Failed to save toolbar settings:',
+                'Storage quota exceeded'
+            );
+        } finally {
+            warnSpy.mockRestore();
+        }
+    });
+
     it('saves toolbar provider changes without overwriting sidepanel provider keys', () => {
         const controller = new window.GeminiToolbarController();
 
@@ -283,6 +301,21 @@ describe('GeminiToolbarController model persistence', () => {
 
         expect(ui.showAskWindow).toHaveBeenCalled();
         expect(ui.showError).toHaveBeenCalledWith('Cannot open side panel');
+    });
+
+    it('shows an extension error when screenshot capture cannot be initiated', async () => {
+        chrome.runtime.sendMessage.mockRejectedValueOnce(
+            new Error('Extension context invalidated')
+        );
+        const controller = new window.GeminiToolbarController();
+
+        controller.handleContextAction('ocr');
+
+        expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({ action: 'INITIATE_CAPTURE' });
+        await vi.waitFor(() => {
+            expect(ui.showAskWindow).toHaveBeenCalled();
+            expect(ui.showError).toHaveBeenCalledWith('Extension context invalidated');
+        });
     });
 
     it('passes custom selection tools through to the toolbar UI', () => {

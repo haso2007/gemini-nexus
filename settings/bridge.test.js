@@ -39,9 +39,11 @@ function createController() {
 
 describe('StandaloneSettingsBridge', () => {
     beforeEach(() => {
+        vi.clearAllMocks();
         localStorage.clear();
         globalThis.chrome = {
             runtime: {
+                lastError: null,
                 getManifest: vi.fn(() => ({ version: '5.0.4' })),
                 sendMessage: vi.fn(() =>
                     Promise.resolve({
@@ -121,6 +123,34 @@ describe('StandaloneSettingsBridge', () => {
         );
     });
 
+    it('restores default settings when extension storage cannot be read on startup', async () => {
+        chrome.storage.local.get.mockImplementation((keys, callback) => {
+            chrome.runtime.lastError = { message: 'Settings storage unavailable' };
+            callback(undefined);
+            chrome.runtime.lastError = null;
+        });
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const controller = createController();
+        const bridge = new StandaloneSettingsBridge(controller);
+
+        try {
+            await bridge.restoreInitialState();
+
+            expect(controller.updateShortcuts).toHaveBeenCalledWith(
+                expect.objectContaining({ quickAsk: 'Alt+Q', openPanel: 'Alt+G' })
+            );
+            expect(controller.updateConnectionSettings).toHaveBeenCalledWith(
+                expect.objectContaining({ provider: 'web' })
+            );
+            expect(warnSpy).toHaveBeenCalledWith(
+                'Unable to restore settings from extension storage:',
+                expect.any(Error)
+            );
+        } finally {
+            warnSpy.mockRestore();
+        }
+    });
+
     it('saves settings messages without the sidepanel iframe bridge', () => {
         const controller = createController();
         const bridge = new StandaloneSettingsBridge(controller);
@@ -136,6 +166,31 @@ describe('StandaloneSettingsBridge', () => {
         expect(chrome.storage.local.set).toHaveBeenCalledWith({
             geminiTextSelectionBlacklist: 'github.com',
         });
+    });
+
+    it('logs standalone settings save failures', async () => {
+        chrome.storage.local.set.mockRejectedValueOnce(new Error('Storage quota exceeded'));
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const controller = createController();
+        const bridge = new StandaloneSettingsBridge(controller);
+
+        try {
+            bridge.handleWindowMessage({
+                source: window,
+                data: {
+                    action: 'SAVE_TEXT_SELECTION_BLACKLIST',
+                    payload: 'github.com',
+                },
+            });
+            await Promise.resolve();
+
+            expect(warnSpy).toHaveBeenCalledWith(
+                'Unable to save standalone settings:',
+                expect.any(Error)
+            );
+        } finally {
+            warnSpy.mockRestore();
+        }
     });
 
     it('saves custom selection tools without the sidepanel iframe bridge', () => {
@@ -261,6 +316,29 @@ describe('StandaloneSettingsBridge', () => {
         expect(exported.settings.geminiMcpServers[0].auth).toEqual({ type: 'bearer' });
     });
 
+    it('logs export read failures without downloading partial settings data', async () => {
+        chrome.storage.local.get.mockImplementation((keys, callback) => {
+            chrome.runtime.lastError = { message: 'Storage read failed' };
+            callback({});
+            chrome.runtime.lastError = null;
+        });
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const controller = createController();
+        const bridge = new StandaloneSettingsBridge(controller);
+
+        try {
+            await expect(bridge.exportSettingsData()).resolves.toBeUndefined();
+
+            expect(downloadText).not.toHaveBeenCalled();
+            expect(warnSpy).toHaveBeenCalledWith(
+                'Unable to export settings data:',
+                expect.any(Error)
+            );
+        } finally {
+            warnSpy.mockRestore();
+        }
+    });
+
     it('imports history data from the standalone settings page', async () => {
         chrome.storage.local.get.mockImplementation((keys, callback) =>
             callback({
@@ -299,6 +377,93 @@ describe('StandaloneSettingsBridge', () => {
             )
         );
         expect(postSpy).toHaveBeenCalledWith(
+            {
+                action: 'DATA_IMPORT_RESULT',
+                payload: { kind: 'history', ok: true },
+            },
+            '*'
+        );
+    });
+
+    it('reports history import read failures instead of writing partial data', async () => {
+        chrome.storage.local.get.mockImplementation((keys, callback) => {
+            chrome.runtime.lastError = { message: 'Storage read failed' };
+            callback({});
+            chrome.runtime.lastError = null;
+        });
+        const postSpy = vi.spyOn(window, 'postMessage');
+        const controller = createController();
+        const bridge = new StandaloneSettingsBridge(controller);
+
+        bridge.handleWindowMessage({
+            source: window,
+            data: {
+                action: 'IMPORT_HISTORY_DATA',
+                payload: {
+                    type: 'GeminiNexus-History',
+                    history: [{ id: 'imported', messages: [{ role: 'ai' }] }],
+                },
+            },
+        });
+
+        await vi.waitFor(() =>
+            expect(postSpy).toHaveBeenCalledWith(
+                {
+                    action: 'DATA_IMPORT_RESULT',
+                    payload: {
+                        kind: 'history',
+                        ok: false,
+                        error: 'Storage read failed',
+                    },
+                },
+                '*'
+            )
+        );
+        expect(chrome.storage.local.set).not.toHaveBeenCalled();
+    });
+
+    it('reports history import write failures from extension storage', async () => {
+        chrome.storage.local.get.mockImplementation((keys, callback) =>
+            callback({
+                geminiSessions: [],
+                geminiGroups: [],
+                geminiDeletedSessionIds: {},
+            })
+        );
+        chrome.storage.local.set.mockImplementation((update, callback) => {
+            chrome.runtime.lastError = { message: 'Storage quota exceeded' };
+            callback?.();
+            chrome.runtime.lastError = null;
+        });
+        const postSpy = vi.spyOn(window, 'postMessage');
+        const controller = createController();
+        const bridge = new StandaloneSettingsBridge(controller);
+
+        bridge.handleWindowMessage({
+            source: window,
+            data: {
+                action: 'IMPORT_HISTORY_DATA',
+                payload: {
+                    type: 'GeminiNexus-History',
+                    history: [{ id: 'imported', messages: [{ role: 'ai' }] }],
+                },
+            },
+        });
+
+        await vi.waitFor(() =>
+            expect(postSpy).toHaveBeenCalledWith(
+                {
+                    action: 'DATA_IMPORT_RESULT',
+                    payload: {
+                        kind: 'history',
+                        ok: false,
+                        error: 'Storage quota exceeded',
+                    },
+                },
+                '*'
+            )
+        );
+        expect(postSpy).not.toHaveBeenCalledWith(
             {
                 action: 'DATA_IMPORT_RESULT',
                 payload: { kind: 'history', ok: true },

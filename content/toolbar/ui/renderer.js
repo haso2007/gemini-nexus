@@ -49,13 +49,40 @@
             tasks.forEach((task) => {
                 const imageElement = container.querySelector(`img[data-req-id="${task.reqId}"]`);
                 if (imageElement) {
-                    chrome.runtime.sendMessage({
-                        action: 'FETCH_GENERATED_IMAGE',
-                        url: task.url,
-                        reqId: task.reqId,
-                    });
+                    try {
+                        const sendResult = chrome.runtime.sendMessage({
+                            action: 'FETCH_GENERATED_IMAGE',
+                            url: task.url,
+                            reqId: task.reqId,
+                        });
+                        sendResult
+                            ?.then?.((response) => {
+                                if (response?.action === 'GENERATED_IMAGE_RESULT') {
+                                    this.handleGeneratedImageResult(response);
+                                    return;
+                                }
+                                if (response?.status === 'error') {
+                                    throw new Error(
+                                        response.error || 'Generated image fetch failed'
+                                    );
+                                }
+                            })
+                            ?.catch?.((error) => {
+                                console.warn('Generated image fetch request failed:', error);
+                                this._markGeneratedImageFailed(imageElement);
+                            });
+                    } catch (error) {
+                        console.warn('Generated image fetch request failed:', error);
+                        this._markGeneratedImageFailed(imageElement);
+                    }
                 }
             });
+        }
+
+        _markGeneratedImageFailed(imageElement) {
+            imageElement.classList.remove('loading');
+            imageElement.style.background = '#ffebee';
+            imageElement.alt = 'Failed to load';
         }
 
         setGeneratedImageWatermarkRemovalEnabled(enabled) {
@@ -87,8 +114,7 @@
                     imageElement.classList.remove('loading');
                     imageElement.style.minHeight = 'auto';
                 } else {
-                    imageElement.style.background = '#ffebee';
-                    imageElement.alt = 'Failed to load';
+                    this._markGeneratedImageFailed(imageElement);
                 }
             }
         }

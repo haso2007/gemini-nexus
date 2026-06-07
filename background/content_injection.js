@@ -22,7 +22,11 @@ function hasGeminiNexusContentScript() {
 }
 
 function hasGeminiNexusWatermarkPageScript() {
-    return window.GeminiNexusWatermarkPage?.installed === true;
+    return window.GeminiNexusGeminiWatermarkRemoverPage?.installed === true;
+}
+
+function hasGeminiNexusWatermarkBridgeScript() {
+    return window.GeminiNexusGwrBridgeReady === true;
 }
 
 function hasGeminiNexusShortcutFrameBridge() {
@@ -129,6 +133,14 @@ async function isWatermarkPageScriptInjected(tabId, scripting = chrome.scripting
     return results?.some((result) => result.result === true) === true;
 }
 
+async function isWatermarkBridgeScriptInjected(tabId, scripting = chrome.scripting) {
+    const results = await scripting.executeScript({
+        target: { tabId },
+        func: hasGeminiNexusWatermarkBridgeScript,
+    });
+    return results?.some((result) => result.result === true) === true;
+}
+
 async function isAllFrameShortcutBridgeInjected(tabId, scripting = chrome.scripting) {
     const results = await scripting.executeScript({
         target: { tabId, allFrames: true },
@@ -172,8 +184,15 @@ export async function injectContentScriptsIntoTab(tab, options = {}) {
                 entry.all_frames === true &&
                 entry.js.includes('content/shortcut_frame_bridge.js')
         );
+        const watermarkBridgeEntries = entries.filter(
+            (entry) =>
+                entry.world !== 'MAIN' && entry.js.includes('content/gemini_watermark_bridge.js')
+        );
         const normalEntries = entries.filter(
-            (entry) => entry.world !== 'MAIN' && !allFrameShortcutBridgeEntries.includes(entry)
+            (entry) =>
+                entry.world !== 'MAIN' &&
+                !allFrameShortcutBridgeEntries.includes(entry) &&
+                !watermarkBridgeEntries.includes(entry)
         );
         const mainEntries = entries.filter((entry) => entry.world === 'MAIN');
         let injected = false;
@@ -187,6 +206,12 @@ export async function injectContentScriptsIntoTab(tab, options = {}) {
 
         for (const entry of allFrameShortcutBridgeEntries) {
             if (!force && (await isAllFrameShortcutBridgeInjected(tabId, scripting))) continue;
+            await injectContentScriptEntry(tabId, entry, scripting);
+            injected = true;
+        }
+
+        for (const entry of watermarkBridgeEntries) {
+            if (!force && (await isWatermarkBridgeScriptInjected(tabId, scripting))) continue;
             await injectContentScriptEntry(tabId, entry, scripting);
             injected = true;
         }

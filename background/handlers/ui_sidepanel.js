@@ -63,19 +63,17 @@ async function openSidePanel(context, request, sender) {
     if (request.sessionId) pendingSidePanelUpdates.pendingSessionId = request.sessionId;
     if (request.mode) pendingSidePanelUpdates.pendingMode = request.mode;
 
-    if (Object.keys(pendingSidePanelUpdates).length > 0) {
-        await chrome.storage.local.set(pendingSidePanelUpdates);
-        setTimeout(() => {
-            chrome.storage.local.remove(Object.keys(pendingSidePanelUpdates));
-        }, 5000);
-    }
+    const pendingKeys = Object.keys(pendingSidePanelUpdates);
+    const pendingActionsStored = await storePendingSidePanelActions(
+        pendingSidePanelUpdates,
+        pendingKeys
+    );
 
     try {
         await openPromise;
     } catch (error) {
-        const pendingKeys = Object.keys(pendingSidePanelUpdates);
-        if (pendingKeys.length > 0) {
-            chrome.storage.local.remove(pendingKeys).catch(() => {});
+        if (pendingActionsStored) {
+            clearPendingSidePanelActions(pendingKeys);
         }
         console.error('Could not open side panel:', error);
         return { status: 'error', error: error.message || String(error) };
@@ -83,6 +81,26 @@ async function openSidePanel(context, request, sender) {
 
     queueSidePanelFollowupMessages(request, sender);
     return { status: 'opened' };
+}
+
+async function storePendingSidePanelActions(pendingSidePanelUpdates, pendingKeys) {
+    if (pendingKeys.length === 0) return false;
+
+    try {
+        await chrome.storage.local.set(pendingSidePanelUpdates);
+        setTimeout(() => {
+            clearPendingSidePanelActions(pendingKeys);
+        }, 5000);
+        return true;
+    } catch (error) {
+        console.warn('Could not store pending side panel actions:', error);
+        return false;
+    }
+}
+
+function clearPendingSidePanelActions(pendingKeys) {
+    if (pendingKeys.length === 0) return;
+    chrome.storage.local.remove(pendingKeys).catch(() => {});
 }
 
 async function toggleSidePanel(context, request, sender) {
@@ -138,23 +156,22 @@ async function closeControlledSidePanel(context, tabId) {
 }
 
 function queueSidePanelFollowupMessages(request, sender) {
+    const sendMessage = chrome.runtime?.sendMessage?.bind(chrome.runtime);
+    if (!sendMessage) return;
+
     setTimeout(() => {
         if (request.sessionId) {
-            chrome.runtime
-                .sendMessage({
-                    action: 'SWITCH_SESSION',
-                    tabId: sender.tab.id,
-                    sessionId: request.sessionId,
-                })
-                .catch(() => {});
+            sendMessage({
+                action: 'SWITCH_SESSION',
+                tabId: sender.tab.id,
+                sessionId: request.sessionId,
+            }).catch(() => {});
         }
         if (request.mode === 'browser_control') {
-            chrome.runtime
-                .sendMessage({
-                    action: 'ACTIVATE_BROWSER_CONTROL',
-                    tabId: sender.tab.id,
-                })
-                .catch(() => {});
+            sendMessage({
+                action: 'ACTIVATE_BROWSER_CONTROL',
+                tabId: sender.tab.id,
+            }).catch(() => {});
         }
     }, 500);
 }

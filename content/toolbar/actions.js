@@ -28,6 +28,10 @@ function withProviderOptions(message, provider, webThinkingLevel) {
     return nextMessage;
 }
 
+function getRuntimeMessageErrorText(error) {
+    return error?.message || String(error) || 'Could not contact Gemini Nexus.';
+}
+
 class ToolbarActions {
     constructor(uiController) {
         this.ui = uiController;
@@ -70,6 +74,33 @@ class ToolbarActions {
             return template.replaceAll('{text}', selection);
         }
         return `${template}\n\n${selection}`;
+    }
+
+    showRuntimeMessageError(error, { showError = true } = {}) {
+        console.warn('Gemini toolbar background message failed:', error);
+        if (showError) {
+            this.ui.showError?.(getRuntimeMessageErrorText(error));
+        }
+    }
+
+    sendRuntimeMessage(message, options = {}) {
+        try {
+            const sendResult = chrome.runtime.sendMessage(message);
+            if (sendResult && typeof sendResult.then === 'function') {
+                sendResult
+                    .then((response) => {
+                        if (response?.status === 'error') {
+                            this.showRuntimeMessageError(
+                                new Error(response.error || 'Background request failed.'),
+                                options
+                            );
+                        }
+                    })
+                    .catch((error) => this.showRuntimeMessageError(error, options));
+            }
+        } catch (error) {
+            this.showRuntimeMessageError(error, options);
+        }
     }
 
     /**
@@ -179,7 +210,7 @@ class ToolbarActions {
         this.lastRequest = message;
         this.lastTranslationRequest =
             mode === 'translate' ? { type: 'image', promptType: 'imageTranslate' } : null;
-        chrome.runtime.sendMessage(message);
+        this.sendRuntimeMessage(message);
     }
 
     async handleImageChat(imageDataUrl, rect) {
@@ -245,7 +276,7 @@ class ToolbarActions {
         this.lastRequest = message;
         this.lastTranslationRequest =
             actionType === 'translate' ? { type: 'text', selection } : null;
-        chrome.runtime.sendMessage(message);
+        this.sendRuntimeMessage(message);
     }
 
     async handleCustomSelectionTool(tool, selection, rect, model = '', mousePoint = null) {
@@ -271,7 +302,7 @@ class ToolbarActions {
         );
 
         this.lastRequest = message;
-        chrome.runtime.sendMessage(message);
+        this.sendRuntimeMessage(message);
     }
 
     handleSubmitAsk(question, context, sessionId = null, model = '') {
@@ -301,7 +332,7 @@ class ToolbarActions {
 
             this.pendingImageChat = null;
             this.lastRequest = message;
-            chrome.runtime.sendMessage(message);
+            this.sendRuntimeMessage(message);
             return;
         }
 
@@ -330,7 +361,7 @@ class ToolbarActions {
         );
 
         this.lastRequest = message;
-        chrome.runtime.sendMessage(message);
+        this.sendRuntimeMessage(message);
     }
 
     handleRetry() {
@@ -366,17 +397,17 @@ class ToolbarActions {
         this.lastRequest = retryMessage;
         const loadingMessage = this.t.loading.regenerate;
         this.ui.showLoading(loadingMessage);
-        chrome.runtime.sendMessage(retryMessage);
+        this.sendRuntimeMessage(retryMessage);
     }
 
     handleCancel() {
         this.pendingImageChat = null;
         this.lastTranslationRequest = null;
-        chrome.runtime.sendMessage({ action: 'CANCEL_PROMPT' });
+        this.sendRuntimeMessage({ action: 'CANCEL_PROMPT' }, { showError: false });
     }
 
     handleContinueChat(sessionId) {
-        chrome.runtime.sendMessage({
+        this.sendRuntimeMessage({
             action: 'OPEN_SIDE_PANEL',
             sessionId,
         });

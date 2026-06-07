@@ -22,9 +22,11 @@ export function handleGetActiveSelection(context, request, sender, sendResponse)
             const tab = await getRequestTab(context, request, sender);
             if (tab) {
                 await sendSelectionResult(context, request, sender, tab.id);
+                return;
             }
+            await sendSelectionMessage(context, request, sender, '');
         },
-        { errorLabel: 'Active selection lookup error', errorResponse: { status: 'completed' } }
+        { errorLabel: 'Active selection lookup error' }
     );
 }
 
@@ -40,22 +42,28 @@ export function handleCheckPageContext(context, request, sender, sendResponse) {
 }
 
 async function sendSelectionResult(context, request, sender, tabId) {
+    let selection = '';
     try {
         const response = await chrome.tabs.sendMessage(tabId, {
             action: 'GET_SELECTION',
         });
-        sendSelectionMessage(context, request, sender, response ? response.selection : '');
+        selection = response ? response.selection : '';
     } catch {
-        sendSelectionMessage(context, request, sender, '');
+        selection = '';
     }
+
+    await sendSelectionMessage(
+        context,
+        request,
+        sender,
+        typeof selection === 'string' ? selection : ''
+    );
 }
 
-function sendSelectionMessage(context, request, sender, text) {
-    chrome.runtime
-        .sendMessage({
-            action: 'SELECTION_RESULT',
-            tabId: context.getTargetSidePanelTabId(request, sender),
-            text,
-        })
-        .catch(() => {});
+async function sendSelectionMessage(context, request, sender, text) {
+    await chrome.runtime.sendMessage({
+        action: 'SELECTION_RESULT',
+        tabId: context.getTargetSidePanelTabId(request, sender),
+        text,
+    });
 }
