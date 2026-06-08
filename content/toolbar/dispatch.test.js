@@ -240,6 +240,33 @@ describe('ToolbarDispatcher', () => {
         expect(controller.readSelectionAloud).toHaveBeenCalledTimes(1);
     });
 
+    it('dispatches selected-text image generation with the current selection', async () => {
+        const controller = {
+            ui: {
+                getSelectedModel: vi.fn(() => 'gemini-3-pro'),
+            },
+            actions: {
+                handleGenerateImage: vi.fn(),
+            },
+            imageDetector: {},
+            inputManager: {},
+            currentSelection: 'A glass city floating above the ocean',
+            lastRect: { left: 1, top: 2 },
+            lastMousePoint: { x: 4, y: 8 },
+            lastSessionId: 'previous-session',
+        };
+
+        await new window.GeminiToolbarDispatcher(controller).dispatch('generate_image');
+
+        expect(controller.lastSessionId).toBeNull();
+        expect(controller.actions.handleGenerateImage).toHaveBeenCalledWith(
+            'A glass city floating above the ocean',
+            { left: 1, top: 2 },
+            'gemini-3-pro',
+            { x: 4, y: 8 }
+        );
+    });
+
     it('dispatches read page through the speech reader path', async () => {
         const controller = {
             ui: {

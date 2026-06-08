@@ -75,6 +75,16 @@
                 <line x1="21" y1="18" x2="7" y2="18"></line>
             </svg>
         `,
+        IMAGE_SPARKLE: markup`
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
+                stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                stroke-linejoin="round">
+                <rect x="3" y="5" width="18" height="14" rx="2"/>
+                <circle cx="8.5" cy="10.5" r="1.5"/>
+                <path d="m21 15-4-4-5 5-2-2-4 5"/>
+                <path d="m17 2 .7 1.8L19.5 4.5l-1.8.7L17 7l-.7-1.8-1.8-.7 1.8-.7z"/>
+            </svg>
+        `,
         SPEAKER: markup`
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
                 stroke="currentColor" stroke-width="2" stroke-linecap="round"

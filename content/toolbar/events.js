@@ -6,6 +6,7 @@
         ['translate', 'translate'],
         ['explain', 'explain'],
         ['summarize', 'summarize'],
+        ['generateImage', 'generate_image'],
         ['readSelection', 'read_selection'],
     ];
 

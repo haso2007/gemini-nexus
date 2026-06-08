@@ -16,6 +16,7 @@ function installToolbarStrings() {
             summarize: 'Summarize',
             grammar: 'Grammar',
             explain: 'Explain',
+            generateImage: 'Generate image',
         },
         prompts: {
             ocr: 'ocr prompt',
@@ -32,6 +33,7 @@ function installToolbarStrings() {
             summarize: (selection) => `summarize ${selection}`,
             grammar: (selection) => `grammar ${selection}`,
             explain: (selection) => `explain ${selection}`,
+            generateImage: (selection) => `generate image from ${selection}`,
         },
         loading: {
             ocr: 'loading ocr',
@@ -45,6 +47,7 @@ function installToolbarStrings() {
             snip: 'loading snip',
             summarize: 'loading summarize',
             grammar: 'loading grammar',
+            generateImage: 'loading generate image',
             regenerate: 'loading regenerate',
         },
         inputs: {
@@ -61,6 +64,7 @@ function installToolbarStrings() {
             summarize: 'input summarize',
             grammar: 'input grammar',
             explain: 'input explain',
+            generateImage: 'input generate image',
         },
         customSelectionToolInput: 'Custom tool',
         errors: {
@@ -452,6 +456,44 @@ describe('ToolbarActions', () => {
             text: 'Rewrite formally:\nHello world',
             model: 'gemini-3-pro',
             provider: 'web',
+        });
+    });
+
+    it('sends selected text as a one-click generated image request', async () => {
+        const ui = {
+            hide: vi.fn(),
+            getProvider: vi.fn(() => 'web'),
+            getWebThinkingLevel: vi.fn(() => 'minimal'),
+            showAskWindow: vi.fn(async () => {}),
+            showLoading: vi.fn(),
+            setInputValue: vi.fn(),
+            setTranslationTargetMode: vi.fn(),
+        };
+        const actions = new window.GeminiToolbarActions(ui);
+
+        await actions.handleGenerateImage(
+            'A glass city floating above the ocean',
+            { x: 1, y: 2 },
+            'gemini-3-pro',
+            { x: 4, y: 8 }
+        );
+
+        expect(ui.hide).toHaveBeenCalledTimes(1);
+        expect(ui.showAskWindow).toHaveBeenCalledWith(
+            { x: 1, y: 2 },
+            'A glass city floating above the ocean',
+            'Generate image',
+            { x: 4, y: 8 }
+        );
+        expect(ui.setTranslationTargetMode).toHaveBeenCalledWith(false);
+        expect(ui.showLoading).toHaveBeenCalledWith('loading generate image');
+        expect(ui.setInputValue).toHaveBeenCalledWith('input generate image');
+        expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
+            action: 'QUICK_ASK',
+            text: 'generate image from A glass city floating above the ocean',
+            model: 'gemini-3-pro',
+            provider: 'web',
+            webThinkingLevel: 'minimal',
         });
     });
 });

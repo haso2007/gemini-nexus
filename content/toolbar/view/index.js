@@ -64,6 +64,7 @@
                     translate: getToolbarElement('btn-translate'),
                     explain: getToolbarElement('btn-explain'),
                     summarize: getToolbarElement('btn-summarize'),
+                    generateImage: getToolbarElement('btn-generate-image'),
                     readSelection: getToolbarElement('btn-read-selection'),
                     customSelectionMore: getToolbarElement('btn-custom-selection-more'),
                     headerClose: getToolbarElement('btn-header-close'),

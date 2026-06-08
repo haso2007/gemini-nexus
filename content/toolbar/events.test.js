@@ -75,6 +75,53 @@ describe('ToolbarEvents', () => {
         events.disconnect();
     });
 
+    it('binds the selected-text image generation button to the generate_image action', () => {
+        const generateImage = document.createElement('button');
+        const askModelSelect = document.createElement('select');
+        const askInput = document.createElement('input');
+        const askWindow = document.createElement('div');
+        const resultText = document.createElement('div');
+        const triggerAction = vi.fn();
+
+        const events = new window.GeminiToolbarEvents({
+            actions: {
+                triggerAction,
+                cancelAsk: vi.fn(),
+                stopAsk: vi.fn(),
+            },
+            handleImageClick: vi.fn(),
+            handleImageHover: vi.fn(),
+            handleModelChange: vi.fn(),
+            isWindowVisible: vi.fn(() => false),
+            isVisible: vi.fn(() => false),
+            hide: vi.fn(),
+            hideImageButton: vi.fn(),
+            saveWindowDimensions: vi.fn(),
+            codeCopy: {
+                handle: vi.fn(),
+            },
+        });
+
+        events.bind(
+            {
+                askInput,
+                askModelSelect,
+                askWindow,
+                resultText,
+                buttons: {
+                    generateImage,
+                },
+            },
+            askWindow
+        );
+
+        generateImage.dispatchEvent(new Event('mousedown'));
+
+        expect(triggerAction).toHaveBeenCalledTimes(1);
+        expect(triggerAction.mock.calls[0][1]).toBe('generate_image');
+        events.disconnect();
+    });
+
     it('saves the ask window dimensions after the visible window is resized', () => {
         const askProviderSelect = document.createElement('select');
         const askModelSelect = document.createElement('select');

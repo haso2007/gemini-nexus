@@ -14,6 +14,41 @@ const GENERATED_IMAGE_PLACEHOLDER_PATTERN =
 const GENERATED_IMAGE_PLACEHOLDER_REPLACE_PATTERN =
     /https?:\/\/googleusercontent\.com\/image_generation_content\/\d+/g;
 
+function escapeRegExp(value) {
+    return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function getUrlVariants(url) {
+    const variants = new Set([url]);
+    if (url.startsWith('https://')) {
+        variants.add(url.replace('https://', 'http://'));
+        variants.add(url.replace('https:', ''));
+    }
+    return [...variants];
+}
+
+function removeGeneratedImageReferences(text, generatedImages) {
+    let result = text;
+    for (const image of generatedImages) {
+        for (const url of getUrlVariants(image.url)) {
+            const escapedUrl = escapeRegExp(url);
+            result = result.replace(
+                new RegExp(`!?\\[[^\\]]*\\]\\(\\s*${escapedUrl}\\s*(?:["'][^)]*["'])?\\s*\\)`, 'g'),
+                ''
+            );
+            result = result.replace(
+                new RegExp(`<img\\b[^>]*\\bsrc=["']${escapedUrl}["'][^>]*>`, 'gi'),
+                ''
+            );
+            result = result.replace(new RegExp(escapedUrl, 'g'), '');
+        }
+    }
+    return result
+        .replace(/[ \t]+\n/g, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
 export function parseGeminiLine(line) {
     try {
         // Strip anti-hijacking prefix if present
@@ -148,6 +183,7 @@ export function parseGeminiLine(line) {
                 // Placeholder format: http://googleusercontent.com/image_generation_content/0
                 if (generatedImages.length > 0) {
                     text = text.replace(GENERATED_IMAGE_PLACEHOLDER_REPLACE_PATTERN, '');
+                    text = removeGeneratedImageReferences(text, generatedImages);
                     // Remove potential empty markdown links created by this removal.
                     text = text.replace(/\[\s*\]\(\s*\)/g, '');
                     text = text.trim();

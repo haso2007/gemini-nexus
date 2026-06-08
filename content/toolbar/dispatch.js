@@ -158,6 +158,17 @@
                         );
                         break;
 
+                    case 'generate_image':
+                        if (!this.controller.currentSelection) return;
+                        this.controller.lastSessionId = null;
+                        this.actions.handleGenerateImage(
+                            this.controller.currentSelection,
+                            this.controller.lastRect,
+                            currentModel,
+                            this.controller.lastMousePoint
+                        );
+                        break;
+
                     case 'read_selection':
                         if (!this.controller.currentSelection) return;
                         this.controller.readSelectionAloud();

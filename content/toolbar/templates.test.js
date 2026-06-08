@@ -33,6 +33,7 @@ describe('GeminiToolbarTemplates', () => {
                 explain: 'Explain',
                 summarize: 'Summarize',
                 readSelection: 'Read selection aloud',
+                generateImage: 'Generate image',
                 customSelectionMore: 'More custom tools',
                 aiTools: 'AI tools',
                 chatWithImage: 'Chat with image',
@@ -192,5 +193,16 @@ describe('GeminiToolbarTemplates', () => {
         expect(button).not.toBeNull();
         expect(button.getAttribute('title')).toBe('Read selection aloud');
         expect(button.querySelector('[data-icon="SPEAKER"]')).not.toBeNull();
+    });
+
+    it('renders a one-click generated image button in the text toolbar', () => {
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = window.GeminiToolbarTemplates.mainStructure;
+
+        const button = wrapper.querySelector('#btn-generate-image');
+
+        expect(button).not.toBeNull();
+        expect(button.getAttribute('title')).toBe('Generate image');
+        expect(button.querySelector('[data-icon="IMAGE_SPARKLE"]')).not.toBeNull();
     });
 });

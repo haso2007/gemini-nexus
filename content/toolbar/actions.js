@@ -68,6 +68,11 @@ class ToolbarActions {
         return this.t.prompts.textTranslate(selection, this.getTranslationTargets());
     }
 
+    buildGenerateImagePrompt(selection) {
+        const prompt = this.t.prompts.generateImage;
+        return typeof prompt === 'function' ? prompt(selection) : selection;
+    }
+
     buildCustomSelectionPrompt(tool, selection) {
         const template = String(tool?.prompt || '').trim();
         if (template.includes('{text}')) {
@@ -276,6 +281,32 @@ class ToolbarActions {
         this.lastRequest = message;
         this.lastTranslationRequest =
             actionType === 'translate' ? { type: 'text', selection } : null;
+        this.sendRuntimeMessage(message);
+    }
+
+    async handleGenerateImage(selection, rect, model = '', mousePoint = null) {
+        const title = this.t.titles.generateImage;
+        const prompt = this.buildGenerateImagePrompt(selection);
+
+        this.lastTranslationRequest = null;
+        this.ui.hide();
+        await this.ui.showAskWindow(rect, selection, title, mousePoint);
+        this.ui.setTranslationTargetMode?.(false);
+        this.ui.showLoading(this.t.loading.generateImage);
+        this.ui.setInputValue(this.t.inputs.generateImage);
+
+        const provider = this.getCurrentProvider();
+        const message = withProviderOptions(
+            {
+                action: 'QUICK_ASK',
+                text: prompt,
+                model: model || getDefaultToolbarModel(),
+            },
+            provider,
+            this.getCurrentWebThinkingLevel()
+        );
+
+        this.lastRequest = message;
         this.sendRuntimeMessage(message);
     }
 

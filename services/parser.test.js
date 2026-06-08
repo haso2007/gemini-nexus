@@ -52,6 +52,32 @@ describe('parseGeminiLine', () => {
         });
     });
 
+    it('removes duplicate generated image markdown from visible text', () => {
+        const line = buildLine({
+            text: [
+                'Here is the generated image:',
+                '',
+                '![Generated image](https://lh3.googleusercontent.com/generated-image)',
+                '',
+                'Done.',
+            ].join('\n'),
+            extraCandidateParts: [['https://lh3.googleusercontent.com/generated-image']],
+        });
+
+        expect(parseGeminiLine(line)).toEqual({
+            text: 'Here is the generated image:\n\nDone.',
+            thoughts: null,
+            images: [
+                {
+                    url: 'https://lh3.googleusercontent.com/generated-image',
+                    alt: 'Generated Image',
+                },
+            ],
+            hasGeneratedImagePlaceholder: false,
+            ids: ['conversation-1', 'response-1', 'choice-1'],
+        });
+    });
+
     it('returns null for malformed or unrelated stream lines', () => {
         expect(parseGeminiLine('')).toBeNull();
         expect(parseGeminiLine('not-json')).toBeNull();
