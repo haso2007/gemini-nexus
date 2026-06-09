@@ -5,6 +5,7 @@ import {
     normalizeMessageImages,
     normalizeUserAttachments,
 } from '../../shared/attachments/index.js';
+import { getLiveArtifactsSystemInstruction } from '../core/live_artifacts.js';
 
 export class PromptController {
     constructor(sessionManager, uiController, imageManager, appController) {
@@ -18,6 +19,17 @@ export class PromptController {
     buildRequestPayload(text, files, sessionId, extra = {}) {
         const selectedModel = this.app.getSelectedModel();
         const conn = this.getConnectionData();
+        const liveArtifactsInstruction =
+            this.app.liveArtifactsEnabled === true
+                ? getLiveArtifactsSystemInstruction(this.getUiLanguage())
+                : '';
+        const extraSystemInstruction =
+            typeof extra.systemInstruction === 'string' ? extra.systemInstruction.trim() : '';
+        const systemInstruction = [liveArtifactsInstruction, extraSystemInstruction]
+            .filter(Boolean)
+            .join('\n\n');
+        const requestExtra = { ...extra };
+        delete requestExtra.systemInstruction;
 
         // Multi-server MCP: collect all enabled servers
         let mcpServers = [];
@@ -67,8 +79,14 @@ export class PromptController {
                     ? firstServer.enabledTools
                     : [],
             sessionId,
-            ...extra,
+            ...(systemInstruction ? { systemInstruction } : {}),
+            ...requestExtra,
         };
+    }
+
+    getUiLanguage() {
+        const lang = document.documentElement.lang || '';
+        return lang.toLowerCase().startsWith('en') ? 'en' : 'zh';
     }
 
     getConnectionData() {
@@ -121,11 +139,8 @@ export class PromptController {
         });
     }
 
-    async send() {
+    async sendPromptText(text, files = []) {
         if (this.app.isGenerating) return;
-
-        const text = this.ui.inputFn.value.trim();
-        const files = this.imageManager.getFiles();
 
         if (!text && files.length === 0) return;
 
@@ -178,6 +193,20 @@ export class PromptController {
         this.setGeneratingState(true, currentId);
 
         sendToBackground(this.buildRequestPayload(text, files, currentId));
+    }
+
+    async send() {
+        if (this.app.isGenerating) return;
+
+        const text = this.ui.inputFn.value.trim();
+        const files = this.imageManager.getFiles();
+
+        await this.sendPromptText(text, files);
+    }
+
+    async sendText(text) {
+        const nextText = String(text || '').trim();
+        await this.sendPromptText(nextText, []);
     }
 
     async resendFromMessage(messageIndex, editedText) {

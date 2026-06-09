@@ -2,6 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { bindAppEvents, getToolsPageScrollDistance } from './events.js';
+import { LIVE_ARTIFACT_FOLLOWUP_EVENT } from '../core/live_artifacts.js';
 
 vi.mock('../../shared/messaging/index.js', () => ({
     sendToBackground: vi.fn(),
@@ -22,6 +23,7 @@ function installFooterDom() {
                 <button id="screen-capture-btn"></button>
                 <button id="snip-btn"></button>
                 <button id="page-context-btn"></button>
+                <button id="live-artifacts-btn"></button>
             </div>
             <button id="tools-scroll-right"></button>
         </div>
@@ -256,5 +258,54 @@ describe('app events', () => {
         expect(document.getElementById('model-select').value).toBe('b');
         expect(app.handleModelChange).toHaveBeenCalledWith('b');
         expect(document.querySelector('.model-picker-current').textContent).toBe('B');
+    });
+
+    it('toggles Live Artifacts mode from the tools row', () => {
+        const app = {
+            handleNewChat: vi.fn(),
+            handleTabSwitcher: vi.fn(),
+            toggleBrowserControl: vi.fn(),
+            toggleLiveArtifacts: vi.fn(),
+            setCaptureMode: vi.fn(),
+            togglePageContext: vi.fn(),
+            handleModelChange: vi.fn(),
+            handleSendMessage: vi.fn(),
+            isGenerating: false,
+        };
+        const ui = {
+            inputFn: document.getElementById('prompt'),
+            updateStatus: vi.fn(),
+        };
+
+        bindAppEvents(app, ui);
+        document.getElementById('live-artifacts-btn').click();
+
+        expect(app.toggleLiveArtifacts).toHaveBeenCalledTimes(1);
+        expect(ui.inputFn).toBe(document.activeElement);
+    });
+
+    it('routes Live Artifact follow-up events to the app controller', () => {
+        const app = {
+            handleNewChat: vi.fn(),
+            handleTabSwitcher: vi.fn(),
+            toggleBrowserControl: vi.fn(),
+            toggleLiveArtifacts: vi.fn(),
+            handleLiveArtifactFollowUp: vi.fn(),
+            setCaptureMode: vi.fn(),
+            togglePageContext: vi.fn(),
+            handleModelChange: vi.fn(),
+            handleSendMessage: vi.fn(),
+            isGenerating: false,
+        };
+        const ui = {
+            inputFn: document.getElementById('prompt'),
+            updateStatus: vi.fn(),
+        };
+        const detail = { instruction: 'Continue' };
+
+        bindAppEvents(app, ui);
+        window.dispatchEvent(new CustomEvent(LIVE_ARTIFACT_FOLLOWUP_EVENT, { detail }));
+
+        expect(app.handleLiveArtifactFollowUp).toHaveBeenCalledWith(detail);
     });
 });

@@ -75,6 +75,14 @@ describe('chat message layout styles', () => {
         const markdownCss = await readCss('chat_markdown.css');
 
         expect(markdownCss).toMatch(
+            /\.live-artifact-preview\[data-live-artifact-kind='html'\]\s*{[^}]*background:\s*transparent/s
+        );
+        expect(markdownCss).toMatch(/\.live-artifact-body-html\s*{[^}]*min-height:\s*0/s);
+        expect(markdownCss).toMatch(/\.live-artifact-body-html\s*{[^}]*background:\s*transparent/s);
+        expect(markdownCss).toMatch(
+            /\.live-artifact-body-html\s+\.live-artifact-frame\s*{[^}]*min-height:\s*120px/s
+        );
+        expect(markdownCss).toMatch(
             /\.live-artifact-body-mermaid,[\s\S]*\.live-artifact-body-graphviz\s*{[^}]*max-height:\s*none/s
         );
         expect(markdownCss).toMatch(

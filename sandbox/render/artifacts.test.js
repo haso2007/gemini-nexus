@@ -10,12 +10,21 @@ import {
     setGraphvizLoaderForTest,
     setMermaidLoaderForTest,
 } from './artifacts.js';
+import { LIVE_ARTIFACT_FOLLOWUP_EVENT } from '../core/live_artifacts.js';
 import { setLanguagePreference } from '../core/i18n.js';
 
 function createCodeBlock(language, code) {
     const wrapper = document.createElement('div');
     wrapper.className = 'code-block-wrapper';
     wrapper.dataset.codeLang = language;
+
+    const header = document.createElement('div');
+    header.className = 'code-header';
+    const label = document.createElement('span');
+    label.className = 'code-lang';
+    label.textContent = language;
+    header.appendChild(label);
+    wrapper.appendChild(header);
 
     const pre = document.createElement('pre');
     const codeElement = document.createElement('code');
@@ -46,44 +55,156 @@ describe('Live Artifact previews', () => {
     });
 
     it('detects previewable artifact languages and common bare diagrams', () => {
-        expect(getArtifactKind('html', '<div>Hello</div>')).toBe('html');
+        expect(getArtifactKind('html', '<div>Hello</div>')).toBeNull();
+        expect(getArtifactKind('amc-live-artifact-html', '<section>Hello</section>')).toBe('html');
+        expect(getArtifactKind('amc-live-artifact-html', '')).toBeNull();
+        expect(getArtifactKind('amc-live-artifact-html', 'Just text')).toBeNull();
         expect(getArtifactKind('svg', '<svg viewBox="0 0 1 1"></svg>')).toBe('svg');
         expect(getArtifactKind('mermaid', 'graph TD\n  A --> B')).toBe('mermaid');
         expect(getArtifactKind('graphviz', 'digraph G { A -> B; }')).toBe('graphviz');
         expect(getArtifactKind('dot', 'digraph G { A -> B; }')).toBe('graphviz');
         expect(getArtifactKind('plaintext', 'sequenceDiagram\n  A->>B: Hi')).toBe('mermaid');
         expect(getArtifactKind('text', 'digraph G {\n  A -> B;\n}')).toBe('graphviz');
+        expect(getArtifactKind('plaintext', '<section>Hello</section>')).toBeNull();
         expect(getArtifactKind('javascript', 'console.log("no preview")')).toBeNull();
     });
 
-    it('renders HTML previews in a scriptless iframe with sanitized srcdoc', () => {
+    it('renders HTML previews in a sandboxed iframe with the AMC follow-up bridge', () => {
         const root = document.createElement('div');
         const wrapper = createCodeBlock(
-            'html',
+            'amc-live-artifact-html',
             [
                 '<button onclick="alert(1)">Run</button>',
                 '<script>alert(2)</script>',
                 '<iframe srcdoc="<script>alert(3)</script>"></iframe>',
                 '<img src="https://example.com/remote.png">',
                 '<img src="data:image/png;base64,AAAA">',
+                '<button data-amc-followup=\'{"instruction":"Continue","state":{"selected":"B"}}\'>Continue</button>',
             ].join('')
         );
         root.appendChild(wrapper);
 
         enhanceLiveArtifacts(root);
 
-        const frame = wrapper.querySelector('iframe.live-artifact-frame');
+        const frame = root.querySelector('iframe.live-artifact-frame');
         const srcdoc = readFrameSrcDoc(frame);
 
         expect(frame).not.toBeNull();
-        expect(frame.getAttribute('sandbox')).toBe('');
-        expect(frame.getAttribute('allow')).toBeNull();
+        expect(frame.getAttribute('sandbox')).toBe('allow-scripts allow-forms');
         expect(srcdoc).toContain('<button>Run</button>');
+        expect(srcdoc).toContain('https://example.com/remote.png');
         expect(srcdoc).toContain('data:image/png;base64,AAAA');
-        expect(srcdoc).not.toContain('<script');
+        expect(srcdoc).toContain('amc-live-artifact-preview');
+        expect(srcdoc).toContain('data-amc-followup');
+        expect(srcdoc).toContain("notify('followup'");
         expect(srcdoc).not.toContain('onclick');
         expect(srcdoc).not.toContain('srcdoc=');
-        expect(srcdoc).not.toContain('https://example.com');
+        expect(srcdoc).toContain('background:transparent');
+        expect(srcdoc).not.toContain('body.artifact-html{padding:16px}');
+    });
+
+    it('replaces Live Artifact HTML code chrome with the inline artifact frame', () => {
+        const wrapper = createCodeBlock(
+            'amc-live-artifact-html',
+            '<section><strong>Inline Artifact</strong></section>'
+        );
+
+        enhanceLiveArtifacts(wrapper);
+
+        expect(wrapper.querySelector('pre')).toBeNull();
+        expect(wrapper.querySelector('.code-header')).toBeNull();
+        expect(wrapper.querySelector('.live-artifact-preview')).not.toBeNull();
+        expect(wrapper.querySelector('iframe.live-artifact-frame')).not.toBeNull();
+    });
+
+    it('keeps regular HTML code blocks as code instead of inline Live Artifacts', () => {
+        const wrapper = createCodeBlock('html', '<section><strong>Code sample</strong></section>');
+
+        enhanceLiveArtifacts(wrapper);
+
+        expect(wrapper.querySelector('pre')).not.toBeNull();
+        expect(wrapper.querySelector('.live-artifact-preview')).toBeNull();
+        expect(wrapper.dataset.liveArtifactEnhanced).toBeUndefined();
+    });
+
+    it('does not render blank Live Artifact frames for empty or non-HTML content', () => {
+        const root = document.createElement('div');
+        const emptyArtifact = createCodeBlock('amc-live-artifact-html', '   ');
+        const textArtifact = createCodeBlock('amc-live-artifact-html', 'Just text');
+        root.append(emptyArtifact, textArtifact);
+
+        enhanceLiveArtifacts(root);
+
+        expect(root.querySelector('.live-artifact-preview')).toBeNull();
+        expect(emptyArtifact.querySelector('pre')).not.toBeNull();
+        expect(textArtifact.querySelector('pre')).not.toBeNull();
+    });
+
+    it('forwards valid Live Artifact follow-up payloads from the current iframe', () => {
+        const handleFollowUp = vi.fn();
+        const preview = createLiveArtifactPreview(
+            'html',
+            '<section><button data-amc-followup="Continue">Continue</button></section>',
+            { onFollowUp: handleFollowUp }
+        );
+        document.body.appendChild(preview);
+
+        const frame = preview.querySelector('iframe.live-artifact-frame');
+        const source = frame.contentWindow || {};
+
+        window.dispatchEvent(
+            new MessageEvent('message', {
+                source,
+                data: {
+                    channel: 'amc-live-artifact-preview',
+                    event: 'followup',
+                    payload: { instruction: 'Continue' },
+                },
+            })
+        );
+
+        window.dispatchEvent(
+            new MessageEvent('message', {
+                source: {},
+                data: {
+                    channel: 'amc-live-artifact-preview',
+                    event: 'followup',
+                    payload: { instruction: 'Ignore' },
+                },
+            })
+        );
+
+        expect(handleFollowUp).toHaveBeenCalledTimes(1);
+        expect(handleFollowUp).toHaveBeenCalledWith({ instruction: 'Continue' });
+    });
+
+    it('dispatches Live Artifact follow-up events when no callback is injected', () => {
+        const handleFollowUpEvent = vi.fn();
+        const preview = createLiveArtifactPreview(
+            'html',
+            '<section><button data-amc-followup="Continue">Continue</button></section>'
+        );
+        document.body.appendChild(preview);
+        window.addEventListener(LIVE_ARTIFACT_FOLLOWUP_EVENT, handleFollowUpEvent);
+
+        const frame = preview.querySelector('iframe.live-artifact-frame');
+        const source = frame.contentWindow || {};
+
+        window.dispatchEvent(
+            new MessageEvent('message', {
+                source,
+                data: {
+                    channel: 'amc-live-artifact-preview',
+                    event: 'followup',
+                    payload: { instruction: 'Continue' },
+                },
+            })
+        );
+
+        window.removeEventListener(LIVE_ARTIFACT_FOLLOWUP_EVENT, handleFollowUpEvent);
+
+        expect(handleFollowUpEvent).toHaveBeenCalledTimes(1);
+        expect(handleFollowUpEvent.mock.calls[0][0].detail).toEqual({ instruction: 'Continue' });
     });
 
     it('sanitizes SVG previews before embedding them in srcdoc', () => {

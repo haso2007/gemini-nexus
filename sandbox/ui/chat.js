@@ -10,6 +10,7 @@ export class ChatController {
         this.inputFn = elements.inputFn;
         this.sendBtn = elements.sendBtn;
         this.pageContextBtn = document.getElementById('page-context-btn');
+        this.liveArtifactsBtn = document.getElementById('live-artifacts-btn');
         this.footerEl = document.querySelector('.footer');
         this.shouldFollowBottom = true;
         this.scrollFrame = null;
@@ -235,6 +236,12 @@ export class ChatController {
     togglePageContext(isActive) {
         if (this.pageContextBtn) {
             this.pageContextBtn.classList.toggle('active', isActive);
+        }
+    }
+
+    toggleLiveArtifacts(isActive) {
+        if (this.liveArtifactsBtn) {
+            this.liveArtifactsBtn.classList.toggle('active', isActive);
         }
     }
 

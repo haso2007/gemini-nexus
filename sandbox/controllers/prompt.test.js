@@ -19,7 +19,7 @@ vi.mock('../core/i18n.js', () => ({
     t: (key) => key,
 }));
 
-function createPromptHarness({ text = 'Hello', files = [] } = {}) {
+function createPromptHarness({ text = 'Hello', files = [], liveArtifactsEnabled = false } = {}) {
     const sessionManager = new SessionManager();
     sessionManager.enterDraft();
 
@@ -42,6 +42,7 @@ function createPromptHarness({ text = 'Hello', files = [] } = {}) {
         hostIsTab: false,
         isGenerating: false,
         generatingSessionId: null,
+        liveArtifactsEnabled,
         getSelectedModel: vi.fn(() => 'gemini-test'),
         sessionFlow: {
             refreshHistoryUI: vi.fn(),
@@ -171,6 +172,46 @@ describe('PromptController.send', () => {
                 action: 'SEND_PROMPT',
                 enableBrowserControl: true,
                 hostIsTab: true,
+            })
+        );
+    });
+
+    it('includes the Live Artifacts system instruction when artifact mode is active', () => {
+        const { controller } = createPromptHarness({ liveArtifactsEnabled: true });
+
+        expect(controller.buildRequestPayload('Make a comparison matrix', [], 'session-1')).toEqual(
+            expect.objectContaining({
+                action: 'SEND_PROMPT',
+                systemInstruction: expect.stringContaining('[Live Artifacts Inline Protocol - zh]'),
+            })
+        );
+    });
+
+    it('sends explicit follow-up text without reading the composer value', async () => {
+        const { controller, sessionManager, ui } = createPromptHarness({
+            text: 'stale composer',
+        });
+
+        await controller.sendText('请继续完善 Artifact');
+
+        const session = sessionManager.getCurrentSession();
+        expect(session.messages[0]).toEqual({
+            role: 'user',
+            text: '请继续完善 Artifact',
+        });
+        expect(appendMessage).toHaveBeenCalledWith(
+            ui.historyDiv,
+            '请继续完善 Artifact',
+            'user',
+            null,
+            null,
+            null,
+            expect.objectContaining({ onEdit: expect.any(Function) })
+        );
+        expect(sendToBackground).toHaveBeenLastCalledWith(
+            expect.objectContaining({
+                action: 'SEND_PROMPT',
+                text: '请继续完善 Artifact',
             })
         );
     });

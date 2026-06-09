@@ -1,4 +1,5 @@
 import { MathPlaceholderProtector } from './math_placeholders.js';
+import { LIVE_ARTIFACT_HTML_LANGUAGE } from '../core/live_artifacts.js';
 
 const ALLOWED_TAGS = new Set([
     'a',
@@ -73,6 +74,48 @@ const TAG_ATTRS = {
 const URI_ATTRS = new Set(['href', 'src']);
 const SAFE_URI_PATTERN =
     /^(https?:|data:image\/(?:png|gif|jpe?g|webp|svg\+xml);base64,|blob:|#|\/)/i;
+const FENCED_CODE_BLOCK_START_REGEX = /^\s*```/;
+const HTML_DOCUMENT_REGEX = /^(?:<!doctype\s+html\b[^>]*>\s*)?<html\b[\s\S]*<\/html>$/i;
+const HTML_FRAGMENT_TAG_NAMES = [
+    'article',
+    'aside',
+    'blockquote',
+    'button',
+    'caption',
+    'details',
+    'div',
+    'figure',
+    'figcaption',
+    'footer',
+    'form',
+    'h[1-6]',
+    'header',
+    'label',
+    'li',
+    'main',
+    'meter',
+    'nav',
+    'ol',
+    'p',
+    'progress',
+    'section',
+    'select',
+    'span',
+    'summary',
+    'table',
+    'tbody',
+    'td',
+    'tfoot',
+    'th',
+    'thead',
+    'tr',
+    'ul',
+].join('|');
+const HTML_FRAGMENT_REGEX = new RegExp(
+    `^<(?:${HTML_FRAGMENT_TAG_NAMES})(?:\\s[^>]*)?>[\\s\\S]*<\\/(?:${HTML_FRAGMENT_TAG_NAMES})>$`,
+    'i'
+);
+const UNSAFE_ARTIFACT_FRAGMENT_TAG_REGEX = /<(?:script|style|iframe|object|embed)\b/i;
 
 function escapeHtml(text) {
     return String(text || '')
@@ -122,6 +165,20 @@ function sanitizeHtml(html) {
     return template.innerHTML;
 }
 
+function isStandaloneHtmlArtifact(text) {
+    const trimmed = String(text || '').trim();
+    if (!trimmed || FENCED_CODE_BLOCK_START_REGEX.test(trimmed)) return false;
+    if (UNSAFE_ARTIFACT_FRAGMENT_TAG_REGEX.test(trimmed)) return false;
+    return HTML_DOCUMENT_REGEX.test(trimmed) || HTML_FRAGMENT_REGEX.test(trimmed);
+}
+
+function normalizePreviewableMarkdownContent(text) {
+    if (!isStandaloneHtmlArtifact(text)) return text || '';
+
+    const content = String(text || '').trim();
+    return `\`\`\`${LIVE_ARTIFACT_HTML_LANGUAGE}\n${content}\n\`\`\``;
+}
+
 /**
  * Transforms raw text into HTML with Math placeholders protected/restored.
  * @param {string} text - Raw Markdown text
@@ -136,7 +193,7 @@ export function transformMarkdown(text) {
 
     const mathHandler = new MathPlaceholderProtector();
 
-    let processedText = mathHandler.protect(text || '');
+    let processedText = mathHandler.protect(normalizePreviewableMarkdownContent(text));
 
     let html = marked.parse(processedText);
 

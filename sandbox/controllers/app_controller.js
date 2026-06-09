@@ -13,6 +13,7 @@ import {
     normalizeWebThinkingLevelForModel,
 } from '../../shared/models/web_thinking.js';
 import { isDedicatedApiProvider } from '../../shared/settings/dedicated_providers.js';
+import { formatLiveArtifactFollowupPrompt } from '../core/live_artifacts.js';
 
 export class AppController {
     constructor(sessionManager, uiController, imageManager) {
@@ -25,6 +26,7 @@ export class AppController {
         this.generatingSessionId = null;
         this.pageContextActive = false;
         this.browserControlActive = false;
+        this.liveArtifactsEnabled = false;
         this.sidePanelScope = DEFAULT_SIDE_PANEL_SCOPE;
         this.currentTabId = null;
         this.currentTabUrl = '';
@@ -69,6 +71,25 @@ export class AppController {
     _checkPageContent() {
         this.ui.updateStatus(t('readingPage'));
         sendToBackground({ action: 'CHECK_PAGE_CONTEXT' });
+    }
+
+    toggleLiveArtifacts(forceState = null) {
+        const nextState = forceState === null ? !this.liveArtifactsEnabled : forceState === true;
+        this.liveArtifactsEnabled = nextState;
+        this.ui.chat.toggleLiveArtifacts?.(this.liveArtifactsEnabled);
+    }
+
+    getUiLanguage() {
+        const lang = document.documentElement.lang || '';
+        return lang.toLowerCase().startsWith('en') ? 'en' : 'zh';
+    }
+
+    async handleLiveArtifactFollowUp(payload) {
+        const prompt = formatLiveArtifactFollowupPrompt(payload, this.getUiLanguage());
+        if (!prompt) return false;
+
+        await this.prompt.sendText(prompt);
+        return true;
     }
 
     setBrowserControlActiveState(active) {

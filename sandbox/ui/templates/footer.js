@@ -34,6 +34,10 @@ export const FooterTemplate = `
                                 ${TemplateIcons.PAGE_CONTEXT}
                                 <span data-i18n="pageContext">Page</span>
                             </button>
+                            <button id="live-artifacts-btn" class="tool-btn" data-i18n-title="liveArtifactsTooltip" title="Toggle Live Artifacts responses">
+                                ${TemplateIcons.CODE}
+                                <span data-i18n="liveArtifacts">Artifacts</span>
+                            </button>
                             <button id="quote-btn" class="tool-btn context-aware" data-i18n-title="quoteTooltip" title="Quote selected text from page">
                                 ${TemplateIcons.QUOTE}
                                 <span data-i18n="quote">Quote</span>

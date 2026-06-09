@@ -241,7 +241,14 @@ export class StateManager {
         this.postCurrentTabContext();
         restoreMessages.afterTabContext.forEach((message) => this.frame.postMessage(message));
 
-        // Replay deferred actions captured before the side panel was ready.
+        this.replayPendingSidePanelActions();
+
+        restoreMessages.afterPendingActions.forEach((message) => this.frame.postMessage(message));
+    }
+
+    replayPendingSidePanelActions() {
+        if (!this.localStorageData) return;
+
         if (this.localStorageData.pendingSessionId) {
             this.frame.postMessage({
                 action: 'BACKGROUND_MESSAGE',
@@ -271,8 +278,6 @@ export class StateManager {
             safeRemoveStorage(chrome.storage.local, 'pendingMode');
             delete this.localStorageData.pendingMode;
         }
-
-        restoreMessages.afterPendingActions.forEach((message) => this.frame.postMessage(message));
     }
 
     syncLocalStorageChanges(changes) {
@@ -299,6 +304,8 @@ export class StateManager {
         if (Object.prototype.hasOwnProperty.call(changes, 'geminiSidebarExpanded')) {
             cacheSidebarExpandedPreference(this.localStorageData.geminiSidebarExpanded);
         }
+
+        this.replayPendingSidePanelActions();
 
         createLocalStorageRestoreMessages(this.localStorageData, changedKeys).forEach((message) =>
             this.frame.postMessage(message)

@@ -1,7 +1,13 @@
 import { createPrefixedId } from '../../shared/utils/index.js';
+import {
+    LIVE_ARTIFACT_FOLLOWUP_EVENT,
+    LIVE_ARTIFACT_HTML_LANGUAGE,
+    LIVE_ARTIFACT_MESSAGE_CHANNEL,
+    normalizeLiveArtifactFollowupPayload,
+} from '../core/live_artifacts.js';
 import { t } from '../core/i18n.js';
 
-const HTML_LANGUAGES = new Set(['html', 'htm', 'xhtml']);
+const HTML_LANGUAGES = new Set([LIVE_ARTIFACT_HTML_LANGUAGE]);
 const SVG_LANGUAGES = new Set(['svg']);
 const MERMAID_LANGUAGES = new Set(['mermaid', 'mmd']);
 const GRAPHVIZ_LANGUAGES = new Set(['graphviz', 'dot']);
@@ -27,6 +33,159 @@ const URI_ATTRS = new Set([
     'src',
     'xlink:href',
 ]);
+const ARTIFACT_BRIDGE_SCRIPT = `<script>
+(() => {
+  const channel = ${JSON.stringify(LIVE_ARTIFACT_MESSAGE_CHANNEL)};
+  const notify = (event, payload) => {
+    try {
+      parent.postMessage(payload === undefined ? { channel, event } : { channel, event, payload }, '*');
+    } catch {}
+  };
+  const notifyResize = () => {
+    try {
+      const body = document.body;
+      const root = document.documentElement;
+      const height = Math.max(
+        body ? body.scrollHeight : 0,
+        body ? body.offsetHeight : 0,
+        root ? root.scrollHeight : 0,
+        root ? root.offsetHeight : 0
+      );
+      parent.postMessage({ channel, event: 'resize', height }, '*');
+    } catch {}
+  };
+  let resizeFrame = 0;
+  const scheduleResize = () => {
+    if (resizeFrame) return;
+    resizeFrame = requestAnimationFrame(() => {
+      resizeFrame = 0;
+      notifyResize();
+    });
+  };
+  if (document.readyState === 'complete') {
+    Promise.resolve().then(scheduleResize);
+  } else {
+    window.addEventListener('load', scheduleResize, { once: true });
+  }
+  if ('ResizeObserver' in window) {
+    const observer = new ResizeObserver(scheduleResize);
+    if (document.documentElement) observer.observe(document.documentElement);
+    if (document.body) observer.observe(document.body);
+  }
+  if ('MutationObserver' in window) {
+    const observer = new MutationObserver(scheduleResize);
+    observer.observe(document.documentElement || document, { childList: true, subtree: true, attributes: true });
+  }
+  window.addEventListener('resize', scheduleResize);
+  const parseFollowupPayload = (rawPayload) => {
+    const trimmedPayload = String(rawPayload || '').trim();
+    if (!trimmedPayload) return null;
+    try {
+      const parsedPayload = JSON.parse(trimmedPayload);
+      if (typeof parsedPayload === 'string') {
+        const instruction = parsedPayload.trim();
+        return instruction ? { instruction } : null;
+      }
+      return parsedPayload;
+    } catch {
+      if (/^[{[]/.test(trimmedPayload)) return null;
+      return { instruction: trimmedPayload };
+    }
+  };
+  const resolveFollowupScope = (trigger) => {
+    const scopeSelector = trigger.getAttribute('data-amc-followup-scope');
+    if (scopeSelector && scopeSelector.trim()) {
+      try {
+        return document.querySelector(scopeSelector) || trigger.closest(scopeSelector) || document;
+      } catch {
+        return document;
+      }
+    }
+    return trigger.closest('[data-amc-followup-scope]') || document;
+  };
+  const readStateValue = (element) => {
+    if (element instanceof HTMLInputElement) {
+      const inputType = element.type.toLowerCase();
+      if (inputType === 'checkbox') return element.checked;
+      if (inputType === 'radio') return element.checked ? element.value || true : undefined;
+      if (inputType === 'number' || inputType === 'range') {
+        return element.value === '' || Number.isNaN(element.valueAsNumber) ? element.value : element.valueAsNumber;
+      }
+      return element.value;
+    }
+    if (element instanceof HTMLSelectElement) {
+      if (element.multiple) return Array.from(element.selectedOptions).map((option) => option.value);
+      return element.value;
+    }
+    if (element instanceof HTMLTextAreaElement) return element.value;
+    const stateValue = element.getAttribute('data-amc-state-value');
+    if (stateValue !== null) {
+      const isToggleLike =
+        element.hasAttribute('aria-pressed') ||
+        element.hasAttribute('aria-selected') ||
+        element.hasAttribute('aria-checked');
+      if (!isToggleLike) return stateValue;
+      const isActive =
+        element.getAttribute('aria-pressed') === 'true' ||
+        element.getAttribute('aria-selected') === 'true' ||
+        element.getAttribute('aria-checked') === 'true';
+      return isActive ? stateValue : undefined;
+    }
+    const textValue = element.textContent ? element.textContent.trim() : '';
+    return textValue || undefined;
+  };
+  const appendStateValue = (state, key, value) => {
+    if (value === undefined) return;
+    if (Object.prototype.hasOwnProperty.call(state, key)) {
+      state[key] = Array.isArray(state[key]) ? [...state[key], value] : [state[key], value];
+      return;
+    }
+    state[key] = value;
+  };
+  const collectFollowupState = (trigger) => {
+    const scope = resolveFollowupScope(trigger);
+    const state = {};
+    const stateElements = [];
+    if (scope instanceof Element && scope.matches('[data-amc-state-key]')) stateElements.push(scope);
+    stateElements.push(...Array.from(scope.querySelectorAll('[data-amc-state-key]')));
+    stateElements.forEach((element) => {
+      const key = element.getAttribute('data-amc-state-key');
+      if (!key || element.disabled) return;
+      appendStateValue(state, key, readStateValue(element));
+    });
+    return state;
+  };
+  const mergeFollowupState = (payload, collectedState) => {
+    if (!collectedState || Object.keys(collectedState).length === 0) return payload;
+    const existingState =
+      payload && typeof payload.state === 'object' && !Array.isArray(payload.state)
+        ? payload.state
+        : payload && payload.state !== undefined
+          ? { value: payload.state }
+          : {};
+    return {
+      ...payload,
+      state: {
+        ...existingState,
+        ...collectedState,
+      },
+    };
+  };
+  const readFollowupPayload = (target) => {
+    if (!(target instanceof Element)) return null;
+    const trigger = target.closest('[data-amc-followup]');
+    if (!trigger) return null;
+    const payload = parseFollowupPayload(trigger.getAttribute('data-amc-followup'));
+    return payload ? mergeFollowupState(payload, collectFollowupState(trigger)) : null;
+  };
+  document.addEventListener('click', (event) => {
+    const payload = readFollowupPayload(event.target);
+    if (!payload) return;
+    event.preventDefault();
+    notify('followup', payload);
+  });
+})();
+</script>`;
 
 let mermaidLoader = () => import('mermaid');
 let mermaidModulePromise = null;
@@ -94,14 +253,13 @@ export function getArtifactKind(language, code = '') {
     const normalizedLanguage = normalizeLanguage(language);
     const trimmedCode = String(code || '').trim();
 
-    if (HTML_LANGUAGES.has(normalizedLanguage)) return 'html';
+    if (HTML_LANGUAGES.has(normalizedLanguage)) return looksLikeHtml(trimmedCode) ? 'html' : null;
     if (SVG_LANGUAGES.has(normalizedLanguage)) return 'svg';
     if (MERMAID_LANGUAGES.has(normalizedLanguage)) return 'mermaid';
     if (GRAPHVIZ_LANGUAGES.has(normalizedLanguage)) return 'graphviz';
     if (looksLikeSvg(trimmedCode)) return 'svg';
 
     if (TEXT_LANGUAGES.has(normalizedLanguage)) {
-        if (looksLikeHtml(trimmedCode)) return 'html';
         if (looksLikeMermaid(trimmedCode)) return 'mermaid';
         if (looksLikeGraphviz(trimmedCode)) return 'graphviz';
     }
@@ -115,7 +273,9 @@ function isSafePreviewUrl(value) {
         .trim();
 
     if (!normalized || normalized.startsWith('#')) return true;
-    return /^data:image\/(?:gif|jpe?g|png|svg\+xml|webp);base64,/i.test(normalized);
+    return /^(https?:|data:image\/(?:gif|jpe?g|png|svg\+xml|webp);base64,|blob:|\/)/i.test(
+        normalized
+    );
 }
 
 function sanitizeCssText(cssText) {
@@ -193,24 +353,25 @@ export function sanitizeArtifactMarkup(markup, kind = 'html') {
 export function buildArtifactSrcDoc(kind, code) {
     const sanitizedMarkup = sanitizeArtifactMarkup(code, kind);
     const bodyClass = kind === 'svg' ? 'artifact-svg' : 'artifact-html';
+    const bridgeScript = kind === 'html' ? ARTIFACT_BRIDGE_SCRIPT : '';
 
     return `<!doctype html>
 <html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:; script-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https: data: blob:; style-src 'unsafe-inline' https:; font-src https: data:; script-src 'unsafe-inline'; connect-src https: data: blob:; media-src https: data: blob:; form-action 'none'; base-uri 'none'">
 <style>
-html,body{min-height:100%;margin:0;background:#fff;color:#111;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-body{box-sizing:border-box;overflow:auto}
-body.artifact-html{padding:16px}
+html,body{min-height:100%;margin:0;background:transparent;color:#111;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body{box-sizing:border-box;overflow:hidden}
+body.artifact-html{padding:0}
 body.artifact-svg{display:grid;place-items:center;padding:16px}
 *,*::before,*::after{box-sizing:border-box}
 img,svg,canvas,video{max-width:100%}
 svg{height:auto}
 </style>
 </head>
-<body class="${bodyClass}">${sanitizedMarkup}</body>
+<body class="${bodyClass}">${sanitizedMarkup}${bridgeScript}</body>
 </html>`;
 }
 
@@ -436,20 +597,22 @@ export function createLiveArtifactPreview(kind, code, options = {}) {
     preview.className = 'live-artifact-preview';
     preview.dataset.liveArtifactKind = kind;
 
-    const header = document.createElement('div');
-    header.className = 'live-artifact-header';
+    if (kind !== 'html') {
+        const header = document.createElement('div');
+        header.className = 'live-artifact-header';
 
-    const title = document.createElement('span');
-    title.className = 'live-artifact-title';
-    title.textContent = t('liveArtifactPreview');
+        const title = document.createElement('span');
+        title.className = 'live-artifact-title';
+        title.textContent = t('liveArtifactPreview');
 
-    const badge = document.createElement('span');
-    badge.className = 'live-artifact-badge';
-    badge.textContent = kind.toUpperCase();
+        const badge = document.createElement('span');
+        badge.className = 'live-artifact-badge';
+        badge.textContent = kind.toUpperCase();
 
-    header.appendChild(title);
-    header.appendChild(badge);
-    preview.appendChild(header);
+        header.appendChild(title);
+        header.appendChild(badge);
+        preview.appendChild(header);
+    }
 
     const body = document.createElement('div');
     body.className = `live-artifact-body live-artifact-body-${kind}`;
@@ -472,13 +635,57 @@ export function createLiveArtifactPreview(kind, code, options = {}) {
     const frame = document.createElement('iframe');
     frame.className = 'live-artifact-frame';
     frame.title = `${t('liveArtifactPreviewTitle')} (${kind.toUpperCase()})`;
-    frame.setAttribute('sandbox', '');
+    frame.setAttribute('sandbox', kind === 'html' ? 'allow-scripts allow-forms' : '');
     frame.referrerPolicy = 'no-referrer';
     frame.loading = 'lazy';
     frame.srcdoc = buildArtifactSrcDoc(kind, code);
     body.appendChild(frame);
 
+    if (kind === 'html') {
+        const handleMessage = (event) => {
+            if (event.source !== frame.contentWindow) return;
+            const data = event.data || {};
+            if (data.channel !== LIVE_ARTIFACT_MESSAGE_CHANNEL) return;
+
+            if (data.event === 'followup') {
+                const payload = normalizeLiveArtifactFollowupPayload(data.payload);
+                if (payload) {
+                    if (typeof options.onFollowUp === 'function') {
+                        options.onFollowUp(payload);
+                    } else {
+                        window.dispatchEvent(
+                            new CustomEvent(LIVE_ARTIFACT_FOLLOWUP_EVENT, { detail: payload })
+                        );
+                    }
+                }
+                return;
+            }
+
+            if (data.event === 'resize' && typeof data.height === 'number') {
+                const height = Math.max(120, Math.ceil(data.height));
+                frame.style.height = `${height}px`;
+            }
+        };
+        window.addEventListener('message', handleMessage);
+        preview.__liveArtifactCleanup = () => {
+            window.removeEventListener('message', handleMessage);
+        };
+    }
+
     return preview;
+}
+
+function replaceCodeBlockWithPreview(wrapper, preview) {
+    wrapper.dataset.liveArtifactEnhanced = 'true';
+
+    if (wrapper.parentNode) {
+        wrapper.replaceWith(preview);
+        return;
+    }
+
+    wrapper.className = 'live-artifact-inline-wrapper';
+    wrapper.innerHTML = '';
+    wrapper.appendChild(preview);
 }
 
 export function enhanceLiveArtifacts(root, options = {}) {
@@ -496,8 +703,14 @@ export function enhanceLiveArtifacts(root, options = {}) {
         const kind = getArtifactKind(getCodeLanguage(wrapper), code);
         if (!kind) return;
 
+        const preview = createLiveArtifactPreview(kind, code, options);
+        if (kind === 'html') {
+            replaceCodeBlockWithPreview(wrapper, preview);
+            return;
+        }
+
         wrapper.dataset.liveArtifactEnhanced = 'true';
-        wrapper.appendChild(createLiveArtifactPreview(kind, code, options));
+        wrapper.appendChild(preview);
     });
 }
 

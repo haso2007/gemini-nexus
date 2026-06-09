@@ -8,7 +8,8 @@ export class PromptBuilder {
     }
 
     async build(request) {
-        let systemPreamble = '';
+        const callerSystemInstruction = String(request.systemInstruction || '').trim();
+        let systemPreamble = callerSystemInstruction ? `${callerSystemInstruction}\n\n` : '';
 
         if (request.includePageContext) {
             const targetTabId = this.controlManager ? this.controlManager.getTargetTabId() : null;

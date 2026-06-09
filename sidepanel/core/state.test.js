@@ -300,6 +300,40 @@ describe('StateManager tab ownership', () => {
         expect(frame.postMessage).not.toHaveBeenCalled();
     });
 
+    it('replays a pending session when it arrives after side panel initialization', () => {
+        const listeners = setupChromeWithLocalData({
+            geminiSessions: [
+                {
+                    id: 'summary-session',
+                    title: 'Video summary',
+                    messages: [{ role: 'ai', text: 'Ready summary' }],
+                },
+            ],
+        });
+        const frame = createFrame();
+        const manager = new StateManager(frame);
+
+        manager.init();
+        manager.markUiReady();
+        frame.postMessage.mockClear();
+
+        listeners.storageChanged(
+            {
+                pendingSessionId: { newValue: 'summary-session' },
+            },
+            'local'
+        );
+
+        expect(frame.postMessage).toHaveBeenCalledWith({
+            action: 'BACKGROUND_MESSAGE',
+            payload: {
+                action: 'SWITCH_SESSION',
+                sessionId: 'summary-session',
+            },
+        });
+        expect(chrome.storage.local.remove).toHaveBeenCalledWith('pendingSessionId');
+    });
+
     it('logs storage failures when clearing consumed pending actions', async () => {
         setupChromeWithLocalData({
             pendingSessionId: 'session-1',

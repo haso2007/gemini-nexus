@@ -118,6 +118,18 @@
     background: #f8fafd;
 }
 
+.live-artifact-preview[data-live-artifact-kind='html'] {
+    margin: 12px 0;
+    border-top: 0;
+    background: transparent;
+    overflow: visible;
+}
+
+[data-theme='light'] .live-artifact-preview[data-live-artifact-kind='html'] {
+    border-top-color: transparent;
+    background: transparent;
+}
+
 .live-artifact-header {
     display: flex;
     align-items: center;
@@ -158,6 +170,13 @@
     max-height: min(520px, 70vh);
     overflow: auto;
     background: #ffffff;
+}
+
+.live-artifact-body-html {
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+    background: transparent;
 }
 
 .live-artifact-body-mermaid,
@@ -201,6 +220,12 @@
     min-height: 220px;
     border: 0;
     background: #ffffff;
+}
+
+.live-artifact-body-html .live-artifact-frame {
+    height: 320px;
+    min-height: 120px;
+    background: transparent;
 }
 
 .msg.ai code {

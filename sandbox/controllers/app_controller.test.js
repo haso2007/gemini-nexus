@@ -33,7 +33,7 @@ function createUi() {
     inputFn.focus = vi.fn();
 
     return {
-        chat: { togglePageContext: vi.fn() },
+        chat: { togglePageContext: vi.fn(), toggleLiveArtifacts: vi.fn() },
         clearChatHistory: vi.fn(),
         historyDiv: document.createElement('div'),
         inputFn,
@@ -291,6 +291,37 @@ describe('AppController session restore behavior', () => {
             '*'
         );
         expect(ui.updateWebThinkingToggle).toHaveBeenCalledWith(ui.settings.connectionData);
+    });
+
+    it('toggles Live Artifacts mode and updates the chat tool state', () => {
+        const { app, ui } = createAppHarness();
+
+        app.toggleLiveArtifacts();
+
+        expect(app.liveArtifactsEnabled).toBe(true);
+        expect(ui.chat.toggleLiveArtifacts).toHaveBeenCalledWith(true);
+
+        app.toggleLiveArtifacts(false);
+
+        expect(app.liveArtifactsEnabled).toBe(false);
+        expect(ui.chat.toggleLiveArtifacts).toHaveBeenLastCalledWith(false);
+    });
+
+    it('formats Live Artifact follow-up payloads and sends them back into the current chat', async () => {
+        const { app } = createAppHarness();
+        const sendText = vi.spyOn(app.prompt, 'sendText').mockResolvedValue();
+
+        await app.handleLiveArtifactFollowUp({
+            instruction: '继续细化第二个方案',
+            title: '方案矩阵',
+            state: { selected: 'B' },
+        });
+
+        expect(sendText).toHaveBeenCalledWith(
+            expect.stringContaining('请根据 Live Artifact 中的交互选择继续处理。')
+        );
+        expect(sendText).toHaveBeenCalledWith(expect.stringContaining('继续细化第二个方案'));
+        expect(sendText).toHaveBeenCalledWith(expect.stringContaining('"selected": "B"'));
     });
 
     it('sends the standalone host flag when enabling browser control', () => {

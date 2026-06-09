@@ -1,5 +1,6 @@
 import { bindInputEvents } from './input_events.js';
 import { bindToolButtonEvents } from './tool_button_events.js';
+import { LIVE_ARTIFACT_FOLLOWUP_EVENT } from '../core/live_artifacts.js';
 
 export { getToolsPageScrollDistance } from './tool_button_events.js';
 
@@ -48,5 +49,8 @@ export function bindAppEvents(app, ui, setResizeRef) {
     });
 
     bindToolButtonEvents(app, ui);
+    window.addEventListener(LIVE_ARTIFACT_FOLLOWUP_EVENT, (event) => {
+        app.handleLiveArtifactFollowUp?.(event.detail);
+    });
     bindInputEvents(app, ui, setResizeRef);
 }

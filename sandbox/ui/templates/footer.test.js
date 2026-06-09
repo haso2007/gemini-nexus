@@ -17,6 +17,7 @@ describe('FooterTemplate', () => {
         expect(textareaShell.querySelector('#prompt')).not.toBeNull();
         expect(leftActions.querySelector('#upload-btn')).not.toBeNull();
         expect(leftActions.querySelector('.tools-container')).not.toBeNull();
+        expect(leftActions.querySelector('#live-artifacts-btn')).not.toBeNull();
         expect(leftActions.querySelector('#youtube-summary-btn')).toBeNull();
         expect(rightActions.querySelector('#send')).not.toBeNull();
 
@@ -42,7 +43,7 @@ describe('FooterTemplate', () => {
             );
         });
 
-        ['browser-control-btn', 'screen-capture-btn'].forEach((buttonId) => {
+        ['browser-control-btn', 'live-artifacts-btn', 'screen-capture-btn'].forEach((buttonId) => {
             expect(document.getElementById(buttonId).classList.contains('context-aware')).toBe(
                 false
             );

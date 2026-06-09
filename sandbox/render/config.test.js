@@ -16,10 +16,10 @@ function createMarkedStub() {
             state.renderer = options.renderer;
         },
         parse(text) {
-            const match = String(text || '').match(/^```(\w+)?\n?([\s\S]*?)\n?```$/);
+            const match = String(text || '').match(/^```([^\n`]*)?\n?([\s\S]*?)\n?```$/);
             if (match && state.renderer?.code) {
                 return state.renderer.code({
-                    lang: match[1] || '',
+                    lang: match[1]?.trim() || '',
                     text: match[2] || '',
                 });
             }
@@ -72,5 +72,18 @@ describe('configureMarkdown', () => {
         expect(html).toContain('<span class="code-lang">mermaid</span>');
         expect(html).toContain('language-mermaid');
         expect(html).toContain('A --&gt; B');
+    });
+
+    it('wraps standalone Live Artifacts HTML fragments before Markdown rendering', () => {
+        globalThis.marked = createMarkedStub();
+        configureMarkdown();
+
+        const html = transformMarkdown(
+            '<section style="display:grid"><strong>Inline Artifact</strong></section>'
+        );
+
+        expect(html).toContain('data-code-lang="amc-live-artifact-html"');
+        expect(html).toContain('<span class="code-lang">amc-live-artifact-html</span>');
+        expect(html).toContain('Inline Artifact');
     });
 });

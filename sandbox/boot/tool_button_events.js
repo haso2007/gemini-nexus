@@ -54,6 +54,14 @@ export function bindToolButtonEvents(app, ui) {
         });
     }
 
+    const liveArtifactsBtn = document.getElementById('live-artifacts-btn');
+    if (liveArtifactsBtn) {
+        liveArtifactsBtn.addEventListener('click', () => {
+            app.toggleLiveArtifacts();
+            if (ui.inputFn) ui.inputFn.focus();
+        });
+    }
+
     document.getElementById('quote-btn').addEventListener('click', () => {
         sendToBackground({ action: 'GET_ACTIVE_SELECTION' });
         if (ui.inputFn) ui.inputFn.focus();
