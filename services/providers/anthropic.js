@@ -120,10 +120,7 @@ function getThinkingConfig(thinkingLevel, model) {
     const budgetTokens = THINKING_BUDGET_BY_LEVEL[thinkingLevel];
     if (!budgetTokens) return null;
     if (shouldUseAdaptiveThinking(model)) {
-        return {
-            thinking: { type: 'adaptive' },
-            outputConfig: { effort: thinkingLevel },
-        };
+        return null;
     }
     return {
         thinking: {
@@ -199,7 +196,7 @@ export async function sendAnthropicMessage(
     const url = `${baseUrl}/messages`;
     debugLog(`[Anthropic API] Requesting ${model} at ${url}...`);
 
-    const response = await fetch(url, {
+    let response = await fetch(url, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -209,6 +206,26 @@ export async function sendAnthropicMessage(
         body: JSON.stringify(payload),
         signal,
     });
+
+    // Retry without thinking config if the model doesn't support it
+    if (!response.ok && thinkingConfig) {
+        const errorText = await readErrorMessage(response.clone());
+        if (errorText.includes('thinking') && errorText.includes('not supported')) {
+            debugLog(`[Anthropic API] Retrying without thinking config for ${model}...`);
+            delete payload.thinking;
+            delete payload.output_config;
+            response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                    'anthropic-version': config?.anthropicVersion || '2023-06-01',
+                },
+                body: JSON.stringify(payload),
+                signal,
+            });
+        }
+    }
 
     if (!response.ok) {
         const errorText = await readErrorMessage(response);

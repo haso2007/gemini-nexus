@@ -149,4 +149,62 @@ describe('sendAnthropicMessage', () => {
             expect(payload.output_config).toEqual({ effort: 'medium' });
         }
     });
+
+    it('retries without thinking config when API rejects thinking parameters', async () => {
+        const encoder = new TextEncoder();
+        const errorResponse = {
+            ok: false,
+            status: 400,
+            clone: vi.fn().mockReturnValue({
+                ok: false,
+                text: vi.fn().mockResolvedValue('thinking is not supported for this model'),
+            }),
+            text: vi.fn().mockResolvedValue('thinking is not supported for this model'),
+        };
+        const successResponse = {
+            ok: true,
+            body: {
+                getReader: () => ({
+                    read: vi
+                        .fn()
+                        .mockResolvedValueOnce({
+                            done: false,
+                            value: encoder.encode(
+                                `data: ${JSON.stringify({ type: 'content_block_delta', delta: { type: 'text_delta', text: 'done' } })}\n\n`
+                            ),
+                        })
+                        .mockResolvedValueOnce({ done: true }),
+                }),
+            },
+        };
+
+        global.fetch
+            .mockResolvedValueOnce(errorResponse)
+            .mockResolvedValueOnce(successResponse);
+
+        await sendAnthropicMessage(
+            'Hello',
+            '',
+            [],
+            {
+                baseUrl: 'https://api.anthropic.com/v1',
+                apiKey: 'anthropic-key',
+                model: 'claude-unknown-model',
+                thinkingLevel: 'high',
+            },
+            [],
+            null,
+            vi.fn()
+        );
+
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+        const [, firstInit] = global.fetch.mock.calls[0];
+        const firstPayload = JSON.parse(firstInit.body);
+        expect(firstPayload.thinking).toEqual({ type: 'enabled', budget_tokens: 4096 });
+
+        const [, secondInit] = global.fetch.mock.calls[1];
+        const secondPayload = JSON.parse(secondInit.body);
+        expect(secondPayload.thinking).toBeUndefined();
+        expect(secondPayload.output_config).toBeUndefined();
+    });
 });
