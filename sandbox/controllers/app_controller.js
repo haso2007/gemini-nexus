@@ -34,6 +34,7 @@ export class AppController {
         this.boundSessionId = null;
         this.hostIsTab = false;
         this.sessionsRestored = false;
+        this.isVisible = true;
 
         // Sidebar Restore Behavior: 'auto', 'restore', 'new'
         this.sidebarRestoreBehavior = 'auto';
@@ -154,6 +155,21 @@ export class AppController {
 
     setHostContext(context = {}) {
         this.hostIsTab = context.isTab === true;
+    }
+
+    handleVisibilityChange(payload) {
+        const visible = payload?.visible === true;
+        this.isVisible = visible;
+
+        if (visible) {
+            console.log('[Gemini Nexus] Sandbox became visible, resuming');
+            // When becoming visible, ensure the UI is properly displayed
+            // The streaming state is preserved, so ongoing streams will continue
+        } else {
+            console.log('[Gemini Nexus] Sandbox became hidden (tab switched away)');
+            // When hidden, we keep the state but don't need to do anything special
+            // Fetch streams will continue in the background
+        }
     }
 
     handleModelChange(model) {
