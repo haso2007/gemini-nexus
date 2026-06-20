@@ -144,6 +144,7 @@ export class PromptController {
 
         if (!text && files.length === 0) return;
 
+        const previousSessionId = this.sessionManager.currentSessionId;
         if (!this.sessionManager.currentSessionId) {
             this.sessionManager.createSession();
         }
@@ -177,6 +178,7 @@ export class PromptController {
             type: 'upsertSession',
             sessionId: currentId,
         });
+        this.app.clearComposerDraftAfterSend?.(previousSessionId, currentId);
         this.app.sessionFlow.switchToSession(currentId);
 
         if (session.context) {
