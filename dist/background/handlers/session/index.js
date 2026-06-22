@@ -40,9 +40,10 @@ export class SessionMessageHandler {
 
         // --- CONTROL ---
         if (request.action === 'CANCEL_PROMPT') {
-            const cancelled = this.sessionManager.cancelCurrentRequest();
+            const sessionId = request.sessionId || null;
+            const cancelled = this.sessionManager.cancelCurrentRequest(sessionId);
             // Ensure the prompt loop logic also stops
-            this.promptHandler.cancel();
+            this.promptHandler.cancel(sessionId);
             sendResponse({ status: cancelled ? 'cancelled' : 'no_active_request' });
             return false;
         }

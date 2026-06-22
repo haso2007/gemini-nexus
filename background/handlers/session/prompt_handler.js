@@ -43,11 +43,15 @@ export class PromptHandler {
         this.controlManager = controlManager;
         this.builder = new PromptBuilder(controlManager, mcpManager);
         this.toolExecutor = new ToolExecutor(controlManager, mcpManager);
-        this.activeRun = null;
+        this.activeRuns = new Map();
     }
 
-    cancel() {
-        this.cancelActiveRun();
+    cancel(sessionId = null) {
+        if (sessionId) {
+            this.cancelActiveRun({ sessionId });
+            return;
+        }
+        this.cancelAllActiveRuns();
     }
 
     createCancellationReply(request) {
@@ -59,12 +63,34 @@ export class PromptHandler {
         };
     }
 
-    cancelActiveRun({ notify = false } = {}) {
-        const run = this.activeRun;
+    getRunKey(sessionId) {
+        return sessionId || '__default__';
+    }
+
+    cancelAllActiveRuns({ notify = false } = {}) {
+        let cancelled = false;
+        for (const run of this.activeRuns.values()) {
+            if (run && !run.cancelled) {
+                run.cancelled = true;
+                if (notify) {
+                    sendRuntimeMessage(this.createCancellationReply(run.request));
+                }
+                cancelled = true;
+            }
+        }
+        this.activeRuns.clear();
+        this.sessionManager?.cancelCurrentRequest?.();
+        return cancelled;
+    }
+
+    cancelActiveRun({ sessionId = null, notify = false } = {}) {
+        const runKey = this.getRunKey(sessionId);
+        const run = this.activeRuns.get(runKey);
         if (!run || run.cancelled) return false;
 
         run.cancelled = true;
-        this.sessionManager?.cancelCurrentRequest?.();
+        this.activeRuns.delete(runKey);
+        this.sessionManager?.cancelCurrentRequest?.(sessionId);
         if (notify) {
             sendRuntimeMessage(this.createCancellationReply(run.request));
         }
@@ -72,17 +98,21 @@ export class PromptHandler {
     }
 
     isRunCancelled(run) {
-        return !run || run.cancelled || this.activeRun !== run;
+        return !run || run.cancelled || this.activeRuns.get(run.runKey) !== run;
     }
 
     handle(request, sendResponse) {
-        this.cancelActiveRun({ notify: true });
+        const sessionId = request.sessionId || null;
+        const runKey = this.getRunKey(sessionId);
+        this.cancelActiveRun({ sessionId, notify: true });
 
         const run = {
+            runKey,
+            sessionId,
             request,
             cancelled: false,
         };
-        this.activeRun = run;
+        this.activeRuns.set(runKey, run);
 
         (async () => {
             const onUpdate = (partialText, partialThoughts) => {
@@ -276,8 +306,8 @@ export class PromptHandler {
                         .catch(() => {});
                 }
             } finally {
-                if (this.activeRun === run) {
-                    this.activeRun = null;
+                if (this.activeRuns.get(run.runKey) === run) {
+                    this.activeRuns.delete(run.runKey);
                 }
                 sendResponse({ status: 'completed' });
             }

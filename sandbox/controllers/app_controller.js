@@ -22,6 +22,7 @@ export class AppController {
         this.imageManager = imageManager;
 
         this.captureMode = 'snip';
+        this.generatingSessions = new Map();
         this.isGenerating = false;
         this.generatingSessionId = null;
         this.pageContextActive = false;
@@ -48,7 +49,7 @@ export class AppController {
         this.ui.inputFn?.addEventListener?.('input', () => this.saveCurrentInputDraft());
 
         document.addEventListener('gemini-provider-changed', () => {
-            if (!this.isGenerating) this.rerender();
+            if (!this.isCurrentSessionGenerating()) this.rerender();
         });
 
         if (this.ui.setBrowserControlCallbacks) {
@@ -61,6 +62,48 @@ export class AppController {
 
     setCaptureMode(mode) {
         this.captureMode = mode;
+    }
+
+    syncLegacyGenerationState() {
+        const generatingSessionIds = this.getGeneratingSessionIds();
+        this.isGenerating = generatingSessionIds.length > 0;
+        this.generatingSessionId = generatingSessionIds[0] || null;
+    }
+
+    startSessionGeneration(sessionId, metadata = {}) {
+        if (!sessionId) return;
+        this.generatingSessions.set(sessionId, {
+            sessionId,
+            startedAt: Date.now(),
+            ...metadata,
+        });
+        this.syncLegacyGenerationState();
+    }
+
+    finishSessionGeneration(sessionId) {
+        if (!sessionId) return;
+        this.generatingSessions.delete(sessionId);
+        this.syncLegacyGenerationState();
+    }
+
+    cancelSessionGeneration(sessionId) {
+        this.finishSessionGeneration(sessionId);
+    }
+
+    isSessionGenerating(sessionId) {
+        return !!sessionId && this.generatingSessions.has(sessionId);
+    }
+
+    hasActiveGenerations() {
+        return this.generatingSessions.size > 0;
+    }
+
+    getGeneratingSessionIds() {
+        return Array.from(this.generatingSessions.keys());
+    }
+
+    isCurrentSessionGenerating() {
+        return this.isSessionGenerating(this.sessionManager.currentSessionId);
     }
 
     togglePageContext() {
@@ -177,6 +220,17 @@ export class AppController {
     }
 
     handleModelChange(model) {
+        // Save model to current session if exists
+        const currentSessionId = this.sessionManager.currentSessionId;
+        if (currentSessionId) {
+            this.sessionManager.setSessionModel(currentSessionId, model);
+            saveSessionsToStorage(this.sessionManager.getPersistableSessions(), {
+                type: 'updateSessionMetadata',
+                sessionId: currentSessionId,
+                fields: ['model'],
+            });
+        }
+
         const connectionData = this.ui.settings?.connectionData;
         const provider =
             connectionData?.provider ||
@@ -514,7 +568,7 @@ export class AppController {
                     this.setBrowserControlActiveState(!payload.enabled);
                     this.ui.updateStatus(payload.error || 'Browser control could not be updated.');
                     setTimeout(() => {
-                        if (!this.isGenerating) this.ui.updateStatus('');
+                        if (!this.isCurrentSessionGenerating()) this.ui.updateStatus('');
                     }, 3000);
                 }
                 return;
@@ -522,7 +576,7 @@ export class AppController {
             if (payload.action === 'BACKGROUND_REQUEST_ERROR') {
                 this.ui.updateStatus(payload.error || 'Background request failed.');
                 setTimeout(() => {
-                    if (!this.isGenerating) this.ui.updateStatus('');
+                    if (!this.isCurrentSessionGenerating()) this.ui.updateStatus('');
                 }, 3000);
                 return;
             }
@@ -530,7 +584,7 @@ export class AppController {
                 if (payload.error) {
                     this.ui.updateStatus(payload.error);
                     setTimeout(() => {
-                        if (!this.isGenerating) this.ui.updateStatus('');
+                        if (!this.isCurrentSessionGenerating()) this.ui.updateStatus('');
                     }, 3000);
                     return;
                 }
@@ -558,7 +612,7 @@ export class AppController {
                 const statusMessage = t('pageReadSuccess').replace('{count}', formattedLength);
                 this.ui.updateStatus(statusMessage);
                 setTimeout(() => {
-                    if (!this.isGenerating) this.ui.updateStatus('');
+                    if (!this.isCurrentSessionGenerating()) this.ui.updateStatus('');
                 }, 3000);
                 return;
             }

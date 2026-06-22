@@ -63,7 +63,7 @@ describe('GeminiSessionManager cancellation', () => {
         let secondResolve;
         manager.dispatcher = {
             dispatch: vi.fn((request, settings, files, onUpdate, signal) => {
-                if (request.sessionId === 'session-2') {
+                if (request.text === 'second') {
                     return new Promise((resolve, reject) => {
                         secondResolve = resolve;
                         signal.addEventListener('abort', () => reject(createAbortError()));
@@ -83,7 +83,7 @@ describe('GeminiSessionManager cancellation', () => {
         await vi.waitFor(() => expect(manager.dispatcher.dispatch).toHaveBeenCalledTimes(1));
 
         const secondPromise = manager.handleSendPrompt(
-            { text: 'second', sessionId: 'session-2' },
+            { text: 'second', sessionId: 'session-1' },
             vi.fn()
         );
         await vi.waitFor(() => expect(manager.dispatcher.dispatch).toHaveBeenCalledTimes(2));
@@ -96,7 +96,7 @@ describe('GeminiSessionManager cancellation', () => {
             if (secondResolve) {
                 secondResolve({
                     action: 'GEMINI_REPLY',
-                    sessionId: 'session-2',
+                    sessionId: 'session-1',
                     status: 'success',
                     text: 'second result',
                 });

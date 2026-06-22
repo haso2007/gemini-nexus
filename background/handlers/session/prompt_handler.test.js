@@ -67,7 +67,7 @@ describe('PromptHandler concurrency', () => {
                 action: 'SEND_PROMPT',
                 text: 'second',
                 model: 'gemini-test',
-                sessionId: 'session-2',
+                sessionId: 'session-1',
             },
             secondResponse
         );
@@ -90,7 +90,7 @@ describe('PromptHandler concurrency', () => {
         });
         second.resolve({
             action: 'GEMINI_REPLY',
-            sessionId: 'session-2',
+            sessionId: 'session-1',
             status: 'success',
             text: 'second result',
         });
@@ -105,12 +105,13 @@ describe('PromptHandler concurrency', () => {
                 action: 'GEMINI_REPLY',
                 sessionId: 'session-1',
                 status: 'success',
+                text: 'late first result',
             })
         );
         expect(chrome.runtime.sendMessage).toHaveBeenCalledWith(
             expect.objectContaining({
                 action: 'GEMINI_REPLY',
-                sessionId: 'session-2',
+                sessionId: 'session-1',
                 status: 'success',
             })
         );

@@ -23,19 +23,24 @@ export class GeminiSessionManager {
     constructor() {
         this.auth = new AuthManager();
         this.dispatcher = new RequestDispatcher(this.auth);
-        this.abortController = null;
+        this.abortControllers = new Map();
     }
 
     async ensureInitialized() {
         await this.auth.ensureInitialized();
     }
 
+    getRequestKey(sessionId) {
+        return sessionId || '__default__';
+    }
+
     async handleSendPrompt(request, onUpdate) {
-        // Cancel previous if exists
-        this.cancelCurrentRequest();
+        const requestKey = this.getRequestKey(request.sessionId || null);
+        // Cancel only an existing request for the same session.
+        this.cancelCurrentRequest(request.sessionId || null);
 
         const abortController = new AbortController();
-        this.abortController = abortController;
+        this.abortControllers.set(requestKey, abortController);
         const signal = abortController.signal;
         let thoughtsStartedAt = null;
         let thoughtsDurationSeconds = null;
@@ -131,19 +136,28 @@ export class GeminiSessionManager {
                 status: 'error',
             };
         } finally {
-            if (this.abortController === abortController) {
-                this.abortController = null;
+            if (this.abortControllers.get(requestKey) === abortController) {
+                this.abortControllers.delete(requestKey);
             }
         }
     }
 
-    cancelCurrentRequest() {
-        if (this.abortController) {
-            this.abortController.abort();
-            this.abortController = null;
+    cancelCurrentRequest(sessionId = null) {
+        if (sessionId) {
+            const requestKey = this.getRequestKey(sessionId);
+            const abortController = this.abortControllers.get(requestKey);
+            if (!abortController) return false;
+            abortController.abort();
+            this.abortControllers.delete(requestKey);
             return true;
         }
-        return false;
+
+        if (this.abortControllers.size === 0) return false;
+        for (const abortController of this.abortControllers.values()) {
+            abortController.abort();
+        }
+        this.abortControllers.clear();
+        return true;
     }
 
     async setContext(context, model) {
