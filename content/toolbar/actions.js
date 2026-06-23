@@ -89,6 +89,13 @@ class ToolbarActions {
     }
 
     sendRuntimeMessage(message, options = {}) {
+        if (!chrome?.runtime) {
+            this.showRuntimeMessageError(
+                new Error('Extension reloaded — please refresh the page.'),
+                options
+            );
+            return;
+        }
         try {
             const sendResult = chrome.runtime.sendMessage(message);
             if (sendResult && typeof sendResult.then === 'function') {

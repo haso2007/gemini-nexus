@@ -243,6 +243,28 @@ describe('ToolbarActions', () => {
         }
     });
 
+    it('shows a reload prompt when chrome.runtime is undefined (extension context invalidated)', async () => {
+        const savedRuntime = chrome.runtime;
+        chrome.runtime = undefined;
+        const ui = {
+            hide: vi.fn(),
+            showAskWindow: vi.fn(async () => {}),
+            showLoading: vi.fn(),
+            showError: vi.fn(),
+            setInputValue: vi.fn(),
+        };
+        const actions = new window.GeminiToolbarActions(ui);
+
+        try {
+            await actions.handleQuickAction('explain', 'Some text', { x: 1, y: 2 }, 'model');
+            expect(ui.showError).toHaveBeenCalledWith(
+                'Extension reloaded — please refresh the page.'
+            );
+        } finally {
+            chrome.runtime = savedRuntime;
+        }
+    });
+
     it('passes the current Web thinking level with selected-text quick asks', async () => {
         const ui = {
             hide: vi.fn(),
