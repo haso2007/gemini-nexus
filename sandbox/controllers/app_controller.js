@@ -106,6 +106,45 @@ export class AppController {
         return this.isSessionGenerating(this.sessionManager.currentSessionId);
     }
 
+    restoreActivePromptRuns(runs) {
+        if (!Array.isArray(runs)) return;
+
+        const restoredRuns = runs.filter((run) => {
+            const sessionId = run?.sessionId || null;
+            const session = this.sessionManager.getSessionById(sessionId);
+            if (!session) return false;
+
+            const messages = Array.isArray(session.messages) ? session.messages : [];
+            const lastMessage = messages[messages.length - 1];
+            return lastMessage?.role !== 'ai';
+        });
+        if (restoredRuns.length === 0) return;
+
+        restoredRuns.forEach((run) => {
+            this.startSessionGeneration(run.sessionId, {
+                startedAt: Number.isFinite(run.startedAt) ? run.startedAt : Date.now(),
+                model: run.model || null,
+                restored: true,
+            });
+        });
+
+        restoredRuns.forEach((run) => {
+            const hasStreamText = typeof run.text === 'string' && run.text.length > 0;
+            const hasThoughts = typeof run.thoughts === 'string' && run.thoughts.length > 0;
+            if (!hasStreamText && !hasThoughts) return;
+
+            this.messageHandler.handleStreamUpdate({
+                action: 'GEMINI_STREAM_UPDATE',
+                sessionId: run.sessionId,
+                text: run.text || '',
+                thoughts: run.thoughts || '',
+            });
+        });
+
+        this.ui.setLoading?.(this.isCurrentSessionGenerating());
+        this.sessionFlow.refreshHistoryUI();
+    }
+
     togglePageContext() {
         this.pageContextActive = !this.pageContextActive;
         this.ui.chat.togglePageContext(this.pageContextActive);
@@ -376,7 +415,8 @@ export class AppController {
 
     saveCurrentInputDraft() {
         const value = this.ui.getInputValue?.() ?? this.ui.inputFn?.value ?? '';
-        this.saveInputDraftForContext(this.currentTabId, this.sessionManager.currentSessionId, value);
+        const sessionId = this.sessionManager.currentSessionId || this.boundSessionId;
+        this.saveInputDraftForContext(this.currentTabId, sessionId, value);
     }
 
     restoreCurrentInputDraft() {
@@ -468,7 +508,7 @@ export class AppController {
             this.currentTabTitle = payload?.title || '';
             this.boundSessionId = payload?.sessionId || null;
             const draftKey = this.getInputDraftKey(this.currentTabId, this.boundSessionId);
-            if (draftKey) {
+            if (draftKey && Object.prototype.hasOwnProperty.call(payload || {}, 'draft')) {
                 const draft = typeof payload?.draft === 'string' ? payload.draft : '';
                 if (draft) this.inputDrafts.set(draftKey, draft);
                 else this.inputDrafts.delete(draftKey);
@@ -554,6 +594,10 @@ export class AppController {
         }
 
         if (action === 'BACKGROUND_MESSAGE' && payload && typeof payload === 'object') {
+            if (payload.action === 'ACTIVE_PROMPT_RUNS') {
+                this.restoreActivePromptRuns(payload.runs);
+                return;
+            }
             if (payload.action === 'SWITCH_SESSION') {
                 this.switchToSession(payload.sessionId);
                 return;

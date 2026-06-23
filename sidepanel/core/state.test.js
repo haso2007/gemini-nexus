@@ -335,8 +335,50 @@ describe('StateManager tab ownership', () => {
             payload: {
                 tabId: 33,
                 sessionId: null,
+                draft: '',
                 title: 'Video',
                 url: 'https://www.youtube.com/watch?v=nU9c-PffHPg',
+            },
+        });
+    });
+
+    it('posts active prompt runs into the iframe during initialization', async () => {
+        setupChromeWithLocalData({
+            geminiSessions: [{ id: 'session-1', title: 'First session', messages: [] }],
+        });
+        chrome.runtime.sendMessage = vi.fn(() =>
+            Promise.resolve({
+                status: 'success',
+                runs: [
+                    {
+                        sessionId: 'session-1',
+                        text: 'Partial reply',
+                        thoughts: 'Thinking',
+                    },
+                ],
+            })
+        );
+        const frame = createFrame();
+        const manager = new StateManager(frame);
+
+        manager.init();
+        manager.markUiReady();
+        await Promise.resolve();
+
+        expect(chrome.runtime.sendMessage).toHaveBeenCalledWith({
+            action: 'GET_ACTIVE_PROMPT_RUNS',
+        });
+        expect(frame.postMessage).toHaveBeenCalledWith({
+            action: 'BACKGROUND_MESSAGE',
+            payload: {
+                action: 'ACTIVE_PROMPT_RUNS',
+                runs: [
+                    {
+                        sessionId: 'session-1',
+                        text: 'Partial reply',
+                        thoughts: 'Thinking',
+                    },
+                ],
             },
         });
     });
@@ -500,6 +542,7 @@ describe('StateManager tab ownership', () => {
                 payload: {
                     tabId: null,
                     sessionId: null,
+                    draft: '',
                     title: '',
                     url: '',
                 },
@@ -537,6 +580,7 @@ describe('StateManager tab ownership', () => {
             payload: {
                 tabId: 33,
                 sessionId: null,
+                draft: '',
                 title: 'Video',
                 url: 'https://www.youtube.com/watch?v=nU9c-PffHPg',
             },

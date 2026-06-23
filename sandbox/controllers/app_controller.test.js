@@ -3,6 +3,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SessionManager } from '../core/session_manager.js';
 import { AppController } from './app_controller.js';
+import { appendMessage } from '../render/message.js';
 import { saveSessionsToStorage, sendToBackground } from '../../shared/messaging/index.js';
 
 vi.mock('../render/message.js', () => ({
@@ -102,6 +103,14 @@ function realSession(overrides = {}) {
 describe('AppController session restore behavior', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        appendMessage.mockImplementation(() => ({
+            addImages: vi.fn(),
+            addSources: vi.fn(),
+            div: document.createElement('div'),
+            dispose: vi.fn(),
+            finalize: vi.fn(),
+            update: vi.fn(),
+        }));
         vi.spyOn(window.parent, 'postMessage').mockImplementation(() => {});
     });
 
@@ -320,8 +329,86 @@ describe('AppController session restore behavior', () => {
             [expect.objectContaining({ id: 'group-1' })],
             sessionManager.currentSessionId,
             expect.objectContaining({ onAddGroup: expect.any(Function) }),
-            { isGenerating: false, generatingSessionId: null }
+            expect.objectContaining({ isGenerating: false, generatingSessionId: null })
         );
+    });
+
+    it('restores active prompt runs from the background after reopening', async () => {
+        const { app, sessionManager, ui } = createAppHarness();
+        sessionManager.setSessions([realSession()]);
+        sessionManager.setCurrentId('real');
+
+        await app.handleIncomingMessage({
+            data: {
+                action: 'BACKGROUND_MESSAGE',
+                payload: {
+                    action: 'ACTIVE_PROMPT_RUNS',
+                    runs: [
+                        {
+                            sessionId: 'real',
+                            startedAt: 12345,
+                            model: 'gemini-test',
+                            text: 'Partial reply',
+                            thoughts: 'Thinking',
+                        },
+                    ],
+                },
+            },
+        });
+
+        expect(app.isSessionGenerating('real')).toBe(true);
+        expect(ui.setLoading).toHaveBeenLastCalledWith(true);
+        expect(ui.renderHistoryList).toHaveBeenCalledWith(
+            [expect.objectContaining({ id: 'real' })],
+            [],
+            'real',
+            expect.objectContaining({ onAddGroup: expect.any(Function) }),
+            expect.objectContaining({
+                isGenerating: true,
+                generatingSessionId: 'real',
+                generatingSessionIds: ['real'],
+            })
+        );
+        expect(appendMessage).toHaveBeenCalledWith(
+            ui.historyDiv,
+            '',
+            'ai',
+            null,
+            '',
+            null,
+            expect.objectContaining({ isStreaming: true })
+        );
+        expect(appendMessage.mock.results[0].value.update).toHaveBeenCalledWith(
+            'Partial reply',
+            'Thinking',
+            expect.objectContaining({ isStreaming: true })
+        );
+    });
+
+    it('ignores stale active prompt snapshots after a reply is already restored', async () => {
+        const { app, sessionManager, ui } = createAppHarness();
+        sessionManager.setSessions([
+            realSession({
+                messages: [
+                    { role: 'user', text: 'Hello' },
+                    { role: 'ai', text: 'Already done' },
+                ],
+            }),
+        ]);
+        sessionManager.setCurrentId('real');
+
+        await app.handleIncomingMessage({
+            data: {
+                action: 'BACKGROUND_MESSAGE',
+                payload: {
+                    action: 'ACTIVE_PROMPT_RUNS',
+                    runs: [{ sessionId: 'real', text: 'Late partial' }],
+                },
+            },
+        });
+
+        expect(app.isSessionGenerating('real')).toBe(false);
+        expect(ui.setLoading).not.toHaveBeenCalledWith(true);
     });
 
     it('rerenders the current chat when storage updates add an AI reply', async () => {

@@ -101,6 +101,19 @@ export class PromptHandler {
         return !run || run.cancelled || this.activeRuns.get(run.runKey) !== run;
     }
 
+    getActiveRunSnapshots() {
+        return Array.from(this.activeRuns.values())
+            .filter((run) => run && !run.cancelled && run.sessionId)
+            .map((run) => ({
+                sessionId: run.sessionId,
+                startedAt: run.startedAt,
+                model: run.request?.model || null,
+                text: run.lastText || '',
+                thoughts: run.lastThoughts || '',
+                sidePanelTabId: run.request?.sidePanelTabId || null,
+            }));
+    }
+
     handle(request, sendResponse) {
         const sessionId = request.sessionId || null;
         const runKey = this.getRunKey(sessionId);
@@ -110,12 +123,17 @@ export class PromptHandler {
             runKey,
             sessionId,
             request,
+            startedAt: Date.now(),
+            lastText: '',
+            lastThoughts: '',
             cancelled: false,
         };
         this.activeRuns.set(runKey, run);
 
         (async () => {
             const onUpdate = (partialText, partialThoughts) => {
+                run.lastText = partialText || '';
+                run.lastThoughts = partialThoughts || '';
                 // Catch errors if receiver (UI) is closed/unavailable
                 chrome.runtime
                     .sendMessage({

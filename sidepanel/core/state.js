@@ -294,6 +294,27 @@ export class StateManager {
         this.replayPendingSidePanelActions();
 
         restoreMessages.afterPendingActions.forEach((message) => this.frame.postMessage(message));
+        this.postActivePromptRuns();
+    }
+
+    postActivePromptRuns() {
+        if (!chrome.runtime || typeof chrome.runtime.sendMessage !== 'function') return;
+
+        chrome.runtime
+            .sendMessage({ action: 'GET_ACTIVE_PROMPT_RUNS' })
+            .then((response) => {
+                const runs = Array.isArray(response?.runs) ? response.runs : [];
+                if (runs.length === 0 || !this.hasInitialized || !this.frame.getWindow()) return;
+
+                this.frame.postMessage({
+                    action: 'BACKGROUND_MESSAGE',
+                    payload: {
+                        action: 'ACTIVE_PROMPT_RUNS',
+                        runs,
+                    },
+                });
+            })
+            .catch(() => {});
     }
 
     replayPendingSidePanelActions() {

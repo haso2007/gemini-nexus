@@ -119,6 +119,52 @@ describe('PromptHandler concurrency', () => {
         expect(secondResponse).toHaveBeenCalledWith({ status: 'completed' });
     });
 
+    it('exposes active run snapshots with the latest stream update', async () => {
+        const pending = deferred();
+        let streamUpdate;
+        const sessionManager = {
+            cancelCurrentRequest: vi.fn(),
+            handleSendPrompt: vi.fn((request, onUpdate) => {
+                streamUpdate = onUpdate;
+                return pending.promise;
+            }),
+        };
+        const handler = new PromptHandler(sessionManager, null, null);
+
+        handler.handle(
+            {
+                action: 'SEND_PROMPT',
+                text: 'hello',
+                model: 'gemini-test',
+                sessionId: 'session-1',
+                sidePanelTabId: 42,
+            },
+            vi.fn()
+        );
+        await vi.waitFor(() => expect(sessionManager.handleSendPrompt).toHaveBeenCalledTimes(1));
+
+        streamUpdate('Partial reply', 'Thinking');
+
+        expect(handler.getActiveRunSnapshots()).toEqual([
+            expect.objectContaining({
+                sessionId: 'session-1',
+                model: 'gemini-test',
+                text: 'Partial reply',
+                thoughts: 'Thinking',
+                sidePanelTabId: 42,
+                startedAt: expect.any(Number),
+            }),
+        ]);
+
+        pending.resolve({
+            action: 'GEMINI_REPLY',
+            sessionId: 'session-1',
+            status: 'success',
+            text: 'done',
+        });
+        await flushPromises();
+    });
+
     it('uses the user browser-control prompt as the native tab group title', async () => {
         globalThis.chrome = {
             runtime: {

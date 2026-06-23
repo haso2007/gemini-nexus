@@ -18,6 +18,14 @@ export class SessionMessageHandler {
             return this.promptHandler.handle(request, sendResponse);
         }
 
+        if (request.action === 'GET_ACTIVE_PROMPT_RUNS') {
+            sendResponse({
+                status: 'success',
+                runs: this.promptHandler.getActiveRunSnapshots(),
+            });
+            return false;
+        }
+
         // --- QUICK ASK (CONTENT SCRIPT) ---
         if (request.action === 'QUICK_ASK') {
             this.quickAskHandler.handleQuickAsk(request, sender).finally(() => {
