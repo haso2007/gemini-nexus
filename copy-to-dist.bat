@@ -17,6 +17,9 @@ if not exist "%DIST%" (
 echo Copying manifest.json...
 copy "%ROOT%manifest.json" "%DIST%\manifest.json" > nul
 
+echo Copying logo.png...
+copy "%ROOT%logo.png" "%DIST%\logo.png" > nul
+
 echo Copying background folder...
 xcopy "%ROOT%background" "%DIST%\background\" /E /I /Y /Q
 
