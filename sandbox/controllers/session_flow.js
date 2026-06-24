@@ -58,6 +58,15 @@ export class SessionFlowController {
     }
 
     switchToSession(sessionId, options = {}) {
+        const alreadyCurrent =
+            !options.force &&
+            this.sessionManager.currentSessionId === sessionId;
+        if (alreadyCurrent) {
+            this.app.boundSessionId = sessionId;
+            this.app.saveCurrentTabSessionBinding(sessionId);
+            return;
+        }
+
         this.app.messageHandler.resetStream();
 
         this.sessionManager.setCurrentId(sessionId);

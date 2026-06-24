@@ -156,22 +156,15 @@ async function closeControlledSidePanel(context, tabId) {
 }
 
 function queueSidePanelFollowupMessages(request, sender) {
+    if (request.mode !== 'browser_control') return;
+
     const sendMessage = chrome.runtime?.sendMessage?.bind(chrome.runtime);
     if (!sendMessage) return;
 
     setTimeout(() => {
-        if (request.sessionId) {
-            sendMessage({
-                action: 'SWITCH_SESSION',
-                tabId: sender.tab.id,
-                sessionId: request.sessionId,
-            }).catch(() => {});
-        }
-        if (request.mode === 'browser_control') {
-            sendMessage({
-                action: 'ACTIVATE_BROWSER_CONTROL',
-                tabId: sender.tab.id,
-            }).catch(() => {});
-        }
+        sendMessage({
+            action: 'ACTIVATE_BROWSER_CONTROL',
+            tabId: sender.tab.id,
+        }).catch(() => {});
     }, 500);
 }
