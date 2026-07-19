@@ -144,6 +144,17 @@ npm install
 npm run package:extension
 ```
 
+> **重要：每次改完源码都要重新打包。**  
+> `artifacts/chrome-extension` 是**生成产物**目录，不是源码本身。改了 `manifest.json`、`package.json`、`sidepanel/`、`sandbox/`、`background/` 等源码后，**不会**自动更新这个目录。浏览器里点 **重新加载 (Reload)** 也只是重新读取已经打好的包，所以旧包会继续显示旧版本（例如源码已升到 `9.0.5`，扩展管理里仍显示 `9.0.4`）。  
+> 只要你希望浏览器里跑到最新改动，就再执行一次：
+>
+> ```bash
+> npm run package:extension
+> ```
+>
+> 然后再对扩展点 **重新加载**（或移除后重新加载 `artifacts/chrome-extension`）。  
+> `npm run package:extension` 会执行 `vite build`，并把完整扩展（含当前 `manifest.json` 版本号）写入 `artifacts/chrome-extension`。
+
 ##### 加载打包后的扩展（推荐）
 
 打包完成后，请用 **"加载已解压的扩展程序"**，并且**只选择**下面这个目录：
@@ -164,6 +175,7 @@ C:\path\to\gemini-nexus\artifacts\chrome-extension
 2. 开启 **开发者模式**。
 3. 若是覆盖本地旧构建，先**移除旧扩展**。
 4. 点击 **加载已解压的扩展程序**，选择 `artifacts/chrome-extension`。
+5. 之后每次改完源码：先再跑 `npm run package:extension`，再在扩展卡片上点 **重新加载**（若版本号仍旧，则移除后重新加载）。
 
 **不要**把下面这些路径当作扩展根目录加载：
 

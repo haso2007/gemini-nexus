@@ -144,6 +144,17 @@ npm install
 npm run package:extension
 ```
 
+> **Important: re-package after every source change.**  
+> `artifacts/chrome-extension` is a **generated** install directory. Editing source (`manifest.json`, `package.json`, `sidepanel/`, `sandbox/`, `background/`, etc.) does **not** update it automatically. Browser **Reload** only re-reads the already packaged folder, so an outdated package keeps showing the old version (for example still `9.0.4` after a bump to `9.0.5`).  
+> After any code or version change you care about in the browser:
+>
+> ```bash
+> npm run package:extension
+> ```
+>
+> Then reload (or remove + load again) the extension from `artifacts/chrome-extension`.  
+> `npm run package:extension` runs `vite build` and writes a complete package into `artifacts/chrome-extension` (including the current `manifest.json` version).
+
 ##### Load the packaged extension (recommended)
 
 After packaging, use **Load unpacked** and select **only** this directory:
@@ -164,6 +175,7 @@ Steps:
 2. Enable **Developer mode**.
 3. Remove any previous Gemini Nexus install if you are upgrading a local build.
 4. Click **Load unpacked** and choose `artifacts/chrome-extension`.
+5. After later source changes: run `npm run package:extension` again, then click **Reload** on the extension card (or remove + load again if the version still looks stale).
 
 Do **not** load these paths as the extension root:
 
