@@ -24,6 +24,10 @@ function copySidepanelPreload(): Plugin {
 
 export default defineConfig(() => {
     return {
+        // Relative asset URLs are required for Chrome/Edge extension pages.
+        // Absolute `/assets/...` paths break sandboxed pages (no allow-same-origin)
+        // and can leave the side panel blank after load.
+        base: './',
         server: {
             port: 3000,
             host: '0.0.0.0',

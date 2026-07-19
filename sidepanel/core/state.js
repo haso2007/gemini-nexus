@@ -107,6 +107,7 @@ export class StateManager {
         this.currentTabId = this.ownerTabId ?? (this.isStandalonePage ? null : undefined);
         this.uiIsReady = false;
         this.hasInitialized = false;
+        this._lastPostedContextPayload = null;
     }
 
     init() {
@@ -190,7 +191,10 @@ export class StateManager {
 
         chrome.storage.onChanged.addListener((changes, areaName) => {
             if (areaName === 'session') {
-                if (changes.geminiSidePanelSessionBindings || changes.geminiSidePanelInputDrafts) {
+                const hadBindingsChange = !!changes.geminiSidePanelSessionBindings;
+                const hadDraftsChange = !!changes.geminiSidePanelInputDrafts;
+
+                if (hadBindingsChange || hadDraftsChange) {
                     this.sessionStorageData = {
                         ...(this.sessionStorageData || {}),
                         geminiSidePanelSessionBindings:
@@ -202,7 +206,9 @@ export class StateManager {
                                 this.sessionStorageData?.geminiSidePanelInputDrafts
                         ),
                     };
-                    if (changes.geminiSidePanelSessionBindings) this.postCurrentTabContext();
+                    // Fix 2: Only post tab context when bindings actually changed.
+                    // Draft-only changes should not trigger a full context re-post.
+                    if (hadBindingsChange) this.postCurrentTabContext();
                 }
                 return;
             }
@@ -458,15 +464,22 @@ export class StateManager {
         const tabMatchesCurrent = tab && tab.id === this.currentTabId;
         const draft = this.getInputDraft(this.currentTabId, boundSessionId);
 
+        // Fix 1: Skip posting if the payload is identical to the last one sent.
+        // This breaks the storage write → onChanged → postMessage → handler → storage write cycle.
+        const payload = {
+            tabId: this.currentTabId,
+            sessionId: boundSessionId,
+            draft,
+            url: tabMatchesCurrent ? tab.url || '' : '',
+            title: tabMatchesCurrent ? tab.title || '' : '',
+        };
+        const payloadKey = JSON.stringify(payload);
+        if (this._lastPostedContextPayload === payloadKey) return;
+        this._lastPostedContextPayload = payloadKey;
+
         this.frame.postMessage({
             action: 'RESTORE_SIDE_PANEL_TAB_CONTEXT',
-            payload: {
-                tabId: this.currentTabId,
-                sessionId: boundSessionId,
-                draft,
-                url: tabMatchesCurrent ? tab.url || '' : '',
-                title: tabMatchesCurrent ? tab.title || '' : '',
-            },
+            payload,
         });
     }
 

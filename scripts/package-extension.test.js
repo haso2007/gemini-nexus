@@ -147,6 +147,7 @@ describe('package-extension', () => {
                 [
                     '<link rel="stylesheet" href="/assets/sidepanel.css">',
                     '<link rel="stylesheet" href="./assets/theme.css?v=1">',
+                    '<link rel="stylesheet" href="../assets/parent.css">',
                     '<script type="module" src="/assets/sidepanel.js"></script>',
                 ].join('\n'),
                 'utf8'
@@ -156,12 +157,14 @@ describe('package-extension', () => {
             expect(
                 await findMissingPackagedAssetReferences(packageRoot, ['sidepanel/index.html'])
             ).toEqual([
+                'sidepanel/index.html -> assets/parent.css',
                 'sidepanel/index.html -> assets/sidepanel.css',
                 'sidepanel/index.html -> assets/theme.css',
             ]);
 
             await writeFile(path.join(packageRoot, 'assets/sidepanel.css'), '', 'utf8');
             await writeFile(path.join(packageRoot, 'assets/theme.css'), '', 'utf8');
+            await writeFile(path.join(packageRoot, 'assets/parent.css'), '', 'utf8');
 
             expect(
                 await findMissingPackagedAssetReferences(packageRoot, ['sidepanel/index.html'])

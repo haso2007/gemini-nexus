@@ -58,6 +58,16 @@ export class SessionFlowController {
     }
 
     switchToSession(sessionId, options = {}) {
+        // Fix 5: No-op when switching to the already-active session with no scroll restoration.
+        // This prevents unnecessary saveCurrentTabSessionBinding → storage write → feedback loops.
+        if (
+            sessionId &&
+            sessionId === this.sessionManager.currentSessionId &&
+            !options.restoreScrollState
+        ) {
+            return;
+        }
+
         this.app.messageHandler.resetStream();
 
         this.sessionManager.setCurrentId(sessionId);

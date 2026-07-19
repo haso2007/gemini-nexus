@@ -129,7 +129,13 @@ export function collectPackagedAssetReferences(html) {
     const attributePattern = /\b(?:href|src)=["']([^"']+)["']/g;
 
     for (const match of html.matchAll(attributePattern)) {
-        const cleanReference = match[1].split(/[?#]/)[0].replace(/^\/+/, '').replace(/^\.\//, '');
+        // Normalize absolute (`/assets/...`), same-dir (`./assets/...`), and
+        // parent-relative (`../assets/...`) Vite URLs to package-root paths.
+        let cleanReference = match[1].split(/[?#]/)[0];
+        cleanReference = cleanReference.replace(/^(\.\/)+/, '').replace(/^\/+/, '');
+        while (cleanReference.startsWith('../')) {
+            cleanReference = cleanReference.slice(3);
+        }
         if (cleanReference.startsWith('assets/')) {
             references.add(cleanReference);
         }

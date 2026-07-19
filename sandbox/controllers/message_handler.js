@@ -217,8 +217,6 @@ export class MessageHandler {
             }
         }
         this.clearStreamState(sessionId);
-        this.ui.setLoading(this.isCurrentSessionGenerating());
-        this.app.sessionFlow.refreshHistoryUI();
 
         // Background session completion: keep the current visible stream untouched.
         if (!this.isCurrentSessionMessage(request)) {
@@ -226,10 +224,15 @@ export class MessageHandler {
             if (targetSession && request.status === 'success') {
                 this.sessionManager.updateContext(sessionId, request.context);
             }
+            // Only refresh history UI (sidebar) — skip full chat re-render for background sessions.
+            this.app.sessionFlow.refreshHistoryUI();
             return;
         }
 
-        // Current session: render the reply normally
+        // Current session: render the reply normally and refresh sidebar.
+        this.ui.setLoading(this.isCurrentSessionGenerating());
+        this.app.sessionFlow.refreshHistoryUI();
+
         const session = this.sessionManager.getCurrentSession();
         renderGeminiReply(this, session, request);
 

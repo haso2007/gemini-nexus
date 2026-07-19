@@ -461,6 +461,8 @@ export class AppController {
             return;
         }
         if (action === 'RESTORE_SIDE_PANEL_TAB_CONTEXT') {
+            // Save draft under old context BEFORE updating tab/session state.
+            // This ensures the previous session's draft is persisted.
             this.saveCurrentInputDraft();
 
             this.currentTabId = payload?.tabId || null;
@@ -499,7 +501,20 @@ export class AppController {
             this.sessionManager.setSessions(restoredSessions);
             this.sessionsRestored = true;
             this.sessionFlow.refreshHistoryUI();
-            if (this.sessionManager.sessions.length !== restoredSessions.length) {
+
+            // Fix 6: Only persist pruned sessions when the set of session IDs actually differs.
+            // Compare session IDs, not just lengths, to avoid false-trigger writes that
+            // could re-enter the storage-onChanged feedback loop.
+            const persistedIds = new Set(
+                this.sessionManager.sessions.map((s) => s.id).filter(Boolean)
+            );
+            const restoredIds = new Set(
+                restoredSessions.map((s) => s?.id).filter(Boolean)
+            );
+            const hasPruned =
+                persistedIds.size !== restoredIds.size ||
+                ![...restoredIds].every((id) => persistedIds.has(id));
+            if (hasPruned) {
                 saveSessionsToStorage(this.sessionManager.getPersistableSessions(), {
                     type: 'pruneSessions',
                 });
