@@ -134,7 +134,7 @@ Gemini Web 依赖逆向协议，可能随网站更新而变化。当前契约记
 #### 安装步骤
 
 1. 从 [Releases](https://github.com/yeahhe365/Gemini-Nexus/releases) 下载最新 ZIP 包并解压。
-2. Chrome 访问 `chrome://extensions/`，右上角开启 **"开发者模式"**。
+2. Chrome 访问 `chrome://extensions/`（Edge 访问 `edge://extensions/`），右上角开启 **"开发者模式"**。
 3. 点击 **"加载已解压的扩展程序"**，选择解压后的文件夹即可。
 
 #### 从源码构建与打包
@@ -144,24 +144,53 @@ npm install
 npm run package:extension
 ```
 
-打包完成后，Chrome 的 **"加载已解压的扩展程序"** 应选择 `artifacts/chrome-extension`。发布或手动安装推荐使用打包目录；`npm run build` 生成的 `dist/` 只是 Vite UI 构建产物，不是完整扩展目录。发布包会把多个 content scripts 按 `manifest.json` 中的顺序合并为单个 `content/index.js`，并重写包内 manifest，避免发布产物依赖一长串手工脚本顺序。
+##### 加载打包后的扩展（推荐）
 
-#### 开发调试：加载未打包扩展
+打包完成后，请用 **"加载已解压的扩展程序"**，并且**只选择**下面这个目录：
 
-如果只想快速测试修改，可以使用 `copy-to-dist.bat` 脚本将必要文件复制到 `dist/` 目录，然后在 Chrome 中加载该目录：
+```text
+artifacts/chrome-extension
+```
+
+Windows 示例路径：
+
+```text
+C:\path\to\gemini-nexus\artifacts\chrome-extension
+```
+
+步骤：
+
+1. 打开 `chrome://extensions/`（Chrome）或 `edge://extensions/`（Edge）。
+2. 开启 **开发者模式**。
+3. 若是覆盖本地旧构建，先**移除旧扩展**。
+4. 点击 **加载已解压的扩展程序**，选择 `artifacts/chrome-extension`。
+
+**不要**把下面这些路径当作扩展根目录加载：
+
+| 路径 | 为什么不对 |
+| :--- | :--------- |
+| 仓库根目录 | 源码布局不是发布用的完整运行时布局。 |
+| 只跑过 `npm run build` 的 `dist/` | 只有 Vite UI 产物，缺少完整打包（例如 content script 合并等）。半成品 `dist/` 可能导致侧栏空白。 |
+
+`npm run build` 只会在 `dist/` 里生成 Vite 管理的 UI 页面，**不是**可直接安装的完整扩展目录。日常安装 / 重装 / 给别人用的本地包，请始终使用：
+
+`npm run package:extension` → 加载 `artifacts/chrome-extension`。
+
+发布包会把多个 content scripts 按 `manifest.json` 中的顺序合并为单个 `content/index.js`，并重写包内 manifest，避免发布产物依赖一长串手工脚本顺序。
+
+##### 可选：用 `dist/` 做本地快速调试
+
+如果只是本地快速改代码验证，并且有意维护一份完整的 `dist/`：
 
 ```bash
 npm run build
-copy-to-dist.bat
+# Windows：构建后把扩展运行时文件复制进 dist/
+./copy-to-dist.bat
 ```
 
-然后在 Chrome 中：
-1. 访问 `chrome://extensions/`
-2. 开启 **开发者模式**
-3. 点击 **加载已解压的扩展程序**
-4. 选择项目根目录下的 `dist/` 文件夹
+然后再用 **"加载已解压的扩展程序"** 选择 `dist/`。
 
-> **注意**：`dist/` 目录仅用于开发调试，不包含完整的打包流程（如 content script 合并）。正式发布请使用 `npm run package:extension`。
+> **注意**：`dist/` 仅适合开发调试；正式发布、重新安装或分享本地构建时，请使用 `artifacts/chrome-extension`，不要只加载半成品的 `dist/`。
 
 #### 发布到 Chrome Web Store
 

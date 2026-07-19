@@ -134,7 +134,7 @@ The repository root is the runnable Chrome extension project root. `package.json
 #### Install from Release
 
 1. Download the latest ZIP from [Releases](https://github.com/yeahhe365/Gemini-Nexus/releases) and unzip it.
-2. Open `chrome://extensions/` in Chrome and enable **Developer mode** in the top-right corner.
+2. Open `chrome://extensions/` in Chrome (or `edge://extensions/` in Microsoft Edge) and enable **Developer mode** in the top-right corner.
 3. Click **Load unpacked** and select the extracted folder.
 
 #### Build and Package from Source
@@ -144,7 +144,49 @@ npm install
 npm run package:extension
 ```
 
-After packaging, choose `artifacts/chrome-extension` when using Chrome **Load unpacked**. For development, you can also load the repository root directly, but releases and manual installs should use the packaged directory. `npm run build` only creates the Vite UI output in `dist/`; it is not a complete extension directory. The package step merges multiple content scripts into a single `content/index.js` in `manifest.json` order and rewrites the packaged manifest, avoiding reliance on a long manual script list in release artifacts.
+##### Load the packaged extension (recommended)
+
+After packaging, use **Load unpacked** and select **only** this directory:
+
+```text
+artifacts/chrome-extension
+```
+
+Example on Windows:
+
+```text
+C:\path\to\gemini-nexus\artifacts\chrome-extension
+```
+
+Steps:
+
+1. Open `chrome://extensions/` (Chrome) or `edge://extensions/` (Edge).
+2. Enable **Developer mode**.
+3. Remove any previous Gemini Nexus install if you are upgrading a local build.
+4. Click **Load unpacked** and choose `artifacts/chrome-extension`.
+
+Do **not** load these paths as the extension root:
+
+| Path | Why it is wrong |
+| :--- | :-------------- |
+| Repository root | Source layout is not the packaged runtime layout used for releases. |
+| `dist/` after `npm run build` only | Vite UI output only. Missing complete runtime packaging (for example content-script bundling used by the package step). A half-built `dist/` can open a blank side panel. |
+
+`npm run build` only creates Vite UI pages under `dist/`. It is **not** a complete extension directory for install. Always prefer `npm run package:extension` → load `artifacts/chrome-extension`.
+
+The package step merges multiple content scripts into a single `content/index.js` in `manifest.json` order and rewrites the packaged manifest, avoiding reliance on a long manual script list in release artifacts.
+
+##### Optional: local `dist/` for quick iteration
+
+If you only need a fast local loop and intentionally maintain a complete `dist/`:
+
+```bash
+npm run build
+# Windows helper: copies runtime files into dist/ after the Vite build
+./copy-to-dist.bat
+```
+
+Then load `dist/` with **Load unpacked**. This path is for development only. For release, reinstall, or sharing a local build with others, use `artifacts/chrome-extension`.
 
 #### Publish to Chrome Web Store
 
