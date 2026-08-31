@@ -148,17 +148,18 @@ npm run package:extension
 
 #### 开发调试：加载未打包扩展
 
-如果只想快速测试修改，可以使用 `copy-to-dist.bat` 脚本将必要文件复制到 `dist/` 目录，然后在 Chrome 中加载该目录：
+如果只想快速测试修改，可以使用 `copy-to-dist.bat` 脚本将必要文件复制到 `dist/` 目录，然后在 Chrome 或 Edge 中加载该目录：
 
 ```bash
 npm run build
 copy-to-dist.bat
 ```
 
-然后在 Chrome 中：
-1. 访问 `chrome://extensions/`
-2. 开启 **开发者模式**
-3. 点击 **加载已解压的扩展程序**
+然后在浏览器中：
+
+1. Chrome 访问 `chrome://extensions/`，或 Edge 访问 `edge://extensions/`
+2. 开启 **开发者模式**（Edge 为 **开发人员模式**）
+3. 点击 **加载已解压的扩展程序**（Edge 为 **加载解压缩的扩展**）
 4. 选择项目根目录下的 `dist/` 文件夹
 
 > **注意**：`dist/` 目录仅用于开发调试，不包含完整的打包流程（如 content script 合并）。正式发布请使用 `npm run package:extension`。

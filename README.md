@@ -144,7 +144,25 @@ npm install
 npm run package:extension
 ```
 
-After packaging, choose `artifacts/chrome-extension` when using Chrome **Load unpacked**. For development, you can also load the repository root directly, but releases and manual installs should use the packaged directory. `npm run build` only creates the Vite UI output in `dist/`; it is not a complete extension directory. The package step merges multiple content scripts into a single `content/index.js` in `manifest.json` order and rewrites the packaged manifest, avoiding reliance on a long manual script list in release artifacts.
+After packaging, choose `artifacts/chrome-extension` when using Chrome or Edge **Load unpacked**. For development, you can also load the repository root directly, but releases and manual installs should use the packaged directory. `npm run build` only creates the Vite UI output in `dist/`; it is not a complete extension directory. The package step merges multiple content scripts into a single `content/index.js` in `manifest.json` order and rewrites the packaged manifest, avoiding reliance on a long manual script list in release artifacts.
+
+#### Development: load the unpacked `dist/` directory
+
+For a quick local test, copy the extension runtime files into `dist/` and load that folder in Chrome or Edge:
+
+```bash
+npm run build
+copy-to-dist.bat
+```
+
+Then:
+
+1. Open `chrome://extensions/` in Chrome, or `edge://extensions/` in Edge
+2. Enable **Developer mode**
+3. Click **Load unpacked**
+4. Select the `dist/` folder at the repository root
+
+> **Note**: `dist/` is for development only and skips the full packaging pipeline (such as content-script merging). Use `npm run package:extension` for release or manual install artifacts.
 
 #### Publish to Chrome Web Store
 
