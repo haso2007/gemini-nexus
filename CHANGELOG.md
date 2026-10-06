@@ -1,5 +1,11 @@
 # Changelog
 
+## v9.0.5 - 2026-10-06
+
+- **Gemini 3.8 Flash 适配**：从上游合入 Google 最新首选模型 **Gemini 3.8 Flash**。
+    - Web 逆向免 Key 渠道：默认 Flash 模型标签升级为 `3.8 Flash`（哈希 `56fdd199312815e2`），请求契约使用 `legacyMode: 2` 与 capabilities `[4,5,6,8,4,5,6,8]`，新增 `gemini-3.8-flash` 别名，向后兼容 `gemini-3.7-flash` / `gemini-3.5-flash`。
+    - 官方 API 渠道：默认模型更新为 `gemini-3.8-flash`，默认模型列表更新为 `gemini-3.8-flash, gemini-3.5-flash-lite, gemini-3.1-pro-preview`；旧 ID `gemini-3-flash-preview` 等映射到 `gemini-3.8-flash`。
+
 ## v5.0.12 - 2026-06-07
 
 - 替换 Gemini 去水印实现，接入 `gemini-watermark-remover-extension` 的 GWR 主世界脚本与处理 runtime。

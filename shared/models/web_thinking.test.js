@@ -47,6 +47,8 @@ describe('web thinking helpers', () => {
     });
 
     it('only supports known Gemini Web reverse models', () => {
+        expect(supportsWebThinking('gemini-3.8-flash')).toBe(true);
+        expect(supportsWebThinking('gemini-3.7-flash')).toBe(true);
         expect(supportsWebThinking('gemini-3-flash-thinking')).toBe(true);
         expect(supportsWebThinking('gpt-5')).toBe(false);
     });

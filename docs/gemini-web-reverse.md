@@ -1,6 +1,6 @@
 # Gemini Web Reverse Contract
 
-Last verified with `js-reverse`: 2026-05-26, `https://gemini.google.com/app`, locale `zh-CN`.
+Last verified: 2026-09-03 (Gemini 3.8 Flash GA lineup on Gemini Web; `56fdd199312815e2` model contract verified against live web session; older model hashes cross-checked against public reverse catalogs; protocol tokens last captured with `js-reverse` on 2026-05-26, `https://gemini.google.com/app`, locale `zh-CN`).
 
 This document records the Gemini Web assumptions used by the reverse provider. Gemini Web is not a public API, so these details should be treated as a contract that can drift.
 
@@ -15,8 +15,8 @@ Supported:
 - Upload image attachments through the current push upload endpoint before `StreamGenerate`.
 - Parse streamed text, thoughts, continuation ids, and hosted generated-image URLs.
 - Expose the current Gemini Web chat modes:
+    - `56fdd199312815e2` -> `3.8 Flash` (default)
     - `8c46e95b1a07cecc` -> `3.1 Flash-Lite`
-    - `56fdd199312815e2` -> `3.5 Flash`
     - `e6fa609c3fa255c0` -> `3.1 Pro`
 
 Not claimed as complete:
@@ -67,7 +67,7 @@ Current field observations from `BardChatUi`:
 | :--------------- | :----------------------------------------- |
 | `4`              | Selected model hash                        |
 | `7`              | Temporary-chat flag                        |
-| `8`              | Client capabilities, currently `[4,5,6,8]` |
+| `8`              | Client capabilities; 3.8 Flash currently uses `[4,5,6,8,4,5,6,8]` |
 | `11`             | Legacy model/mode value retained by Nexus  |
 | `14`             | Native mode category                       |
 | `15`             | Native thinking level                      |

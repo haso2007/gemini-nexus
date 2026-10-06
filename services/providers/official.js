@@ -141,8 +141,15 @@ function buildMessageContent(historyMessage, targetModel) {
 }
 
 function normalizeOfficialModel(model) {
-    if (model === 'gemini-3-flash') return 'gemini-3-flash-preview';
-    if (model === 'gemini-3-flash-thinking') return 'gemini-3-flash-preview';
+    if (
+        model === 'gemini-3-flash' ||
+        model === 'gemini-3-flash-preview' ||
+        model === 'gemini-3-flash-thinking' ||
+        model === 'gemini-3.5-flash' ||
+        model === 'gemini-3.7-flash'
+    ) {
+        return 'gemini-3.8-flash';
+    }
     if (model === 'gemini-3-pro') return 'gemini-3.1-pro-preview';
     if (model === 'gemini-3-pro-preview') return 'gemini-3.1-pro-preview';
     return model;
