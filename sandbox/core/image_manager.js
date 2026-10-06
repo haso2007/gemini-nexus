@@ -225,6 +225,19 @@ export class ImageManager {
         return [...this.files];
     }
 
+    setFiles(files = []) {
+        this.files = Array.isArray(files)
+            ? files
+                  .filter((file) => file && typeof file.base64 === 'string')
+                  .map((file) => ({
+                      base64: file.base64,
+                      type: typeof file.type === 'string' ? file.type : 'application/octet-stream',
+                      name: typeof file.name === 'string' ? file.name : 'attachment',
+                  }))
+            : [];
+        this._render();
+    }
+
     _render() {
         this.imagePreview.innerHTML = '';
 

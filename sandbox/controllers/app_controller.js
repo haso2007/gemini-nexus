@@ -208,11 +208,12 @@ export class AppController {
         this.isVisible = visible;
 
         if (visible) {
+            this.restoreCurrentComposerState();
             console.log('[Gemini Nexus] Sandbox became visible, resuming');
             // When becoming visible, ensure the UI is properly displayed
             // The streaming state is preserved, so ongoing streams will continue
         } else {
-            this.saveCurrentInputDraft();
+            this.saveCurrentComposerState();
             console.log('[Gemini Nexus] Sandbox became hidden (tab switched away)');
             // When hidden, we keep the state but don't need to do anything special
             // Fetch streams will continue in the background
@@ -343,17 +344,81 @@ export class AppController {
     }
 
     getInputDraftKey(tabId = this.currentTabId, sessionId = this.sessionManager.currentSessionId) {
+        if (sessionId) return `session:${sessionId}`;
+        if (Number.isInteger(tabId) && tabId > 0) return `draft:${tabId}`;
+        return 'draft';
+    }
+
+    getLegacyInputDraftKey(tabId = this.currentTabId, sessionId = this.sessionManager.currentSessionId) {
         if (!Number.isInteger(tabId) || tabId <= 0) return null;
         return sessionId ? `tab:${tabId}|session:${sessionId}` : `tab:${tabId}|draft`;
     }
 
+    normalizeComposerDraft(value) {
+        if (typeof value === 'string') return { text: value, files: [] };
+        if (!value || typeof value !== 'object' || Array.isArray(value)) {
+            return { text: '', files: [] };
+        }
+        const files = Array.isArray(value.files)
+            ? value.files.filter(
+                  (file) => file && typeof file === 'object' && typeof file.base64 === 'string'
+              )
+            : [];
+        return {
+            text: typeof value.text === 'string' ? value.text : '',
+            files,
+        };
+    }
+
+    isEmptyComposerDraft(value) {
+        const draft = this.normalizeComposerDraft(value);
+        return !draft.text && draft.files.length === 0;
+    }
+
+    readComposerSnapshot() {
+        return {
+            text: this.ui.getInputValue?.() ?? this.ui.inputFn?.value ?? '',
+            files: this.imageManager?.getFiles?.() || [],
+        };
+    }
+
+    applyComposerSnapshot(value) {
+        const draft = this.normalizeComposerDraft(value);
+        if (this.ui.setInputValue) {
+            this.ui.setInputValue(draft.text);
+        } else if (this.ui.inputFn) {
+            this.ui.inputFn.value = draft.text;
+        }
+        if (typeof this.imageManager?.setFiles === 'function') {
+            this.imageManager.setFiles(draft.files);
+        } else if (draft.files.length === 0) {
+            this.imageManager?.clearFile?.();
+        }
+    }
+
+    resolveComposerDraft(tabId, sessionId) {
+        const key = this.getInputDraftKey(tabId, sessionId);
+        const legacyKey = this.getLegacyInputDraftKey(tabId, sessionId);
+        return this.normalizeComposerDraft(
+            this.inputDrafts.get(key) || (legacyKey ? this.inputDrafts.get(legacyKey) : null)
+        );
+    }
+
+    hydrateComposerDrafts(rawDrafts) {
+        if (!rawDrafts || typeof rawDrafts !== 'object' || Array.isArray(rawDrafts)) return;
+        Object.entries(rawDrafts).forEach(([key, value]) => {
+            const draft = this.normalizeComposerDraft(value);
+            if (this.isEmptyComposerDraft(draft)) this.inputDrafts.delete(key);
+            else this.inputDrafts.set(key, draft);
+        });
+    }
+
     postInputDraftToHost(tabId, sessionId, value) {
-        if (!Number.isInteger(tabId) || tabId <= 0) return;
         window.parent.postMessage(
             {
                 action: 'SAVE_SIDE_PANEL_INPUT_DRAFT',
                 payload: {
-                    tabId,
+                    tabId: Number.isInteger(tabId) && tabId > 0 ? tabId : null,
                     sessionId: sessionId || null,
                     value,
                 },
@@ -364,37 +429,45 @@ export class AppController {
 
     saveInputDraftForContext(tabId, sessionId, value) {
         const key = this.getInputDraftKey(tabId, sessionId);
-        if (!key) return;
+        const legacyKey = this.getLegacyInputDraftKey(tabId, sessionId);
+        const draft = this.normalizeComposerDraft(value);
 
-        if (value) {
-            this.inputDrafts.set(key, value);
-        } else {
+        if (this.isEmptyComposerDraft(draft)) {
             this.inputDrafts.delete(key);
+            if (legacyKey) this.inputDrafts.delete(legacyKey);
+        } else {
+            this.inputDrafts.set(key, draft);
+            if (legacyKey) this.inputDrafts.delete(legacyKey);
         }
-        this.postInputDraftToHost(tabId, sessionId, value);
+        this.postInputDraftToHost(tabId, sessionId, draft);
     }
 
     saveCurrentInputDraft() {
-        const value = this.ui.getInputValue?.() ?? this.ui.inputFn?.value ?? '';
-        this.saveInputDraftForContext(this.currentTabId, this.sessionManager.currentSessionId, value);
+        this.saveCurrentComposerState();
+    }
+
+    saveCurrentComposerState() {
+        this.saveInputDraftForContext(
+            this.currentTabId,
+            this.sessionManager.currentSessionId,
+            this.readComposerSnapshot()
+        );
     }
 
     restoreCurrentInputDraft() {
-        const key = this.getInputDraftKey();
-        if (!key) return;
+        this.restoreCurrentComposerState();
+    }
 
-        const value = this.inputDrafts.get(key) || '';
-        if (this.ui.setInputValue) {
-            this.ui.setInputValue(value);
-        } else if (this.ui.inputFn) {
-            this.ui.inputFn.value = value;
-        }
+    restoreCurrentComposerState() {
+        this.applyComposerSnapshot(this.resolveComposerDraft());
     }
 
     clearInputDraftForContext(tabId = this.currentTabId, sessionId = this.sessionManager.currentSessionId) {
         const key = this.getInputDraftKey(tabId, sessionId);
-        if (key) this.inputDrafts.delete(key);
-        this.postInputDraftToHost(tabId, sessionId, '');
+        const legacyKey = this.getLegacyInputDraftKey(tabId, sessionId);
+        this.inputDrafts.delete(key);
+        if (legacyKey) this.inputDrafts.delete(legacyKey);
+        this.postInputDraftToHost(tabId, sessionId, { text: '', files: [] });
     }
 
     clearComposerDraftAfterSend(previousSessionId, currentSessionId) {
@@ -461,24 +534,26 @@ export class AppController {
             return;
         }
         if (action === 'RESTORE_SIDE_PANEL_TAB_CONTEXT') {
-            this.saveCurrentInputDraft();
+            this.saveCurrentComposerState();
 
             this.currentTabId = payload?.tabId || null;
             this.currentTabUrl = payload?.url || '';
             this.currentTabTitle = payload?.title || '';
             this.boundSessionId = payload?.sessionId || null;
-            const draftKey = this.getInputDraftKey(this.currentTabId, this.boundSessionId);
-            if (draftKey) {
-                const draft = typeof payload?.draft === 'string' ? payload.draft : '';
-                if (draft) this.inputDrafts.set(draftKey, draft);
+            this.hydrateComposerDrafts(payload?.drafts);
+            if (payload?.drafts == null && typeof payload?.draft === 'string') {
+                const draftKey = this.getInputDraftKey(this.currentTabId, this.boundSessionId);
+                if (payload.draft) this.inputDrafts.set(draftKey, { text: payload.draft, files: [] });
                 else this.inputDrafts.delete(draftKey);
             }
             this.ui.setPageContextAvailable?.(
                 Number.isInteger(this.currentTabId) && this.currentTabId > 0
             );
-            if (this.sessionsRestored && this.sidePanelScope === DEFAULT_SIDE_PANEL_SCOPE) {
-                this.restoreRememberedTabSession();
-                this.restoreCurrentInputDraft();
+            if (this.sessionsRestored) {
+                if (this.sidePanelScope === DEFAULT_SIDE_PANEL_SCOPE) {
+                    this.restoreRememberedTabSession();
+                }
+                this.restoreCurrentComposerState();
             }
             return;
         }
@@ -536,7 +611,7 @@ export class AppController {
 
                 if (this.sidePanelScope === DEFAULT_SIDE_PANEL_SCOPE) {
                     this.restoreRememberedTabSession();
-                    this.restoreCurrentInputDraft();
+                    this.restoreCurrentComposerState();
                 } else if (shouldRestore && sorted.length > 0) {
                     this.switchToSession(sorted[0].id);
                 } else {

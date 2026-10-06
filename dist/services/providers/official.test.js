@@ -156,6 +156,32 @@ describe('extractOfficialResponseData', () => {
         expect(url).toContain('/models/gemini-3.1-pro-preview:streamGenerateContent');
     });
 
+    it('maps legacy Gemini Flash UI aliases to gemini-3.8-flash', async () => {
+        global.fetch = vi.fn().mockResolvedValue({
+            ok: true,
+            body: makeSseStream('done'),
+        });
+
+        await sendOfficialMessage(
+            'Hello',
+            '',
+            [],
+            {
+                baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+                apiKey: 'key',
+                model: 'gemini-3-flash-preview',
+            },
+            'low',
+            [],
+            false,
+            null,
+            vi.fn()
+        );
+
+        const [url] = global.fetch.mock.calls[0];
+        expect(url).toContain('/models/gemini-3.8-flash:streamGenerateContent');
+    });
+
     it('does not send unsupported minimal thinking level to Gemini Pro models', async () => {
         global.fetch = vi.fn().mockResolvedValue({
             ok: true,

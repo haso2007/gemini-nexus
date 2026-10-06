@@ -214,7 +214,10 @@ export class PromptController {
             sessionId: currentId,
         });
         this.app.clearComposerDraftAfterSend?.(previousSessionId, currentId);
-        this.app.sessionFlow.switchToSession(currentId);
+        this.app.sessionFlow.switchToSession(currentId, {
+            saveComposer: false,
+            restoreComposer: false,
+        });
 
         if (session.context) {
             sendToBackground({

@@ -72,8 +72,16 @@ function createAppHarness() {
     const sessionManager = new SessionManager();
     const ui = createUi();
     const imageManager = {
-        getFiles: vi.fn(() => []),
-        clearFile: vi.fn(),
+        files: [],
+        getFiles: vi.fn(function getFiles() {
+            return [...this.files];
+        }),
+        setFiles: vi.fn(function setFiles(files = []) {
+            this.files = Array.isArray(files) ? [...files] : [];
+        }),
+        clearFile: vi.fn(function clearFile() {
+            this.files = [];
+        }),
     };
     const app = new AppController(sessionManager, ui, imageManager);
     return { app, sessionManager, ui };
@@ -235,6 +243,38 @@ describe('AppController session restore behavior', () => {
         expect(ui.inputFn.value).toBe('draft for tab two');
     });
 
+    it('keeps unsent composer drafts isolated when switching chats in the sidebar', async () => {
+        const { app, sessionManager, ui } = createAppHarness();
+        app.currentTabId = 1;
+        app.sidePanelScope = 'remembered_tabs';
+
+        await app.handleIncomingMessage(
+            restoreEvent([
+                realSession({ id: 'chat-1', title: 'Chat one' }),
+                realSession({ id: 'chat-2', title: 'Chat two' }),
+            ])
+        );
+        await app.handleIncomingMessage({
+            data: {
+                action: 'RESTORE_SIDE_PANEL_TAB_CONTEXT',
+                payload: { tabId: 1, sessionId: 'chat-1' },
+            },
+        });
+
+        ui.inputFn.value = 'unsent in chat 1';
+        app.switchToSession('chat-2');
+        expect(sessionManager.currentSessionId).toBe('chat-2');
+        expect(ui.inputFn.value).toBe('');
+
+        ui.inputFn.value = 'unsent in chat 2';
+        app.switchToSession('chat-1');
+        expect(sessionManager.currentSessionId).toBe('chat-1');
+        expect(ui.inputFn.value).toBe('unsent in chat 1');
+
+        app.switchToSession('chat-2');
+        expect(ui.inputFn.value).toBe('unsent in chat 2');
+    });
+
     it('removes a cached composer draft when the user clears the input', async () => {
         const { app, ui } = createAppHarness();
         app.sidePanelScope = 'remembered_tabs';
@@ -320,7 +360,7 @@ describe('AppController session restore behavior', () => {
             [expect.objectContaining({ id: 'group-1' })],
             sessionManager.currentSessionId,
             expect.objectContaining({ onAddGroup: expect.any(Function) }),
-            { isGenerating: false, generatingSessionId: null }
+            { isGenerating: false, generatingSessionId: null, generatingSessionIds: [] }
         );
     });
 

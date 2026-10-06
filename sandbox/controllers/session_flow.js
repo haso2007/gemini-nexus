@@ -46,18 +46,34 @@ export class SessionFlowController {
         this.enterDraft();
     }
 
+    restoreComposerState(options = {}) {
+        if (
+            options.restoreComposer !== false &&
+            typeof this.app.restoreCurrentComposerState === 'function'
+        ) {
+            this.app.restoreCurrentComposerState();
+            return;
+        }
+        this.ui.resetInput();
+        this.app.imageManager?.clearFile?.();
+    }
+
     enterDraft() {
+        this.app.saveCurrentComposerState?.();
         this.app.messageHandler.resetStream();
         this.sessionManager.enterDraft();
         this.app.boundSessionId = null;
         this.app.saveCurrentTabSessionBinding(null);
         this.ui.clearChatHistory();
-        this.ui.resetInput();
+        this.restoreComposerState();
         this.ui.setLoading?.(false);
         this.refreshHistoryUI();
     }
 
     switchToSession(sessionId, options = {}) {
+        if (options.saveComposer !== false) {
+            this.app.saveCurrentComposerState?.();
+        }
         this.app.messageHandler.resetStream();
 
         this.sessionManager.setCurrentId(sessionId);
@@ -131,7 +147,7 @@ export class SessionFlowController {
         this.app.saveCurrentTabSessionBinding(sessionId);
 
         this.refreshHistoryUI();
-        this.ui.resetInput();
+        this.restoreComposerState(options);
     }
 
     refreshHistoryUI() {

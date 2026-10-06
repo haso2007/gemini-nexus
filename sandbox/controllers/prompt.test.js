@@ -84,7 +84,10 @@ describe('PromptController.send', () => {
             sessionId: session.id,
         });
         expect(app.clearComposerDraftAfterSend).toHaveBeenCalledWith(null, session.id);
-        expect(app.sessionFlow.switchToSession).toHaveBeenCalledWith(session.id);
+        expect(app.sessionFlow.switchToSession).toHaveBeenCalledWith(session.id, {
+            saveComposer: false,
+            restoreComposer: false,
+        });
         expect(app.isGenerating).toBe(true);
         expect(app.generatingSessionId).toBe(session.id);
         expect(sendToBackground).toHaveBeenLastCalledWith(

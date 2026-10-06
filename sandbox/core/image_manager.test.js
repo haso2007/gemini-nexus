@@ -38,6 +38,20 @@ describe('ImageManager', () => {
         expect(card.querySelector('span').textContent).toBe('<img src=x onerror=alert(1)>spec.pdf');
     });
 
+    it('replaces composer attachments when restoring a chat snapshot', () => {
+        const manager = createHarness();
+        manager.addFile('data:image/png;base64,AAAA', 'image/png', 'old.png');
+
+        manager.setFiles([
+            { base64: 'data:image/jpeg;base64,BBBB', type: 'image/jpeg', name: 'restored.jpg' },
+        ]);
+
+        expect(manager.getFiles()).toEqual([
+            { base64: 'data:image/jpeg;base64,BBBB', type: 'image/jpeg', name: 'restored.jpg' },
+        ]);
+        expect(document.querySelectorAll('.preview-item')).toHaveLength(1);
+    });
+
     it('renders preview remove controls as accessible composer buttons', () => {
         const manager = createHarness();
 

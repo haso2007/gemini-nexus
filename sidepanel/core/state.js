@@ -1,6 +1,8 @@
 import { CONNECTION_STORAGE_KEYS } from '../../shared/settings/connection.js';
 import {
+    getLegacySidePanelInputDraftKey,
     getSidePanelInputDraftKey,
+    normalizeComposerDraft,
     normalizeSidePanelInputDrafts,
 } from './bridge_storage.js';
 import {
@@ -438,13 +440,17 @@ export class StateManager {
         return this.sessionStorageData?.geminiSidePanelSessionBindings || {};
     }
 
-    getInputDraft(tabId, sessionId) {
-        const key = getSidePanelInputDraftKey(tabId, sessionId);
-        if (!key) return '';
-        const drafts = normalizeSidePanelInputDrafts(
+    getInputDrafts() {
+        return normalizeSidePanelInputDrafts(
             this.sessionStorageData?.geminiSidePanelInputDrafts
         );
-        return typeof drafts[key] === 'string' ? drafts[key] : '';
+    }
+
+    getInputDraft(tabId, sessionId) {
+        const drafts = this.getInputDrafts();
+        const key = getSidePanelInputDraftKey(tabId, sessionId);
+        const legacyKey = getLegacySidePanelInputDraftKey(tabId, sessionId);
+        return normalizeComposerDraft(drafts[key] || (legacyKey ? drafts[legacyKey] : null));
     }
 
     postTabContextMessage(tab = null) {
@@ -463,7 +469,8 @@ export class StateManager {
             payload: {
                 tabId: this.currentTabId,
                 sessionId: boundSessionId,
-                draft,
+                draft: draft.text,
+                drafts: this.getInputDrafts(),
                 url: tabMatchesCurrent ? tab.url || '' : '',
                 title: tabMatchesCurrent ? tab.title || '' : '',
             },

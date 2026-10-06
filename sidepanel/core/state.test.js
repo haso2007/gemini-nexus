@@ -335,6 +335,8 @@ describe('StateManager tab ownership', () => {
             payload: {
                 tabId: 33,
                 sessionId: null,
+                draft: '',
+                drafts: {},
                 title: 'Video',
                 url: 'https://www.youtube.com/watch?v=nU9c-PffHPg',
             },
@@ -500,6 +502,8 @@ describe('StateManager tab ownership', () => {
                 payload: {
                     tabId: null,
                     sessionId: null,
+                    draft: '',
+                    drafts: {},
                     title: '',
                     url: '',
                 },
@@ -537,6 +541,8 @@ describe('StateManager tab ownership', () => {
             payload: {
                 tabId: 33,
                 sessionId: null,
+                draft: '',
+                drafts: {},
                 title: 'Video',
                 url: 'https://www.youtube.com/watch?v=nU9c-PffHPg',
             },

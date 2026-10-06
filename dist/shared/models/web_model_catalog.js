@@ -1,9 +1,11 @@
 (function () {
+    // Web model hashes verified against Gemini Web reverse catalogs and live Gemini Web requests.
+    // Labels follow the public GA lineup.
     const DEFAULT_WEB_MODEL = '56fdd199312815e2';
 
     const WEB_MODEL_OPTIONS = Object.freeze(
         [
-            { value: '56fdd199312815e2', label: '3.5 Flash' },
+            { value: '56fdd199312815e2', label: '3.8 Flash' },
             { value: '8c46e95b1a07cecc', label: '3.1 Flash-Lite' },
             { value: 'e6fa609c3fa255c0', label: '3.1 Pro' },
         ].map((option) => Object.freeze(option))
@@ -13,6 +15,8 @@
         'gemini-2.5-flash': '8c46e95b1a07cecc',
         'gemini-3.1-flash-lite': '8c46e95b1a07cecc',
         'gemini-3-flash': '8c46e95b1a07cecc',
+        'gemini-3.8-flash': '56fdd199312815e2',
+        'gemini-3.7-flash': '56fdd199312815e2',
         'gemini-3.5-flash': '56fdd199312815e2',
         'gemini-3-flash-thinking': '56fdd199312815e2',
         'gemini-3.1-pro': 'e6fa609c3fa255c0',
@@ -25,9 +29,13 @@
             mode: 6,
             fastThinkingLevel: 'minimal',
         }),
+        // Gemini 3.8 Flash: GA Flash lineup on Gemini Web.
         '56fdd199312815e2': Object.freeze({
             hash: '56fdd199312815e2',
+            // The live request uses different legacy and native mode fields.
+            legacyMode: 2,
             mode: 1,
+            capabilities: Object.freeze([4, 5, 6, 8, 4, 5, 6, 8]),
             fastThinkingLevel: 'minimal',
         }),
         e6fa609c3fa255c0: Object.freeze({

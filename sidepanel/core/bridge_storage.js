@@ -19,12 +19,54 @@ function logInputDraftWriteError(error) {
 }
 
 export function getSidePanelInputDraftKey(tabId, sessionId = null) {
+    if (sessionId) return `session:${sessionId}`;
+    if (Number.isInteger(tabId) && tabId > 0) return `draft:${tabId}`;
+    return 'draft';
+}
+
+export function getLegacySidePanelInputDraftKey(tabId, sessionId = null) {
     if (!Number.isInteger(tabId) || tabId <= 0) return null;
     return sessionId ? `tab:${tabId}|session:${sessionId}` : `tab:${tabId}|draft`;
 }
 
+export function normalizeComposerDraft(value) {
+    if (typeof value === 'string') {
+        return { text: value, files: [] };
+    }
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return { text: '', files: [] };
+    }
+
+    const files = Array.isArray(value.files)
+        ? value.files
+              .filter((file) => file && typeof file === 'object' && typeof file.base64 === 'string')
+              .map((file) => ({
+                  base64: file.base64,
+                  type: typeof file.type === 'string' ? file.type : 'application/octet-stream',
+                  name: typeof file.name === 'string' ? file.name : 'attachment',
+              }))
+        : [];
+
+    return {
+        text: typeof value.text === 'string' ? value.text : '',
+        files,
+    };
+}
+
+export function isEmptyComposerDraft(value) {
+    const draft = normalizeComposerDraft(value);
+    return !draft.text && draft.files.length === 0;
+}
+
 export function normalizeSidePanelInputDrafts(value) {
-    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+    const drafts = {};
+    Object.entries(value).forEach(([key, draftValue]) => {
+        if (typeof key !== 'string' || !key) return;
+        const draft = normalizeComposerDraft(draftValue);
+        if (!isEmptyComposerDraft(draft)) drafts[key] = draft;
+    });
+    return drafts;
 }
 
 export function restoreConnectionSettings(frame) {
@@ -67,7 +109,7 @@ export function saveSidePanelInputDraft(payload) {
     const tabId = payload?.tabId;
     const sessionId = payload?.sessionId || null;
     const key = getSidePanelInputDraftKey(tabId, sessionId);
-    if (!key) return;
+    const legacyKey = getLegacySidePanelInputDraftKey(tabId, sessionId);
 
     chrome.storage.session.get([INPUT_DRAFTS_KEY], (result) => {
         const readError = getRuntimeLastError();
@@ -77,12 +119,13 @@ export function saveSidePanelInputDraft(payload) {
         }
 
         const drafts = { ...normalizeSidePanelInputDrafts(result?.[INPUT_DRAFTS_KEY]) };
-        const value = typeof payload?.value === 'string' ? payload.value : '';
-        if (value) {
-            drafts[key] = value;
+        const draft = normalizeComposerDraft(payload?.value);
+        if (!isEmptyComposerDraft(draft)) {
+            drafts[key] = draft;
         } else {
             delete drafts[key];
         }
+        if (legacyKey && legacyKey !== key) delete drafts[legacyKey];
 
         try {
             const writeResult = chrome.storage.session.set({ [INPUT_DRAFTS_KEY]: drafts });
