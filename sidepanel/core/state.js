@@ -34,7 +34,7 @@ export function isExtensionHostPageTab(tab) {
 
     try {
         const url = new URL(tab.url);
-        if (url.protocol !== 'chrome-extension:') return false;
+        if (url.protocol !== 'chrome-extension:' && url.protocol !== 'moz-extension:') return false;
 
         const path = url.pathname.replace(/^\/+/, '');
         return (
@@ -144,26 +144,29 @@ export class StateManager {
             }
         );
 
-        chrome.storage.session.get(['geminiSidePanelSessionBindings', 'geminiSidePanelInputDrafts'], (result) => {
-            const errorMessage = getRuntimeLastErrorMessage();
-            if (errorMessage) {
-                console.warn('Failed to load side panel session state:', errorMessage);
-                this.sessionStorageData = {
-                    geminiSidePanelSessionBindings: {},
-                    geminiSidePanelInputDrafts: {},
-                };
-            } else {
-                this.sessionStorageData = {
-                    ...(result || {}),
-                    geminiSidePanelSessionBindings:
-                        result?.geminiSidePanelSessionBindings || {},
-                    geminiSidePanelInputDrafts: normalizeSidePanelInputDrafts(
-                        result?.geminiSidePanelInputDrafts
-                    ),
-                };
+        chrome.storage.session.get(
+            ['geminiSidePanelSessionBindings', 'geminiSidePanelInputDrafts'],
+            (result) => {
+                const errorMessage = getRuntimeLastErrorMessage();
+                if (errorMessage) {
+                    console.warn('Failed to load side panel session state:', errorMessage);
+                    this.sessionStorageData = {
+                        geminiSidePanelSessionBindings: {},
+                        geminiSidePanelInputDrafts: {},
+                    };
+                } else {
+                    this.sessionStorageData = {
+                        ...(result || {}),
+                        geminiSidePanelSessionBindings:
+                            result?.geminiSidePanelSessionBindings || {},
+                        geminiSidePanelInputDrafts: normalizeSidePanelInputDrafts(
+                            result?.geminiSidePanelInputDrafts
+                        ),
+                    };
+                }
+                this.trySendInitData();
             }
-            this.trySendInitData();
-        });
+        );
 
         if (chrome.tabs && typeof chrome.tabs.getCurrent === 'function') {
             chrome.tabs.getCurrent((tab) => {
@@ -441,9 +444,7 @@ export class StateManager {
     }
 
     getInputDrafts() {
-        return normalizeSidePanelInputDrafts(
-            this.sessionStorageData?.geminiSidePanelInputDrafts
-        );
+        return normalizeSidePanelInputDrafts(this.sessionStorageData?.geminiSidePanelInputDrafts);
     }
 
     getInputDraft(tabId, sessionId) {

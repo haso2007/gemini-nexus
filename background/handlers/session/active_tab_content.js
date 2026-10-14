@@ -21,6 +21,7 @@ export async function getActiveTabContent(specificTabId = null) {
             (tab.url.startsWith('chrome://') ||
                 tab.url.startsWith('edge://') ||
                 tab.url.startsWith('chrome-extension://') ||
+                tab.url.startsWith('moz-extension://') ||
                 tab.url.startsWith('about:') ||
                 tab.url.startsWith('view-source:') ||
                 tab.url.startsWith('https://chrome.google.com/webstore') ||

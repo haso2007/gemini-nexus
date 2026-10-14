@@ -2,6 +2,7 @@ const BLOCKED_URL_PREFIXES = [
     'chrome://',
     'edge://',
     'chrome-extension://',
+    'moz-extension://',
     'about:',
     'view-source:',
 ];

@@ -225,26 +225,58 @@ async function removeJunkFiles(directory) {
 }
 
 async function writeZipArchive() {
-    const manifest = JSON.parse(
-        await readFile(path.join(packageDir, 'manifest.json'), 'utf8')
-    );
+    const manifest = JSON.parse(await readFile(path.join(packageDir, 'manifest.json'), 'utf8'));
     const zipName = `gemini-nexus-firefox-${manifest.version}.zip`;
     const zipPath = path.join(artifactsDir, zipName);
     await rm(zipPath, { force: true });
-    await new Promise((resolve, reject) => {
-        execFile(
-            'zip',
-            ['-r', '-X', zipPath, '.'],
-            { cwd: packageDir },
-            (error, stdout, stderr) => {
-                if (error) {
-                    reject(new Error(`zip failed: ${stderr || error.message}`));
-                    return;
+    const relZipPath = path.relative(packageDir, zipPath);
+
+    const tryZip = () =>
+        new Promise((resolve, reject) => {
+            execFile(
+                'zip',
+                ['-r', '-X', zipPath, '.'],
+                { cwd: packageDir },
+                (error, stdout, stderr) => {
+                    if (error) {
+                        reject(new Error(`zip failed: ${stderr || error.message}`));
+                        return;
+                    }
+                    resolve(stdout);
                 }
-                resolve(stdout);
-            }
-        );
-    });
+            );
+        });
+
+    const tryTar = () =>
+        new Promise((resolve, reject) => {
+            const tarCmd = process.platform === 'win32' ? 'tar.exe' : 'tar';
+            execFile(
+                tarCmd,
+                ['-a', '-c', '-f', relZipPath, '.'],
+                { cwd: packageDir },
+                (error, stdout, stderr) => {
+                    if (error) {
+                        reject(new Error(`tar failed: ${stderr || error.message}`));
+                        return;
+                    }
+                    resolve(stdout);
+                }
+            );
+        });
+
+    try {
+        await tryZip();
+    } catch (zipError) {
+        try {
+            await tryTar();
+        } catch (tarError) {
+            console.warn(
+                `[warn] Could not create zip archive (${zipError.message}; ${tarError.message}). ` +
+                    `The unpacked directory at ${path.relative(rootDir, packageDir)} is still usable for debugging.`
+            );
+            return;
+        }
+    }
     console.log(`Firefox store zip written to ${path.relative(rootDir, zipPath)}`);
 }
 
@@ -290,9 +322,10 @@ async function main() {
     ]);
     if (missingReferences.length > 0) {
         throw new Error(
-            ['Packaged HTML references missing asset files:', ...missingReferences.map((r) => `- ${r}`)].join(
-                '\n'
-            )
+            [
+                'Packaged HTML references missing asset files:',
+                ...missingReferences.map((r) => `- ${r}`),
+            ].join('\n')
         );
     }
 

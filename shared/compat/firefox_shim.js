@@ -50,8 +50,7 @@
         return lastErrorValue;
     }
     function setLastError(err) {
-        lastErrorValue =
-            err == null ? undefined : { message: String((err && err.message) || err) };
+        lastErrorValue = err == null ? undefined : { message: String((err && err.message) || err) };
     }
 
     // Method names that receive a *listener*, not a completion callback.
@@ -63,20 +62,12 @@
         hasListeners: true,
     };
 
-    var wrappedCache = new WeakMap();
-
-    function isWrappableObject(value) {
-        if (!value) return false;
-        if (typeof value === 'function') return true;
-        if (typeof value !== 'object') return false;
-        var proto = Object.getPrototypeOf(value);
-        return proto === Object.prototype || proto === null;
-    }
-
     // Wrap an async API method so an optional trailing function argument is
     // treated as a Chrome-style completion callback.
     function wrapFunction(fn, owner, methodName) {
-        if (LISTENER_METHODS[methodName]) return fn;
+        if (LISTENER_METHODS[methodName]) {
+            return typeof fn.bind === 'function' ? fn.bind(owner) : fn;
+        }
         return function () {
             var args = Array.prototype.slice.call(arguments);
             var lastArg = args.length ? args[args.length - 1] : undefined;
@@ -112,64 +103,11 @@
         };
     }
 
-    // Recursively wrap an API namespace object. Non-plain objects (DOM nodes,
-    // class instances, etc.) are passed through untouched.
-    function wrapNamespace(obj) {
-        if (!isWrappableObject(obj)) return obj;
-        if (wrappedCache.has(obj)) return wrappedCache.get(obj);
-        var wrapped = {};
-        wrappedCache.set(obj, wrapped);
-        var keys;
-        try {
-            keys = Object.keys(obj);
-        } catch (e) {
-            return obj;
-        }
-        for (var i = 0; i < keys.length; i++) {
-            var key = keys[i];
-            var value;
-            try {
-                value = obj[key];
-            } catch (e) {
-                continue;
-            }
-            if (typeof value === 'function') {
-                wrapped[key] = wrapFunction(value, obj, key);
-            } else if (isWrappableObject(value)) {
-                wrapped[key] = wrapNamespace(value);
-            } else {
-                wrapped[key] = value;
-            }
-        }
-        return wrapped;
-    }
-
-    var chromeShim = wrapNamespace(browserNs);
-
-    // Chrome-compatible `runtime.lastError` as a live getter.
-    try {
-        if (chromeShim.runtime) {
-            Object.defineProperty(chromeShim.runtime, 'lastError', {
-                get: getLastError,
-                configurable: true,
-                enumerable: true,
-            });
-        }
-    } catch (e) {}
-
-    // Mark the shim so a second evaluation is a no-op.
-    try {
-        Object.defineProperty(chromeShim, '__geminiNexusFirefoxShim', {
-            value: true,
-            configurable: true,
-            enumerable: false,
-        });
-    } catch (e) {}
-
     // --- `chrome.sidePanel` emulation via `sidebarAction` (best effort) ---
+    var sidePanelShim = undefined;
     try {
-        var sidebarAction = chromeShim.sidebarAction;
-        if (sidebarAction && !chromeShim.sidePanel) {
+        var sidebarAction = browserNs.sidebarAction;
+        if (sidebarAction) {
             var openPanelForWindow = function (windowId) {
                 try {
                     var result = sidebarAction.open({ windowId: windowId });
@@ -181,7 +119,7 @@
                 }
             };
 
-            chromeShim.sidePanel = {
+            sidePanelShim = {
                 open: function (options) {
                     var windowId =
                         options && typeof options.windowId === 'number'
@@ -224,6 +162,64 @@
             };
         }
     } catch (e) {}
+
+    var proxyCache = new WeakMap();
+
+    // Recursively wrap the `browser.*` tree in a Proxy so any async method
+    // accepts an optional trailing callback and accesses prototype methods
+    // across Firefox's XPCOM/WebExtension object hierarchy.
+    function wrapNamespace(target) {
+        if (!target || (typeof target !== 'object' && typeof target !== 'function')) {
+            return target;
+        }
+        if (proxyCache.has(target)) return proxyCache.get(target);
+
+        var proxy = new Proxy(target, {
+            get: function (obj, prop) {
+                if (prop === '__geminiNexusFirefoxShim') return true;
+                if (prop === 'sidePanel' && sidePanelShim && !obj.sidePanel) {
+                    return sidePanelShim;
+                }
+                if (prop === 'lastError' && obj === browserNs.runtime) {
+                    return getLastError();
+                }
+
+                var value;
+                try {
+                    value = obj[prop];
+                } catch (e) {
+                    return undefined;
+                }
+
+                if (typeof value === 'function') {
+                    return wrapFunction(value, obj, prop);
+                }
+                if (typeof value === 'object' && value !== null) {
+                    return wrapNamespace(value);
+                }
+                return value;
+            },
+            set: function (obj, prop, val) {
+                try {
+                    obj[prop] = val;
+                    return true;
+                } catch (e) {
+                    return false;
+                }
+            },
+            has: function (obj, prop) {
+                if (prop === '__geminiNexusFirefoxShim') return true;
+                if (prop === 'sidePanel' && sidePanelShim) return true;
+                if (prop === 'lastError' && obj === browserNs.runtime) return true;
+                return prop in obj;
+            },
+        });
+
+        proxyCache.set(target, proxy);
+        return proxy;
+    }
+
+    var chromeShim = wrapNamespace(browserNs);
 
     // Install as the global `chrome` namespace.
     try {
