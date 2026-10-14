@@ -15,7 +15,7 @@ Firefox 版通过 `npm run package:firefox` 产出（先跑 `npm run build`）�
 
 | # | 问题 | 做法 |
 |---|------|------|
-| 1 | Firefox 的 `chrome.*` 只有回调风格，不支持 Promise，而全仓库都是 `await chrome.*` | 新增 `shared/compat/firefox_shim.js`，在 Firefox 下把 `globalThis.chrome` 指向 `browser`（Promise 风格）；Chrome 下无操作 |
+| 1 | 现代 Firefox 的 `chrome.*` 与 `browser` 是同一纯 Promise 命名空间，会静默忽略 Chrome 风格的尾部回调；而仓库约 20 处仍用回调写法（`storage.get/set`、`tabs.getCurrent/query/get`、`alarms.get`、`contextMenus.create` 等），导致存储读取永不回包、`new Promise` 包裹处永久挂起 | `shared/compat/firefox_shim.js` 把 `browser.*` 包一层：所有异步方法同时支持 Promise 与 Chrome 风格尾部回调（含 `runtime.lastError` 语义），`addListener` 等监听方法除外；Chrome 下无操作 |
 | 2 | `chrome.sidePanel` 不存在 | shim 里用 `browser.sidebarAction` 模拟：`setPanelBehavior` → 空操作；`open` → `sidebarAction.open()`；`setOptions({path})` → `sidebarAction.setPanel()`；manifest 加 `sidebar_action` |
 | 3 | `chrome.debugger` 不存在（CDP 浏览器控制功能） | `background/control/connection.js` 增加可用性检测，不可用时直接返回失败并给出明确错误信息，该功能在 Firefox 下优雅降级 |
 | 4 | `chrome.tabGroups` 不存在 | 代码里已有 `chrome.tabs?.group` / `chrome.tabGroups?.update` 保护，Firefox 下自动跳过 tab 分组指示 |

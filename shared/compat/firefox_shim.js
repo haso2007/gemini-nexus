@@ -8,122 +8,228 @@
  * intentionally written without import/export so it works both as a classic
  * script (manifest `content_scripts`) and as an ES module import.
  *
- * What it does:
+ * What it does (Firefox only):
  *
- * 1. Promise namespace: Firefox's `chrome.*` namespace is callback-only;
- *    only `browser.*` returns promises. The codebase uses promise-style
- *    `chrome.*` calls everywhere, so when the `browser` namespace exists
- *    (Firefox) we alias `globalThis.chrome` to it. In Chrome `browser` is
- *    undefined and this is a no-op.
+ * 1. Chrome-style callbacks: the codebase was written against Chrome's
+ *    `chrome.*`, which accepts an optional trailing callback on async methods
+ *    (e.g. `chrome.storage.local.get(keys, cb)`, `chrome.tabs.getCurrent(cb)`)
+ *    and reports failures via `chrome.runtime.lastError` inside the callback.
+ *    Modern Firefox unifies `chrome` and `browser` into a single promise-only
+ *    namespace, so those callbacks were silently ignored: storage reads never
+ *    fired, `new Promise` wrappers around `chrome.tabs.getCurrent(cb)` hung
+ *    forever, and features like Data Management import appeared dead.
+ *    The shim wraps the `browser.*` namespace so every async method accepts
+ *    an optional Chrome-style trailing callback (wired to the underlying
+ *    promise, with `runtime.lastError` semantics), while plain promise usage
+ *    passes through untouched.
  *
  * 2. `chrome.sidePanel` (Chrome-only) is emulated on top of Firefox's
- *    `sidebarAction` API:
- *      - setPanelBehavior() -> no-op (Firefox has no equivalent; the
- *        sidebar toggle is separate from the action button).
- *      - open({tabId, windowId}) -> sidebarAction.open() (acts on the
- *        active window; must be called from a user gesture, same as Chrome).
- *      - setOptions({tabId, path, enabled}) -> sidebarAction.setPanel()
- *        for `path`; per-tab `enabled` has no Firefox equivalent. The
- *        `enabled: false` close hack maps to sidebarAction.close() when
- *        available, otherwise it is a no-op.
+ *    `sidebarAction` API (best effort; see docs/firefox.md).
  *
- * 3. `chrome.debugger` does not exist in Firefox. It is left undefined here;
- *    background/control/connection.js feature-detects it and disables the
- *    CDP-based browser-control feature with a clear error message.
- *
- * 4. `chrome.tabGroups` does not exist in Firefox either; callers already
- *    feature-detect it (background/managers/control_manager.js) and skip
- *    the native tab-group indicator.
+ * In real Chrome `globalThis.browser` is undefined and this file is a no-op:
+ * the native `chrome` namespace already supports both styles.
  */
-
 (function () {
     'use strict';
 
     var g = globalThis;
+    var browserNs = g.browser;
 
-    // Capture the real namespaces before aliasing.
-    var browserNS = g.browser;
-    var originalChrome = g.chrome;
+    // Not Firefox (Chrome/Edge/...): native `chrome` already supports both
+    // promise and callback styles. Do nothing.
+    if (!browserNs || typeof browserNs !== 'object') return;
 
-    // 1. Prefer the promise-based namespace when available (Firefox).
-    if (browserNS && browserNS !== originalChrome) {
-        try {
-            g.chrome = browserNS;
-        } catch (aliasError) {
-            // If the alias cannot be installed, keep going: feature shims
-            // below still attach to whichever namespace object exists.
-        }
+    // Already shimmed (e.g. evaluated twice via multiple bundles).
+    try {
+        if (g.chrome && g.chrome.__geminiNexusFirefoxShim) return;
+    } catch (e) {}
+
+    // --- `chrome.runtime.lastError` state (Chrome semantics) ---
+    var lastErrorValue = undefined;
+    function getLastError() {
+        return lastErrorValue;
+    }
+    function setLastError(err) {
+        lastErrorValue =
+            err == null ? undefined : { message: String((err && err.message) || err) };
     }
 
-    var chrome = g.chrome;
-    if (!chrome) {
-        return;
+    // Method names that receive a *listener*, not a completion callback.
+    // These must never be treated as callback-style invocations.
+    var LISTENER_METHODS = {
+        addListener: true,
+        removeListener: true,
+        hasListener: true,
+        hasListeners: true,
+    };
+
+    var wrappedCache = new WeakMap();
+
+    function isWrappableObject(value) {
+        if (!value) return false;
+        if (typeof value === 'function') return true;
+        if (typeof value !== 'object') return false;
+        var proto = Object.getPrototypeOf(value);
+        return proto === Object.prototype || proto === null;
     }
 
-    function toAbsoluteUrl(path) {
-        if (!path) return path;
-        if (/^[a-z][a-z0-9+.-]*:/i.test(path)) return path;
-        try {
-            if (chrome.runtime && typeof chrome.runtime.getURL === 'function') {
-                return chrome.runtime.getURL(path);
-            }
-        } catch (urlError) {
-            // Fall through and return the path unchanged.
-        }
-        return path;
-    }
-
-    // 2. sidePanel -> sidebarAction adapter (Firefox only).
-    if (!chrome.sidePanel && browserNS && browserNS.sidebarAction) {
-        var sidebarAction = browserNS.sidebarAction;
-
-        chrome.sidePanel = {
-            setPanelBehavior: function () {
-                return Promise.resolve();
-            },
-
-            open: function () {
+    // Wrap an async API method so an optional trailing function argument is
+    // treated as a Chrome-style completion callback.
+    function wrapFunction(fn, owner, methodName) {
+        if (LISTENER_METHODS[methodName]) return fn;
+        return function () {
+            var args = Array.prototype.slice.call(arguments);
+            var lastArg = args.length ? args[args.length - 1] : undefined;
+            if (typeof lastArg === 'function') {
+                var callback = args.pop();
+                var result;
                 try {
-                    return sidebarAction.open();
-                } catch (openError) {
-                    return Promise.reject(openError);
+                    result = fn.apply(owner, args);
+                } catch (syncError) {
+                    setLastError(syncError);
+                    try {
+                        callback(undefined);
+                    } catch (ignored) {}
+                    return undefined;
                 }
-            },
-
-            setOptions: function (options) {
-                options = options || {};
-                var tasks = [];
-
-                if (options.path) {
-                    var details = { panel: toAbsoluteUrl(options.path) };
-                    if (options.tabId != null) {
-                        details.tabId = options.tabId;
+                Promise.resolve(result).then(
+                    function (value) {
+                        setLastError(undefined);
+                        try {
+                            callback(value);
+                        } catch (ignored) {}
+                    },
+                    function (asyncError) {
+                        setLastError(asyncError);
+                        try {
+                            callback(undefined);
+                        } catch (ignored) {}
                     }
-                    tasks.push(
-                        sidebarAction.setPanel(details).catch(function () {
-                            // Best effort: setting a per-tab panel may fail
-                            // on tabs where sidebars are unavailable.
-                        })
-                    );
-                } else if (options.enabled === false) {
-                    // Closest equivalent to Chrome's disable/close hack.
-                    if (typeof sidebarAction.close === 'function') {
-                        tasks.push(
-                            sidebarAction.close().catch(function () {})
-                        );
-                    }
-                }
-
-                return Promise.all(tasks).then(function () {});
-            },
-
-            getOptions: function () {
-                return Promise.resolve({});
-            },
+                );
+                return undefined;
+            }
+            return fn.apply(owner, args);
         };
     }
 
-    // 3. chrome.debugger: intentionally NOT stubbed. Firefox does not
-    // implement it, and background/control/connection.js detects its absence
-    // to disable the browser-control feature with a clear message.
+    // Recursively wrap an API namespace object. Non-plain objects (DOM nodes,
+    // class instances, etc.) are passed through untouched.
+    function wrapNamespace(obj) {
+        if (!isWrappableObject(obj)) return obj;
+        if (wrappedCache.has(obj)) return wrappedCache.get(obj);
+        var wrapped = {};
+        wrappedCache.set(obj, wrapped);
+        var keys;
+        try {
+            keys = Object.keys(obj);
+        } catch (e) {
+            return obj;
+        }
+        for (var i = 0; i < keys.length; i++) {
+            var key = keys[i];
+            var value;
+            try {
+                value = obj[key];
+            } catch (e) {
+                continue;
+            }
+            if (typeof value === 'function') {
+                wrapped[key] = wrapFunction(value, obj, key);
+            } else if (isWrappableObject(value)) {
+                wrapped[key] = wrapNamespace(value);
+            } else {
+                wrapped[key] = value;
+            }
+        }
+        return wrapped;
+    }
+
+    var chromeShim = wrapNamespace(browserNs);
+
+    // Chrome-compatible `runtime.lastError` as a live getter.
+    try {
+        if (chromeShim.runtime) {
+            Object.defineProperty(chromeShim.runtime, 'lastError', {
+                get: getLastError,
+                configurable: true,
+                enumerable: true,
+            });
+        }
+    } catch (e) {}
+
+    // Mark the shim so a second evaluation is a no-op.
+    try {
+        Object.defineProperty(chromeShim, '__geminiNexusFirefoxShim', {
+            value: true,
+            configurable: true,
+            enumerable: false,
+        });
+    } catch (e) {}
+
+    // --- `chrome.sidePanel` emulation via `sidebarAction` (best effort) ---
+    try {
+        var sidebarAction = chromeShim.sidebarAction;
+        if (sidebarAction && !chromeShim.sidePanel) {
+            var openPanelForWindow = function (windowId) {
+                try {
+                    var result = sidebarAction.open({ windowId: windowId });
+                    return result && typeof result.then === 'function'
+                        ? result
+                        : Promise.resolve(result);
+                } catch (error) {
+                    return Promise.reject(error);
+                }
+            };
+
+            chromeShim.sidePanel = {
+                open: function (options) {
+                    var windowId =
+                        options && typeof options.windowId === 'number'
+                            ? options.windowId
+                            : undefined;
+                    if (typeof windowId === 'number') {
+                        return openPanelForWindow(windowId);
+                    }
+                    return Promise.resolve();
+                },
+                setOptions: function (options) {
+                    options = options || {};
+                    var path = options.path;
+                    var tabId = options.tabId;
+                    var enabled = options.enabled;
+                    var chain = Promise.resolve();
+                    if (typeof path === 'string') {
+                        var params = { panel: path };
+                        if (typeof tabId === 'number') params.tabId = tabId;
+                        chain = chain.then(function () {
+                            return sidebarAction.setPanel(params);
+                        });
+                    }
+                    if (typeof enabled === 'boolean' && typeof tabId === 'number') {
+                        chain = chain.then(function () {
+                            if (typeof sidebarAction.setEnabled === 'function') {
+                                return sidebarAction.setEnabled({ tabId: tabId, enabled: enabled });
+                            }
+                            return undefined;
+                        });
+                    }
+                    return chain;
+                },
+                setPanelBehavior: function () {
+                    return Promise.resolve();
+                },
+                getOptions: function () {
+                    return Promise.resolve({});
+                },
+            };
+        }
+    } catch (e) {}
+
+    // Install as the global `chrome` namespace.
+    try {
+        g.chrome = chromeShim;
+    } catch (e) {
+        // If the assignment is not permitted, leave the native namespace in
+        // place (older Firefox `chrome` already supports callbacks).
+    }
 })();
