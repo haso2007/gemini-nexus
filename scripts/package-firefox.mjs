@@ -124,6 +124,13 @@ export function createFirefoxManifest(packagedManifest) {
         gecko: {
             id: GECKO_ID,
             strict_min_version: STRICT_MIN_VERSION,
+            // Required by AMO for all new submissions (Firefox 140+ shows it
+            // in the consent UI; silently ignored on older versions).
+            // The add-on itself collects no data: network requests go only
+            // to the AI providers the user configured.
+            data_collection_permissions: {
+                required: ['none'],
+            },
         },
     };
 
