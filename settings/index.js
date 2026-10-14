@@ -1,4 +1,4 @@
-// Must be first: cross-browser extension API shim (see shared/compat/firefox_shim.js).
+// Must be first: cross-browser extension API shim.
 import '../shared/compat/firefox_shim.js';
 import { SettingsController } from '../sandbox/ui/settings/index.js';
 import { SettingsPageTemplate } from '../sandbox/ui/templates/settings/index.js';

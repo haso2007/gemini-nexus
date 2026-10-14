@@ -1,4 +1,4 @@
-// Must be first: cross-browser extension API shim (see shared/compat/firefox_shim.js).
+// Must be first: cross-browser extension API shim.
 import '../shared/compat/firefox_shim.js';
 import { initRendererMode } from './boot/renderer.js';
 import { initAppMode } from './boot/app.js';

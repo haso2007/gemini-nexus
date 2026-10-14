@@ -1,4 +1,4 @@
-// Must be first: cross-browser extension API shim (see shared/compat/firefox_shim.js).
+// Must be first: cross-browser extension API shim.
 import '../shared/compat/firefox_shim.js';
 import { FrameManager } from './core/frame.js';
 import { StateManager } from './core/state.js';
