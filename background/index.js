@@ -1,3 +1,7 @@
+// Must be the first import: installs the cross-browser extension API shim
+// (Firefox `browser.*` promise alias, sidePanel -> sidebarAction, etc.)
+// before any other module touches `chrome.*`.
+import '../shared/compat/firefox_shim.js';
 import { GeminiSessionManager } from './managers/session_manager.js';
 import { ImageManager } from './managers/image_manager.js';
 import { BrowserControlManager } from './managers/control_manager.js';

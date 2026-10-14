@@ -14,6 +14,16 @@ export class BrowserConnection {
         this.lastAttachErrorMessage = '';
         this.lastDetachReason = '';
 
+        // Firefox does not implement chrome.debugger, so the CDP-based
+        // browser-control feature is unavailable there. Detect it once and
+        // fail gracefully with a clear message instead of throwing.
+        this.debuggerAvailable = Boolean(
+            chrome.debugger && typeof chrome.debugger.attach === 'function'
+        );
+        if (!this.debuggerAvailable) {
+            return;
+        }
+
         // Global listener for CDP events
         chrome.debugger.onEvent.addListener(this._handleEvent.bind(this));
 
@@ -100,6 +110,12 @@ export class BrowserConnection {
 
     async attach(tabId) {
         this.targetTabId = tabId; // Always store the intended tab
+
+        if (!this.debuggerAvailable) {
+            this.lastAttachErrorMessage =
+                'Browser control is not supported in Firefox (chrome.debugger is unavailable).';
+            return false;
+        }
 
         // If already attached to the same tab, just ensure domains are enabled
         if (this.attached && this.currentTabId === tabId) {

@@ -36,6 +36,7 @@ const requiredPaths = [
     'dist/sidepanel/index.html',
     'dist/sidepanel/preload.js',
     'dist/sandbox/index.html',
+    'dist/sandbox/theme_boot.js',
     'dist/settings/index.html',
     'vendor/gemini-watermark-remover',
 ];
@@ -297,6 +298,7 @@ async function main() {
         copyIntoPackage('dist/sidepanel/index.html', 'sidepanel/index.html'),
         copyIntoPackage('dist/sidepanel/preload.js', 'sidepanel/preload.js'),
         copyIntoPackage('dist/sandbox/index.html', 'sandbox/index.html'),
+        copyIntoPackage('dist/sandbox/theme_boot.js', 'sandbox/theme_boot.js'),
         copyIntoPackage('dist/settings/index.html', 'settings/index.html'),
     ]);
 

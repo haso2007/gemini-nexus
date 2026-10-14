@@ -22,13 +22,31 @@ function copySidepanelPreload(): Plugin {
     };
 }
 
+function copySandboxThemeBoot(): Plugin {
+    return {
+        name: 'copy-sandbox-theme-boot',
+        apply: 'build',
+        async generateBundle() {
+            // Referenced as ./theme_boot.js from sandbox/index.html; kept as a
+            // separate classic script (not bundled) so it runs before first
+            // render and stays CSP-clean (no inline script).
+            const source = await readFile(path.resolve(__dirname, 'sandbox/theme_boot.js'), 'utf8');
+            this.emitFile({
+                type: 'asset',
+                fileName: 'sandbox/theme_boot.js',
+                source,
+            });
+        },
+    };
+}
+
 export default defineConfig(() => {
     return {
         server: {
             port: 3000,
             host: '0.0.0.0',
         },
-        plugins: [copySidepanelPreload()],
+        plugins: [copySidepanelPreload(), copySandboxThemeBoot()],
         build: {
             chunkSizeWarningLimit: 1600,
             rollupOptions: {
