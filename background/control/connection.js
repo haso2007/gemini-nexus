@@ -5,6 +5,7 @@ import { debugLog } from '../../shared/logging/debug.js';
  */
 export class BrowserConnection {
     constructor() {
+        this.driver = 'cdp';
         this.currentTabId = null;
         this.targetTabId = null; // Tracks the intended tab ID even if debugger is not attached
         this.attached = false;

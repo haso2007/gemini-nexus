@@ -10,33 +10,42 @@
         geminiGeneratedImageWatermarkRemovalEnabled: true,
     };
 
+    function postBridgePayload(payload) {
+        window.postMessage(JSON.stringify(payload), '*');
+    }
+
+    function readBridgePayload(data) {
+        if (typeof data === 'string') {
+            try {
+                return JSON.parse(data);
+            } catch {
+                return {};
+            }
+        }
+        return data || {};
+    }
+
     function postStateResponse(requestId, enabled) {
-        window.postMessage(
-            {
-                type: STATE_RESPONSE_TYPE,
-                requestId,
-                enabled: enabled !== false,
-            },
-            '*'
-        );
+        postBridgePayload({
+            type: STATE_RESPONSE_TYPE,
+            requestId,
+            enabled: enabled !== false,
+        });
     }
 
     function postXhrResponse(requestId, response) {
-        window.postMessage(
-            {
-                type: XHR_RESPONSE_TYPE,
-                requestId,
-                response: response || {
-                    ok: false,
-                    status: 0,
-                    statusText: '',
-                    headers: {},
-                    bytes: [],
-                    error: chrome.runtime?.lastError?.message || 'No extension response',
-                },
+        postBridgePayload({
+            type: XHR_RESPONSE_TYPE,
+            requestId,
+            response: response || {
+                ok: false,
+                status: 0,
+                statusText: '',
+                headers: {},
+                bytes: [],
+                error: chrome.runtime?.lastError?.message || 'No extension response',
             },
-            '*'
-        );
+        });
     }
 
     function handleStateRequest(requestId) {
@@ -60,7 +69,7 @@
     window.addEventListener('message', (event) => {
         if (event.source !== window) return;
 
-        const data = event.data || {};
+        const data = readBridgePayload(event.data);
         if (data.type === STATE_REQUEST_TYPE && data.requestId) {
             handleStateRequest(data.requestId);
             return;

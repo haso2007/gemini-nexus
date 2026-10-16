@@ -1,4 +1,5 @@
 import { generateUUID } from '../../shared/utils/index.js';
+import { fetchGeminiWithPageFallback } from '../net/firefox_page_fetch.js';
 
 const WEB_CLIENT_CAPABILITIES = Object.freeze([4, 5, 6, 8]);
 const TTS_RPC_ID = 'XqA3Ic';
@@ -100,7 +101,7 @@ export async function fetchGeminiTtsAudio(text, context, options = {}) {
         headers['X-Goog-AuthUser'] = context.authUser;
     }
 
-    const response = await fetch(endpoint, {
+    const response = await fetchGeminiWithPageFallback(endpoint, {
         method: 'POST',
         credentials: 'include',
         headers,

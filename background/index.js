@@ -11,6 +11,8 @@ import { SidePanelScopeManager } from './managers/sidepanel_scope_manager.js';
 import { setupContextMenus } from './menus.js';
 import { setupMessageListener } from './messages.js';
 import { keepAliveManager } from './managers/keep_alive.js';
+import { installGeminiHeaderRules } from './network/gemini_header_rules.js';
+import { holdStreamKeepAlivePorts } from './handlers/session/prompt_handler.js';
 import { setupContentScriptInjection } from './content_injection.js';
 import { setupPageShortcutCommands } from './page_shortcut_commands.js';
 import {
@@ -78,3 +80,7 @@ setupMessageListener(
 );
 
 keepAliveManager.init();
+holdStreamKeepAlivePorts();
+installGeminiHeaderRules().catch((error) => {
+    console.warn('[Gemini Nexus] Failed to install Gemini header rules:', error);
+});

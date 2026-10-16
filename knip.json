@@ -1,6 +1,8 @@
 {
     "entry": [
         "background/index.js",
+        "background/control/dom_page_script.js",
+        "background/control/dom_bridge_script.js",
         "sidepanel/index.html",
         "sidepanel/index.js",
         "sidepanel/preload.js",

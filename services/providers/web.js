@@ -15,6 +15,7 @@ import {
     normalizeWebThinkingLevelForModel,
 } from '../../shared/models/web_thinking.js';
 import { debugLog } from '../../shared/logging/debug.js';
+import { fetchGeminiWithPageFallback } from '../net/firefox_page_fetch.js';
 
 const WEB_CLIENT_CAPABILITIES = Object.freeze([4, 5, 6, 8]);
 
@@ -109,7 +110,7 @@ async function fetchStream(endpoint, atValue, fReq, headers, signal) {
         Referer: 'https://gemini.google.com/',
     };
 
-    const response = await fetch(endpoint, {
+    const response = await fetchGeminiWithPageFallback(endpoint, {
         method: 'POST',
         signal: signal,
         headers: finalHeaders,

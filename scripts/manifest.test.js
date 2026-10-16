@@ -149,7 +149,7 @@ describe('manifest content scripts', () => {
 
         expect(geminiBridgeEntry).toMatchObject({
             matches: ['https://gemini.google.com/*', 'https://business.gemini.google/*'],
-            js: ['content/gemini_watermark_bridge.js'],
+            js: ['content/gemini_watermark_bridge.js', 'content/gemini_page_fetch.js'],
             run_at: 'document_start',
         });
         expect(geminiBridgeEntry.world).toBeUndefined();

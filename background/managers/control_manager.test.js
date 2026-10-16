@@ -74,6 +74,13 @@ describe('BrowserControlManager native tab group indicator', () => {
         });
     });
 
+    it('uses the DOM driver when chrome.debugger is missing', () => {
+        delete chrome.debugger;
+        const manager = new BrowserControlManager();
+
+        expect(manager.connection.driver).toBe('dom');
+    });
+
     it('ungroups the previously controlled tab when control stops', async () => {
         chrome.tabs.group = vi.fn(() => Promise.resolve(9));
         chrome.tabs.ungroup = vi.fn(() => Promise.resolve());

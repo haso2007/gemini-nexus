@@ -1,4 +1,5 @@
 import { extractFromHTML } from '../shared/utils/index.js';
+import { fetchGeminiWithPageFallback } from './net/firefox_page_fetch.js';
 
 // Get 'at' (SNlM0e), 'bl' (cfb2h), and user index values
 // Supports fetching from specific user index URL to get correct tokens for that account.
@@ -7,7 +8,7 @@ export async function fetchRequestParams(userIndex = '0') {
     if (userIndex && userIndex !== '0') {
         url = `https://gemini.google.com/u/${userIndex}/app`;
     }
-    const response = await fetch(url, {
+    const response = await fetchGeminiWithPageFallback(url, {
         method: 'GET',
         credentials: 'include',
     });

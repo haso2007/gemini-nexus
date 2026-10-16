@@ -1,30 +1,34 @@
 <!doctype html>
 <html>
-    <head>
-        <meta charset="UTF-8" />
-        <title>Gemini Nexus Bridge</title>
-        <script  src="preload.js"></script>
-      <script type="module" crossorigin src="/assets/sidepanel-B1AwDEwR.js"></script>
-      <link rel="modulepreload" crossorigin href="/assets/web_model_catalog-Cia9tRsp.js">
-      <link rel="modulepreload" crossorigin href="/assets/dedicated_providers-DcMHp-Z6.js">
-      <link rel="modulepreload" crossorigin href="/assets/selection_tools-B2jN6uTL.js">
-      <link rel="modulepreload" crossorigin href="/assets/index-BCCSpqaB.js">
-      <link rel="stylesheet" crossorigin href="/assets/sidepanel-DYQZEvs5.css">
-    </head>
-    <body>
-        <!-- Skeleton Shell for Instant Paint -->
-        <div id="skeleton">
-            <div class="sk-header">
-                <div class="sk-icon"></div>
-                <div class="sk-icon"></div>
-            </div>
-            <div class="sk-content"></div>
-            <div class="sk-footer">
-                <div class="sk-input"></div>
-            </div>
-        </div>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Gemini Nexus Bridge</title>
+    <script  src="preload.js"></script>
+    <script type="module" crossorigin src="/assets/sidepanel-5uYo4GrE.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/web_model_catalog-E2Kyv4KH.js">
+    <link rel="modulepreload" crossorigin href="/assets/dedicated_providers-yvzPM4gE.js">
+    <link rel="modulepreload" crossorigin href="/assets/selection_tools-PpXbFHwI.js">
+    <link rel="modulepreload" crossorigin href="/assets/index-Jrw4OcMi.js">
+    <link rel="stylesheet" crossorigin href="/assets/sidepanel-DYQZEvs5.css">
+  </head>
+  <body>
+    <!-- Skeleton Shell for Instant Paint -->
+    <div id="skeleton">
+      <div class="sk-header">
+        <div class="sk-icon"></div>
+        <div class="sk-icon"></div>
+      </div>
+      <div class="sk-content"></div>
+      <div class="sk-footer">
+        <div class="sk-input"></div>
+      </div>
+    </div>
 
-        <!-- Iframe src is set by JS to include theme parameter -->
-        <iframe id="sandbox-frame" allow="clipboard-write; display-capture"></iframe>
-    </body>
+    <!--
+      Chrome isolates this frame with manifest.sandbox. Do not add an HTML
+      sandbox attribute: Firefox would give the frame an opaque origin, and
+      script-src 'self' would then block the UI bundle, leaving a blank sidebar.
+    -->
+    <iframe id="sandbox-frame" allow="clipboard-write; display-capture"></iframe>
+  </body>
 </html>

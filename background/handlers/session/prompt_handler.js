@@ -29,6 +29,23 @@ async function sendRuntimeMessage(message) {
     } catch {}
 }
 
+export const STREAM_KEEPALIVE_PORT = 'gemini-stream-keepalive';
+
+export function openStreamKeepAlivePort() {
+    try {
+        return chrome.runtime.connect({ name: STREAM_KEEPALIVE_PORT });
+    } catch {
+        return null;
+    }
+}
+
+export function holdStreamKeepAlivePorts() {
+    chrome.runtime.onConnect.addListener((port) => {
+        if (port.name !== STREAM_KEEPALIVE_PORT) return;
+        port.onDisconnect.addListener(() => {});
+    });
+}
+
 function getBrowserControlTaskTitle(text) {
     const normalized = String(text || '')
         .replace(/\s+/g, ' ')
@@ -113,6 +130,7 @@ export class PromptHandler {
             cancelled: false,
         };
         this.activeRuns.set(runKey, run);
+        const keepAlivePort = openStreamKeepAlivePort();
 
         (async () => {
             const onUpdate = (partialText, partialThoughts) => {
@@ -306,6 +324,7 @@ export class PromptHandler {
                         .catch(() => {});
                 }
             } finally {
+                keepAlivePort?.disconnect();
                 if (this.activeRuns.get(run.runKey) === run) {
                     this.activeRuns.delete(run.runKey);
                 }

@@ -63,11 +63,11 @@ describe('Gemini watermark isolated bridge', () => {
             expect.any(Function)
         );
         expect(postMessageSpy).toHaveBeenCalledWith(
-            {
+            JSON.stringify({
                 type: 'GWR_EXTENSION_STATE_RESPONSE',
                 requestId: 'state-1',
                 enabled: false,
-            },
+            }),
             '*'
         );
     });
@@ -95,7 +95,7 @@ describe('Gemini watermark isolated bridge', () => {
             expect.any(Function)
         );
         expect(postMessageSpy).toHaveBeenCalledWith(
-            {
+            JSON.stringify({
                 type: 'GWR_EXTENSION_GM_XHR_RESPONSE',
                 requestId: 'xhr-1',
                 response: {
@@ -106,7 +106,7 @@ describe('Gemini watermark isolated bridge', () => {
                     headers: { 'content-type': 'image/png' },
                     bytes: [1, 2, 3],
                 },
-            },
+            }),
             '*'
         );
     });
@@ -126,7 +126,7 @@ describe('Gemini watermark isolated bridge', () => {
         });
 
         expect(postMessageSpy).toHaveBeenCalledWith(
-            {
+            JSON.stringify({
                 type: 'GWR_EXTENSION_GM_XHR_RESPONSE',
                 requestId: 'xhr-2',
                 response: {
@@ -137,7 +137,7 @@ describe('Gemini watermark isolated bridge', () => {
                     bytes: [],
                     error: 'No listener',
                 },
-            },
+            }),
             '*'
         );
     });

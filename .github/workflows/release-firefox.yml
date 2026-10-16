@@ -1,0 +1,42 @@
+name: Package Firefox Extension
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Package Firefox extension and AMO source
+        run: npm run package:firefox -- --source
+
+      - name: Lint Firefox package
+        run: npx --yes web-ext lint -s artifacts/firefox-extension
+
+      - name: Upload Firefox artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemini-nexus-firefox
+          path: |
+            artifacts/gemini-nexus-firefox-*.zip
+            artifacts/firefox-extension
+          if-no-files-found: error

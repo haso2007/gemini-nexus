@@ -16,7 +16,8 @@
     "package:extension": "npm run build && node scripts/package-extension.mjs",
     "publish:chrome-webstore": "node scripts/chrome-webstore-publish.mjs",
     "preview": "vite preview",
-    "package:firefox": "npm run build && node scripts/package-firefox.mjs"
+    "package:firefox": "npm run build && node scripts/package-firefox.mjs",
+    "lint:firefox": "npx --yes web-ext lint -s artifacts/firefox-extension"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

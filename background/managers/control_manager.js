@@ -1,4 +1,5 @@
 import { BrowserConnection } from '../control/connection.js';
+import { DomConnection } from '../control/dom_connection.js';
 import { SnapshotManager } from '../control/snapshot/index.js';
 import { BrowserActions } from '../control/actions/index.js';
 import { ToolDispatcher } from '../control/dispatcher.js';
@@ -7,13 +8,20 @@ import { debugLog } from '../../shared/logging/debug.js';
 
 export const DEFAULT_BROWSER_CONTROL_START_URL = 'https://www.google.com/search?q=';
 
+export function createBrowserControlConnection() {
+    if (chrome.debugger && typeof chrome.debugger.attach === 'function') {
+        return new BrowserConnection();
+    }
+    return new DomConnection();
+}
+
 /**
  * Main Controller handling Chrome DevTools MCP functionalities.
  * Orchestrates connection, snapshots, and action execution.
  */
 export class BrowserControlManager {
     constructor() {
-        this.connection = new BrowserConnection();
+        this.connection = createBrowserControlConnection();
         this.snapshotManager = new SnapshotManager(this.connection);
         this.actions = new BrowserActions(this.connection, this.snapshotManager, {
             getControlledGroupId: () => this.getControlledGroupId(),

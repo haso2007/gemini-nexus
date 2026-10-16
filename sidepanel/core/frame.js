@@ -45,9 +45,15 @@ export class FrameManager {
     }
 
     postMessage(message) {
-        if (this.iframe.contentWindow) {
-            this.iframe.contentWindow.postMessage(message, '*');
+        const target = this.iframe?.contentWindow;
+        if (!target) return;
+        let origin = '*';
+        try {
+            if (target.origin && target.origin !== 'null') origin = target.origin;
+        } catch {
+            origin = '*';
         }
+        target.postMessage(message, origin);
     }
 
     getWindow() {

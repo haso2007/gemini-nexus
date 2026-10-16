@@ -29,10 +29,10 @@ const packageDir = path.join(artifactsDir, 'firefox-extension');
 
 export const FIREFOX_SHIM_PATH = 'shared/compat/firefox_shim.js';
 export const GECKO_ID = 'gemini-nexus-firefox@haso2007';
-export const STRICT_MIN_VERSION = '128.0';
+export const STRICT_MIN_VERSION = '140.0';
 export const DEFAULT_SIDEBAR_PANEL = 'sidepanel/index.html';
 
-const UNSUPPORTED_PERMISSIONS = new Set(['sidePanel', 'debugger', 'tabGroups']);
+const UNSUPPORTED_PERMISSIONS = new Set(['sidePanel', 'debugger']);
 
 const localDependencyAssets = [
   {
@@ -81,6 +81,9 @@ export function createFirefoxManifest(packagedManifest) {
   manifest.permissions = (manifest.permissions || []).filter(
     (permission) => !UNSUPPORTED_PERMISSIONS.has(permission)
   );
+  if (!manifest.permissions.includes('declarativeNetRequest')) {
+    manifest.permissions.push('declarativeNetRequest');
+  }
 
   if (manifest.content_security_policy) {
     manifest.content_security_policy = {
@@ -161,22 +164,39 @@ async function sanitizePackagedSandboxHtml() {
 }
 
 /**
- * Ensures `sidepanel/index.html` in the Firefox package enforces HTML5
- * `sandbox="allow-scripts allow-forms allow-popups allow-modals"` on `#sandbox-frame`
- * since Firefox ignores `manifest.sandbox`.
+ * Firefox treats a sandboxed iframe as an opaque origin. Extension CSP
+ * `script-src 'self'` then blocks the UI bundle, so the sidebar stays blank.
+ * @param {string} html
  */
-async function enforceSidepanelIframeSandbox() {
-  const sidepanelHtmlPath = path.join(packageDir, 'sidepanel/index.html');
-  const html = await readFile(sidepanelHtmlPath, 'utf8');
-  if (!/id=["']sandbox-frame["'][^>]*\bsandbox=/i.test(html)) {
-    const updated = html.replace(
-      /<iframe\s+id=["']sandbox-frame["']/i,
-      '<iframe id="sandbox-frame" sandbox="allow-scripts allow-forms allow-popups allow-modals"'
-    );
-    if (updated !== html) {
-      await writeFile(sidepanelHtmlPath, updated, 'utf8');
-    }
-  }
+export function stripSandboxFrameAttribute(html) {
+  return html.replace(
+    /<iframe\b([^>]*\bid=["']sandbox-frame["'][^>]*)>/gi,
+    (_match, attrs) => `<iframe${attrs.replace(/\s+sandbox=(["'])[\s\S]*?\1/gi, '')}>`
+  );
+}
+
+/**
+ * Sidebar and sandbox documents live in subdirectories. Root-absolute
+ * `/assets/...` URLs fail to resolve in Firefox sidebars, so point them at
+ * the packaged `assets/` directory.
+ * @param {string} html
+ */
+export function relativizePackagedAssetUrls(html) {
+  return html.replace(/(=)(["'])\/assets\//g, '$1$2../assets/');
+}
+
+async function prepareFirefoxHtmlPages() {
+  const pages = ['sidepanel/index.html', 'sandbox/index.html', 'settings/index.html'];
+  await Promise.all(
+    pages.map(async (relativePath) => {
+      const htmlPath = path.join(packageDir, relativePath);
+      const html = await readFile(htmlPath, 'utf8');
+      const updated = relativizePackagedAssetUrls(
+        relativePath.endsWith('sidepanel/index.html') ? stripSandboxFrameAttribute(html) : html
+      );
+      if (updated !== html) await writeFile(htmlPath, updated, 'utf8');
+    })
+  );
 }
 
 /**
@@ -406,6 +426,8 @@ async function main() {
     copyIntoPackage('logo.png'),
     copyIntoPackage('assets/icons'),
     copyIntoPackage('background'),
+    copyIntoPackage('background/control/dom_page_script.js'),
+    copyIntoPackage('background/control/dom_bridge_script.js'),
     writeContentBundle(),
     copyUnbundledContentScripts(),
     copyIntoPackage('shared'),
@@ -421,7 +443,7 @@ async function main() {
   ]);
 
   await sanitizePackagedSandboxHtml();
-  await enforceSidepanelIframeSandbox();
+  await prepareFirefoxHtmlPages();
   await removeJunkFiles(packageDir);
 
   const missingReferences = await findMissingPackagedAssetReferences(packageDir, [

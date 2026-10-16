@@ -12,6 +12,11 @@ import { McpConnectionClient } from './mcp/connection_client.js';
 export class McpRemoteManager {
     constructor({ clientName = 'gemini-nexus', clientVersion = '0.0.0' } = {}) {
         this.connectionClient = new McpConnectionClient({ clientName, clientVersion });
+        globalThis.chrome?.runtime?.onSuspend?.addListener(() => {
+            this.disconnect().catch((error) => {
+                console.warn('[MCP] Failed to disconnect before suspend:', error);
+            });
+        });
     }
 
     isEnabled(config) {

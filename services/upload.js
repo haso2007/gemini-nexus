@@ -1,5 +1,6 @@
 import { dataUrlToBlob } from '../shared/utils/index.js';
 import { normalizeUserAttachments } from '../shared/attachments/index.js';
+import { fetchGeminiWithPageFallback } from './net/firefox_page_fetch.js';
 
 const CURRENT_UPLOAD_ENDPOINT = 'https://push.clients6.google.com/upload/';
 
@@ -29,7 +30,7 @@ function readHeader(response, headerName) {
 }
 
 async function startResumableUpload(fileName, uploadRequest, signal) {
-    const response = await fetch(uploadRequest.endpoint, {
+    const response = await fetchGeminiWithPageFallback(uploadRequest.endpoint, {
         method: 'POST',
         signal,
         headers: {
@@ -54,7 +55,7 @@ async function startResumableUpload(fileName, uploadRequest, signal) {
 }
 
 async function finalizeResumableUpload(uploadUrl, blob, uploadRequest, signal) {
-    const response = await fetch(uploadUrl, {
+    const response = await fetchGeminiWithPageFallback(uploadUrl, {
         method: 'POST',
         signal,
         headers: {

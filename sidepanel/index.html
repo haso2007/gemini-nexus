@@ -20,18 +20,11 @@
     </div>
 
     <!--
-      CRITICAL FOR FIREFOX MV3:
-      Firefox does not support `manifest.sandbox` or `content_security_policy.sandbox`.
-      Explicitly declaring `sandbox="allow-scripts allow-forms allow-popups allow-modals"`
-      on `#sandbox-frame` guarantees that `sandbox/index.html` runs inside an isolated
-      opaque origin (`window.origin === "null"`) without WebExtension API privileges
-      in both Chrome and Firefox.
+      Chrome isolates this frame with manifest.sandbox. Do not add an HTML
+      sandbox attribute: Firefox would give the frame an opaque origin, and
+      script-src 'self' would then block the UI bundle, leaving a blank sidebar.
     -->
-    <iframe
-      id="sandbox-frame"
-      sandbox="allow-scripts allow-forms allow-popups allow-modals"
-      allow="clipboard-write; display-capture"
-    ></iframe>
+    <iframe id="sandbox-frame" allow="clipboard-write; display-capture"></iframe>
     <script src="index.js" type="module"></script>
   </body>
 </html>
