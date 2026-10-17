@@ -22,6 +22,8 @@ describe('web thinking helpers', () => {
         expect(getWebThinkingFastLevel('56fdd199312815e2')).toBe('minimal');
         expect(getWebThinkingFastLevel('e6fa609c3fa255c0')).toBe('low');
         expect(normalizeWebThinkingLevelForModel('e6fa609c3fa255c0', 'minimal')).toBe('low');
+        expect(getWebThinkingFastLevel('95a4c0abcba24364')).toBe('low');
+        expect(normalizeWebThinkingLevelForModel('95a4c0abcba24364', 'minimal')).toBe('low');
     });
 
     it('toggles between model-specific fast mode and high mode', () => {
@@ -29,6 +31,8 @@ describe('web thinking helpers', () => {
         expect(getNextWebThinkingLevel('8c46e95b1a07cecc', 'minimal')).toBe('high');
         expect(getNextWebThinkingLevel('e6fa609c3fa255c0', 'high')).toBe('low');
         expect(getNextWebThinkingLevel('e6fa609c3fa255c0', 'low')).toBe('high');
+        expect(getNextWebThinkingLevel('95a4c0abcba24364', 'high')).toBe('low');
+        expect(getNextWebThinkingLevel('95a4c0abcba24364', 'low')).toBe('high');
     });
 
     it('maps Nexus Web thinking levels to Gemini Web native levels', () => {
@@ -50,6 +54,8 @@ describe('web thinking helpers', () => {
         expect(supportsWebThinking('gemini-3.8-flash')).toBe(true);
         expect(supportsWebThinking('gemini-3.7-flash')).toBe(true);
         expect(supportsWebThinking('gemini-3-flash-thinking')).toBe(true);
+        expect(supportsWebThinking('gemini-4-argon')).toBe(true);
+        expect(supportsWebThinking('95a4c0abcba24364')).toBe(true);
         expect(supportsWebThinking('gpt-5')).toBe(false);
     });
 });

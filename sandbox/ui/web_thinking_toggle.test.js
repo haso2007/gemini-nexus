@@ -55,6 +55,20 @@ describe('web thinking toggle UI', () => {
         expect(button.title).toBe('Thinking: Low (Fast Mode)');
     });
 
+    it('uses low as the fast active state for Gemini Web 4 Argon', () => {
+        syncWebThinkingToggle(
+            button,
+            { provider: 'web', webThinkingLevel: 'low' },
+            '95a4c0abcba24364'
+        );
+
+        expect(button.hidden).toBe(false);
+        expect(button.classList.contains('is-fast')).toBe(true);
+        expect(button.dataset.thinkingLevel).toBe('low');
+        expect(button.dataset.fastThinkingLevel).toBe('low');
+        expect(button.title).toBe('Thinking: Low (Fast Mode)');
+    });
+
     it('uses deep mode wording for the high state', () => {
         syncWebThinkingToggle(
             button,

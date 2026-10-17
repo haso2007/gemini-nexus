@@ -8,6 +8,7 @@
             { value: '56fdd199312815e2', label: '3.8 Flash' },
             { value: '8c46e95b1a07cecc', label: '3.1 Flash-Lite' },
             { value: 'e6fa609c3fa255c0', label: '3.1 Pro' },
+            { value: '95a4c0abcba24364', label: '4 Argon' },
         ].map((option) => Object.freeze(option))
     );
 
@@ -21,6 +22,9 @@
         'gemini-3-flash-thinking': '56fdd199312815e2',
         'gemini-3.1-pro': 'e6fa609c3fa255c0',
         'gemini-3-pro': 'e6fa609c3fa255c0',
+        'gemini-4-argon': '95a4c0abcba24364',
+        'gemini-4': '95a4c0abcba24364',
+        '4-argon': '95a4c0abcba24364',
     });
 
     const WEB_MODEL_HEADER_CONFIGS = Object.freeze({
@@ -41,6 +45,11 @@
         e6fa609c3fa255c0: Object.freeze({
             hash: 'e6fa609c3fa255c0',
             mode: 3,
+            fastThinkingLevel: 'low',
+        }),
+        '95a4c0abcba24364': Object.freeze({
+            hash: '95a4c0abcba24364',
+            mode: 8,
             fastThinkingLevel: 'low',
         }),
     });
