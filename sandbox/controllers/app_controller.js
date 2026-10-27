@@ -649,6 +649,15 @@ export class AppController {
                 return;
             }
             if (payload.action === 'BACKGROUND_REQUEST_ERROR') {
+                const requestAction = payload.requestAction || null;
+                if (requestAction === 'SEND_PROMPT' || requestAction === 'QUICK_ASK') {
+                    const sessionId = this.sessionManager?.currentSessionId || null;
+                    if (sessionId && typeof this.finishSessionGeneration === 'function') {
+                        this.finishSessionGeneration(sessionId);
+                    }
+                    this.ui.setLoading(false);
+                    this.sessionFlow?.refreshHistoryUI?.();
+                }
                 this.ui.updateStatus(payload.error || 'Background request failed.');
                 setTimeout(() => {
                     if (!this.isCurrentSessionGenerating()) this.ui.updateStatus('');

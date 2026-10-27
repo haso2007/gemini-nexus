@@ -135,6 +135,28 @@ describe('shared/compat/firefox_shim', () => {
         expect(received).toEqual({ action: 'TEST_ACTION' });
     });
 
+    it('keeps sendMessage pending until a listener calls sendResponse after returning true', async () => {
+        const { context, browser } = createFirefoxSandbox();
+        browser.runtime.sendMessage = (message) => {
+            const replies = browser.runtime.onMessage.listeners.map((listener) =>
+                listener(message, { id: 'sender' })
+            );
+            const pending = replies.find((reply) => reply && typeof reply.then === 'function');
+            return pending || Promise.resolve(undefined);
+        };
+        let release;
+        context.chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+            setTimeout(() => sendResponse({ status: 'completed', echo: message.text }), 0);
+            release = true;
+            return true;
+        });
+
+        const response = await context.chrome.runtime.sendMessage({ action: 'SEND_PROMPT', text: 'hi' });
+
+        expect(release).toBe(true);
+        expect(response).toEqual({ status: 'completed', echo: 'hi' });
+    });
+
     it('emulates chrome.sidePanel on top of sidebarAction', () => {
         const { context } = createFirefoxSandbox();
         expect(typeof context.chrome.sidePanel?.setPanelBehavior).toBe('function');

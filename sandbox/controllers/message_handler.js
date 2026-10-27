@@ -215,6 +215,15 @@ export class MessageHandler {
                 this.app.isGenerating = false;
                 this.app.generatingSessionId = null;
             }
+        } else if (request.status === 'error' || request.status === 'cancelled') {
+            // Ensure error/cancel replies clear generating state even if the session
+            // was not tracked as generating (e.g. auth failure before stream starts)
+            if (typeof this.app.finishSessionGeneration === 'function') {
+                this.app.finishSessionGeneration(sessionId);
+            } else if (this.app.generatingSessionId === sessionId) {
+                this.app.isGenerating = false;
+                this.app.generatingSessionId = null;
+            }
         }
         this.clearStreamState(sessionId);
         this.ui.setLoading(this.isCurrentSessionGenerating());

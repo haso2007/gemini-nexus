@@ -1477,4 +1477,39 @@ describe('RequestDispatcher response mapping', () => {
         expect(auth.forceContextRefresh).not.toHaveBeenCalled();
         expect(sendWebMessage).toHaveBeenCalledTimes(1);
     });
+
+    it('does not retry when Gemini Web login tokens are missing from the page', async () => {
+        getHistory.mockResolvedValue([]);
+        const auth = {
+            accountIndices: ['0'],
+            getOrFetchContext: vi.fn(async () => {
+                throw new Error(
+                    'Gemini Web request tokens unavailable for account 0: atValue, blValue, fSid. Please log in to gemini.google.com or refresh Gemini.'
+                );
+            }),
+            updateContext: vi.fn(),
+            forceContextRefresh: vi.fn(),
+            rotateAccount: vi.fn(),
+        };
+        const dispatcher = new RequestDispatcher(auth);
+
+        await expect(
+            dispatcher.dispatch(
+                {
+                    text: 'hello',
+                    model: 'gemini-web',
+                    sessionId: 'session-web',
+                },
+                { provider: 'web' },
+                [],
+                vi.fn(),
+                null
+            )
+        ).rejects.toThrow('Gemini Web request tokens unavailable');
+
+        expect(auth.getOrFetchContext).toHaveBeenCalledTimes(1);
+        expect(auth.forceContextRefresh).not.toHaveBeenCalled();
+        expect(auth.rotateAccount).not.toHaveBeenCalled();
+        expect(sendWebMessage).not.toHaveBeenCalled();
+    });
 });

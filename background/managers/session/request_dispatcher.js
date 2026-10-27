@@ -329,7 +329,9 @@ function isUnavailableWebAuthError(message = '') {
         message.includes('Not logged in') ||
         message.includes('Sign in') ||
         message.includes('Missing Gemini Web auth token: blValue') ||
-        message.includes('Missing Gemini Web auth token: fSid')
+        message.includes('Missing Gemini Web auth token: fSid') ||
+        message.includes('Gemini Web request tokens unavailable') ||
+        message.includes('Please log in to gemini.google.com')
     );
 }
 

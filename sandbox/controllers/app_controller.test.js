@@ -544,6 +544,32 @@ describe('AppController session restore behavior', () => {
         expect(ui.updateStatus).toHaveBeenCalledWith('Side panel unavailable');
     });
 
+    it('clears the generating spinner when a send-prompt request fails', async () => {
+        const { app, sessionManager, ui } = createAppHarness();
+        sessionManager.createSession('gemini-test');
+        const sessionId = sessionManager.currentSessionId;
+        app.startSessionGeneration(sessionId);
+        app.sessionFlow = { refreshHistoryUI: vi.fn() };
+
+        await app.handleIncomingMessage({
+            data: {
+                action: 'BACKGROUND_MESSAGE',
+                payload: {
+                    action: 'BACKGROUND_REQUEST_ERROR',
+                    requestAction: 'SEND_PROMPT',
+                    error: 'Could not establish connection. Receiving end does not exist.',
+                },
+            },
+        });
+
+        expect(app.isSessionGenerating(sessionId)).toBe(false);
+        expect(ui.setLoading).toHaveBeenCalledWith(false);
+        expect(app.sessionFlow.refreshHistoryUI).toHaveBeenCalled();
+        expect(ui.updateStatus).toHaveBeenCalledWith(
+            'Could not establish connection. Receiving end does not exist.'
+        );
+    });
+
     it('shows open-tabs result errors instead of opening an empty selector', async () => {
         const { app, ui } = createAppHarness();
 

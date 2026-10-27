@@ -62,6 +62,52 @@
         hasListeners: true,
     };
 
+    // Firefox's native runtime.onMessage listener is `(message, sender) => ...`.
+    // Chrome extensions pass a third `sendResponse` argument and keep the
+    // message channel open by returning `true`. Firefox ignores that return
+    // value: it only waits when the listener returns a Promise. Without this
+    // bridge, `chrome.runtime.sendMessage` (for example SEND_PROMPT) never
+    // resolves, the background event page is treated as idle and gets
+    // terminated, and the chat spinner never stops.
+    function wrapMessageListener(listener) {
+        if (typeof listener !== 'function' || listener.__geminiNexusSendResponse) {
+            return listener;
+        }
+        function wrapped(message, sender) {
+            var responded = false;
+            var settled;
+            var settle;
+            var pending = new Promise(function (resolve) {
+                settle = resolve;
+            });
+            function sendResponse(response) {
+                if (responded) return;
+                responded = true;
+                settled = response;
+                settle(response);
+            }
+            var result;
+            try {
+                result = listener(message, sender, sendResponse);
+            } catch (error) {
+                settle(Promise.reject(error));
+                return pending;
+            }
+            if (result === true) {
+                return pending;
+            }
+            if (responded) {
+                return Promise.resolve(settled);
+            }
+            if (result && typeof result.then === 'function') {
+                return result;
+            }
+            return undefined;
+        }
+        wrapped.__geminiNexusSendResponse = true;
+        return wrapped;
+    }
+
     // Wrap an async API method so an optional trailing function argument is
     // treated as a Chrome-style completion callback.
     function wrapFunction(fn, owner, methodName) {
@@ -192,6 +238,12 @@
                 }
 
                 if (typeof value === 'function') {
+                    if (prop === 'addListener' && obj === browserNs.runtime.onMessage) {
+                        var nativeAdd = typeof value.bind === 'function' ? value.bind(obj) : value;
+                        return function (listener) {
+                            return nativeAdd(wrapMessageListener(listener));
+                        };
+                    }
                     return wrapFunction(value, obj, prop);
                 }
                 if (typeof value === 'object' && value !== null) {

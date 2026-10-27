@@ -140,6 +140,40 @@ describe('GeminiSessionManager cancellation', () => {
         expect(result.text).not.toContain('style=');
     });
 
+    it('treats a logged-out Gemini page as an unavailable Web auth error', async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        getConnectionSettings.mockResolvedValue({ provider: 'web' });
+        const manager = new GeminiSessionManager();
+        manager.ensureInitialized = vi.fn(async () => {});
+        manager.auth = {
+            forceContextRefresh: vi.fn(),
+            getCurrentIndex: vi.fn(() => '0'),
+        };
+        manager.dispatcher = {
+            dispatch: vi.fn(async () => {
+                throw new Error(
+                    'Gemini Web request tokens unavailable for account 0: atValue, blValue, fSid. Please log in to gemini.google.com or refresh Gemini.'
+                );
+            }),
+        };
+
+        const result = await manager.handleSendPrompt(
+            { text: 'hello', sessionId: 'session-web' },
+            vi.fn()
+        );
+
+        expect(manager.auth.forceContextRefresh).toHaveBeenCalledTimes(1);
+        expect(result).toEqual(
+            expect.objectContaining({
+                action: 'GEMINI_REPLY',
+                sessionId: 'session-web',
+                status: 'error',
+                text: expect.stringContaining('Please log in'),
+            })
+        );
+        expect(result.text).not.toContain('request tokens unavailable');
+    });
+
     it('keeps the Web auth login prompt when clearing stale context fails', async () => {
         vi.spyOn(console, 'error').mockImplementation(() => {});
         const storageError = new Error('Storage write failed');
