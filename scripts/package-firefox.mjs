@@ -24,7 +24,7 @@
  *   except the MAIN-world one (page context must stay untouched)
  *
  * Known intentional degradations in the Firefox build (see docs/firefox.md):
- * - CDP-based browser control is disabled (no chrome.debugger in Firefox).
+ * - Browser control falls back to DOM scripting (no chrome.debugger in Firefox).
  * - Per-tab side-panel enable/disable is best-effort (no Firefox equivalent).
  * - The native tab-group indicator is skipped (no chrome.tabGroups).
  */
