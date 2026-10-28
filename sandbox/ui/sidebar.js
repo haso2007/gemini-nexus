@@ -483,6 +483,28 @@ export class SidebarController {
         }
 
         const currentQuery = this.searchInput ? this.searchInput.value : '';
+        const renderSignature = JSON.stringify({
+            sessions: this.allSessions.map((session) => [
+                session?.id || '',
+                session?.title || '',
+                session?.isPinned === true,
+                session?.groupId || '',
+                Array.isArray(session?.messages) ? session.messages.length : 0,
+            ]),
+            groups: this.allGroups.map((group) => [
+                group?.id || '',
+                group?.title || '',
+                group?.isExpanded !== false,
+            ]),
+            currentId: this.currentSessionId || '',
+            generating: this.renderState.generatingSessionIds,
+            menu: [this.activeMenuType || '', this.activeMenuId || ''],
+            editing: [this.editingSessionId || '', this.editingGroupId || ''],
+            query: currentQuery,
+        });
+        if (renderSignature === this._renderSignature) return;
+        this._renderSignature = renderSignature;
+
         if (currentQuery.trim()) {
             this.handleSearch(currentQuery);
         } else {

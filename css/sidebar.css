@@ -13,7 +13,6 @@
         transform 0.2s cubic-bezier(0.2, 0, 0, 1),
         width 0.2s cubic-bezier(0.2, 0, 0, 1),
         background-color 0.2s;
-    will-change: transform, width;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -602,8 +601,12 @@ body.layout-wide .sidebar-overlay {
 }
 
 .history-generating-spinner {
+    position: absolute;
+    right: 36px;
+    top: 50%;
     width: 14px;
     height: 14px;
+    margin-top: -7px;
     border: 2px solid var(--border-color);
     border-top-color: currentColor;
     border-radius: 50%;
