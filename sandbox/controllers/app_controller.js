@@ -502,6 +502,27 @@ export class AppController {
         return messages.slice(previousMessageCount).some((message) => message?.role === 'ai');
     }
 
+    sessionHasPersistedAiReply(session) {
+        const messages = Array.isArray(session?.messages) ? session.messages : [];
+        const lastMessage = messages[messages.length - 1];
+        return lastMessage?.role === 'ai' && Boolean(lastMessage.text || lastMessage.thoughts);
+    }
+
+    clearGeneratingSessionsWithPersistedReply(sessions) {
+        if (!this.generatingSessions?.size || !Array.isArray(sessions)) return false;
+
+        let changed = false;
+        for (const sessionId of this.generatingSessions.keys()) {
+            const session = sessions.find((item) => item?.id === sessionId);
+            if (!this.sessionHasPersistedAiReply(session)) continue;
+            this.generatingSessions.delete(sessionId);
+            changed = true;
+        }
+
+        if (changed) this.syncLegacyGenerationState();
+        return changed;
+    }
+
     syncCurrentSessionFromStorage(sessionId, previousMessageCount) {
         const session = this.sessionManager.getSessionById(sessionId);
         if (!this.hasNewAiMessage(session, previousMessageCount)) return false;
@@ -573,6 +594,8 @@ export class AppController {
 
             this.sessionManager.setSessions(restoredSessions);
             this.sessionsRestored = true;
+            this.clearGeneratingSessionsWithPersistedReply(restoredSessions);
+            this.ui.setLoading(this.isCurrentSessionGenerating());
             this.sessionFlow.refreshHistoryUI();
             if (this.sessionManager.sessions.length !== restoredSessions.length) {
                 saveSessionsToStorage(this.sessionManager.getPersistableSessions(), {

@@ -73,6 +73,10 @@
         if (typeof listener !== 'function' || listener.__geminiNexusSendResponse) {
             return listener;
         }
+        // Firefox destroys the reply actor ("Conduits" / RunListener) if the
+        // event page has no pending listener promise while an async handler is
+        // still working. Returning a promise immediately keeps that actor alive
+        // until sendResponse runs, even when the listener forgets to return true.
         function wrapped(message, sender) {
             var responded = false;
             var settled;
@@ -102,7 +106,14 @@
             if (result && typeof result.then === 'function') {
                 return result;
             }
-            return undefined;
+            // A synchronous listener that neither replies nor returns true is
+            // finished. Resolve on the next turn so a listener that calls
+            // sendResponse before returning (without returning true) is still
+            // delivered, which is what keeps Firefox's reply actor alive.
+            Promise.resolve().then(function () {
+                if (!responded) settle(undefined);
+            });
+            return pending;
         }
         wrapped.__geminiNexusSendResponse = true;
         return wrapped;
