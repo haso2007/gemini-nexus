@@ -361,6 +361,32 @@ describe('MessageBridge model persistence', () => {
         );
     });
 
+    it('retries a message once while the Firefox background service worker starts', async () => {
+        const frame = createFrame();
+        const state = createState();
+        chrome.runtime.sendMessage
+            .mockRejectedValueOnce(
+                new Error('Could not establish connection. Receiving end does not exist.')
+            )
+            .mockResolvedValueOnce({ status: 'completed' });
+        const bridge = new MessageBridge(frame, state);
+
+        bridge.forwardToBackground({ action: 'SEND_PROMPT', text: 'hello' });
+
+        await vi.waitFor(() => expect(chrome.runtime.sendMessage).toHaveBeenCalledTimes(2));
+
+        expect(chrome.runtime.sendMessage).toHaveBeenLastCalledWith({
+            action: 'SEND_PROMPT',
+            text: 'hello',
+        });
+        expect(frame.postMessage).not.toHaveBeenCalledWith(
+            expect.objectContaining({
+                action: 'BACKGROUND_MESSAGE',
+                payload: expect.objectContaining({ action: 'BACKGROUND_REQUEST_ERROR' }),
+            })
+        );
+    });
+
     it('routes browser-control prompts through the current webpage tab id', () => {
         const frame = createFrame();
         const state = createState();

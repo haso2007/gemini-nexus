@@ -9,6 +9,8 @@ const FORWARDED_RESPONSE_ACTIONS = new Set([
 ]);
 
 const HOST_ROUTED_ACTIONS = new Set(['GET_OPEN_TABS', 'SWITCH_TAB']);
+const MISSING_RECEIVER_ERROR = /could not establish connection\. receiving end does not exist/i;
+const BACKGROUND_STARTUP_RETRY_DELAY_MS = 100;
 
 function getErrorMessage(error, fallback = 'Background request failed') {
     return error?.message || error || fallback;
@@ -78,10 +80,29 @@ export function isMessageForCurrentTab(state, message) {
     return message.tabId == null || message.tabId === messageTargetTabId;
 }
 
+function isMissingReceiverError(error) {
+    return MISSING_RECEIVER_ERROR.test(getErrorMessage(error, ''));
+}
+
+function waitForBackgroundStartup() {
+    return new Promise((resolve) => setTimeout(resolve, BACKGROUND_STARTUP_RETRY_DELAY_MS));
+}
+
+async function sendToBackgroundWithRetry(payload) {
+    try {
+        return await chrome.runtime.sendMessage(payload);
+    } catch (error) {
+        // Firefox can report no receiver while its MV3 service worker is starting.
+        // The rejected message was not delivered, so one delayed retry is safe.
+        if (!isMissingReceiverError(error)) throw error;
+        await waitForBackgroundStartup();
+        return chrome.runtime.sendMessage(payload);
+    }
+}
+
 export function forwardToBackground(bridge, payload) {
     const scopedPayload = attachCurrentTabContext(bridge.state, payload);
-    chrome.runtime
-        .sendMessage(scopedPayload)
+    sendToBackgroundWithRetry(scopedPayload)
         .then((response) => {
             if (response && scopedPayload.action === 'TOGGLE_BROWSER_CONTROL') {
                 postBrowserControlToggleResult(bridge, scopedPayload, response);
