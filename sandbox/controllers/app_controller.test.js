@@ -194,6 +194,44 @@ describe('AppController session restore behavior', () => {
         expect(sessionManager.currentSessionId).toBe('real');
     });
 
+    it('keeps an explicitly selected session when delayed tab details arrive', async () => {
+        const { app, sessionManager, ui } = createAppHarness();
+        app.sidePanelScope = 'remembered_tabs';
+
+        await app.handleIncomingMessage(restoreEvent([realSession()]));
+        await app.handleIncomingMessage({
+            data: {
+                action: 'RESTORE_SIDE_PANEL_TAB_CONTEXT',
+                payload: { tabId: 123, sessionId: null },
+            },
+        });
+        await app.handleIncomingMessage({
+            data: {
+                action: 'BACKGROUND_MESSAGE',
+                payload: { action: 'SWITCH_SESSION', sessionId: 'real' },
+            },
+        });
+        ui.clearChatHistory.mockClear();
+        window.parent.postMessage.mockClear();
+
+        await app.handleIncomingMessage({
+            data: {
+                action: 'RESTORE_SIDE_PANEL_TAB_DETAILS',
+                payload: {
+                    tabId: 123,
+                    title: 'Order details',
+                    url: 'https://ldcstore.com/orders/1',
+                },
+            },
+        });
+
+        expect(sessionManager.currentSessionId).toBe('real');
+        expect(app.boundSessionId).toBe('real');
+        expect(app.currentTabTitle).toBe('Order details');
+        expect(ui.clearChatHistory).not.toHaveBeenCalled();
+        expect(window.parent.postMessage).not.toHaveBeenCalled();
+    });
+
     it('restores unsent composer drafts when returning to a remembered browser tab', async () => {
         const { app, sessionManager, ui } = createAppHarness();
         app.sidePanelScope = 'remembered_tabs';

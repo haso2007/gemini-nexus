@@ -318,7 +318,7 @@ describe('StateManager tab ownership', () => {
         expect(localStorage.getItem('geminiSidebarExpanded')).toBe('false');
     });
 
-    it('posts the current tab URL with side panel tab context', () => {
+    it('posts tab details without re-sending a potentially stale session binding', () => {
         setupChrome({
             id: 33,
             title: 'Video',
@@ -337,6 +337,14 @@ describe('StateManager tab ownership', () => {
                 sessionId: null,
                 draft: '',
                 drafts: {},
+                title: '',
+                url: '',
+            },
+        });
+        expect(frame.postMessage).toHaveBeenCalledWith({
+            action: 'RESTORE_SIDE_PANEL_TAB_DETAILS',
+            payload: {
+                tabId: 33,
                 title: 'Video',
                 url: 'https://www.youtube.com/watch?v=nU9c-PffHPg',
             },

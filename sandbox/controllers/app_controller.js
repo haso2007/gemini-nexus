@@ -349,7 +349,10 @@ export class AppController {
         return 'draft';
     }
 
-    getLegacyInputDraftKey(tabId = this.currentTabId, sessionId = this.sessionManager.currentSessionId) {
+    getLegacyInputDraftKey(
+        tabId = this.currentTabId,
+        sessionId = this.sessionManager.currentSessionId
+    ) {
         if (!Number.isInteger(tabId) || tabId <= 0) return null;
         return sessionId ? `tab:${tabId}|session:${sessionId}` : `tab:${tabId}|draft`;
     }
@@ -462,7 +465,10 @@ export class AppController {
         this.applyComposerSnapshot(this.resolveComposerDraft());
     }
 
-    clearInputDraftForContext(tabId = this.currentTabId, sessionId = this.sessionManager.currentSessionId) {
+    clearInputDraftForContext(
+        tabId = this.currentTabId,
+        sessionId = this.sessionManager.currentSessionId
+    ) {
         const key = this.getInputDraftKey(tabId, sessionId);
         const legacyKey = this.getLegacyInputDraftKey(tabId, sessionId);
         this.inputDrafts.delete(key);
@@ -554,6 +560,16 @@ export class AppController {
             this.ui.settings.updateContextSettings(payload);
             return;
         }
+        if (action === 'RESTORE_SIDE_PANEL_TAB_DETAILS') {
+            if (payload?.tabId !== this.currentTabId) return;
+
+            this.currentTabUrl = payload?.url || '';
+            this.currentTabTitle = payload?.title || '';
+            this.ui.setPageContextAvailable?.(
+                Number.isInteger(this.currentTabId) && this.currentTabId > 0
+            );
+            return;
+        }
         if (action === 'RESTORE_SIDE_PANEL_TAB_CONTEXT') {
             this.saveCurrentComposerState();
 
@@ -564,7 +580,8 @@ export class AppController {
             this.hydrateComposerDrafts(payload?.drafts);
             if (payload?.drafts == null && typeof payload?.draft === 'string') {
                 const draftKey = this.getInputDraftKey(this.currentTabId, this.boundSessionId);
-                if (payload.draft) this.inputDrafts.set(draftKey, { text: payload.draft, files: [] });
+                if (payload.draft)
+                    this.inputDrafts.set(draftKey, { text: payload.draft, files: [] });
                 else this.inputDrafts.delete(draftKey);
             }
             this.ui.setPageContextAvailable?.(

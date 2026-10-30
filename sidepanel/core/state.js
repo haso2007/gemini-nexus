@@ -504,7 +504,14 @@ export class StateManager {
                 if (chrome.runtime?.lastError || !tab) return;
                 if (this.currentTabId !== tabId) return;
 
-                this.postTabContextMessage(tab);
+                this.frame.postMessage({
+                    action: 'RESTORE_SIDE_PANEL_TAB_DETAILS',
+                    payload: {
+                        tabId,
+                        url: tab.url || '',
+                        title: tab.title || '',
+                    },
+                });
             });
         } catch {
             // Some extension pages or browser states can reject tab detail lookup.
