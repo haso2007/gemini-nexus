@@ -123,7 +123,7 @@ describe('AppController session restore behavior', () => {
 
         expect(sessionManager.currentSessionId).toBe('real');
         expect(app.boundSessionId).toBe('real');
-        expect(window.parent.postMessage).toHaveBeenCalledWith(
+        expect(window.parent.postMessage).not.toHaveBeenCalledWith(
             {
                 action: 'SAVE_SIDE_PANEL_SESSION_BINDING',
                 payload: {
@@ -192,6 +192,38 @@ describe('AppController session restore behavior', () => {
 
         expect(app.currentTabId).toBe(123);
         expect(sessionManager.currentSessionId).toBe('real');
+        expect(window.parent.postMessage).not.toHaveBeenCalledWith(
+            {
+                action: 'SAVE_SIDE_PANEL_SESSION_BINDING',
+                payload: { tabId: 123, sessionId: 'real' },
+            },
+            '*'
+        );
+    });
+
+    it('does not echo a restored empty tab binding back to storage', async () => {
+        const { app, sessionManager } = createAppHarness();
+        app.sidePanelScope = 'remembered_tabs';
+
+        await app.handleIncomingMessage(restoreEvent([realSession()]));
+        app.switchToSession('real');
+        window.parent.postMessage.mockClear();
+
+        await app.handleIncomingMessage({
+            data: {
+                action: 'RESTORE_SIDE_PANEL_TAB_CONTEXT',
+                payload: { tabId: 123, sessionId: null },
+            },
+        });
+
+        expect(sessionManager.currentSessionId).toBeNull();
+        expect(window.parent.postMessage).not.toHaveBeenCalledWith(
+            {
+                action: 'SAVE_SIDE_PANEL_SESSION_BINDING',
+                payload: { tabId: 123, sessionId: null },
+            },
+            '*'
+        );
     });
 
     it('keeps an explicitly selected session when delayed tab details arrive', async () => {

@@ -487,15 +487,16 @@ export class AppController {
     }
 
     restoreRememberedTabSession() {
+        const boundSessionId = this.boundSessionId;
         const boundSession = this.getBoundSession();
         if (boundSession) {
             if (this.sessionManager.currentSessionId !== boundSession.id) {
-                this.switchToSession(boundSession.id);
+                this.sessionFlow.switchToSession(boundSession.id, { persistBinding: false });
             }
             return;
         }
 
-        this.sessionFlow.enterDraft();
+        this.sessionFlow.enterDraft({ persistBinding: Boolean(boundSessionId) });
     }
 
     getMessageCount(session) {

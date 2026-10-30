@@ -58,12 +58,14 @@ export class SessionFlowController {
         this.app.imageManager?.clearFile?.();
     }
 
-    enterDraft() {
+    enterDraft(options = {}) {
         this.app.saveCurrentComposerState?.();
         this.app.messageHandler.resetStream();
         this.sessionManager.enterDraft();
         this.app.boundSessionId = null;
-        this.app.saveCurrentTabSessionBinding(null);
+        if (options.persistBinding !== false) {
+            this.app.saveCurrentTabSessionBinding(null);
+        }
         this.ui.clearChatHistory();
         this.restoreComposerState();
         this.ui.setLoading?.(false);
@@ -144,7 +146,9 @@ export class SessionFlowController {
         }
 
         this.app.boundSessionId = sessionId;
-        this.app.saveCurrentTabSessionBinding(sessionId);
+        if (options.persistBinding !== false) {
+            this.app.saveCurrentTabSessionBinding(sessionId);
+        }
 
         this.refreshHistoryUI();
         this.restoreComposerState(options);
