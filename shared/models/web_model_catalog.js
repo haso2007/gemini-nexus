@@ -5,8 +5,10 @@
 
     const WEB_MODEL_OPTIONS = Object.freeze(
         [
+            // Gemini Web now labels this Lite tier as 3.5 Flash-Lite. The
+            // underlying Web model hash and request contract are unchanged.
+            { value: '8c46e95b1a07cecc', label: '3.5 Flash-Lite' },
             { value: '56fdd199312815e2', label: '3.8 Flash' },
-            { value: '8c46e95b1a07cecc', label: '3.1 Flash-Lite' },
             { value: 'e6fa609c3fa255c0', label: '3.1 Pro' },
         ].map((option) => Object.freeze(option))
     );
@@ -14,6 +16,7 @@
     const LEGACY_WEB_MODEL_ALIASES = Object.freeze({
         'gemini-2.5-flash': '8c46e95b1a07cecc',
         'gemini-3.1-flash-lite': '8c46e95b1a07cecc',
+        'gemini-3.5-flash-lite': '8c46e95b1a07cecc',
         'gemini-3-flash': '8c46e95b1a07cecc',
         'gemini-3.8-flash': '56fdd199312815e2',
         'gemini-3.7-flash': '56fdd199312815e2',

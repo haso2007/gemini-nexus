@@ -15,9 +15,14 @@ Supported:
 - Upload image attachments through the current push upload endpoint before `StreamGenerate`.
 - Parse streamed text, thoughts, continuation ids, and hosted generated-image URLs.
 - Expose the current Gemini Web chat modes:
+    - `8c46e95b1a07cecc` -> `3.5 Flash-Lite`
     - `56fdd199312815e2` -> `3.8 Flash` (default)
-    - `8c46e95b1a07cecc` -> `3.1 Flash-Lite`
     - `e6fa609c3fa255c0` -> `3.1 Pro`
+
+The current Gemini Web model menu also advertises `4 Argon`, but its internal
+Web hash and request contract have not yet been captured. It is deliberately
+not exposed until those values are verified; the public API model id cannot be
+used in the reverse-engineered Web request.
 
 Not claimed as complete:
 
@@ -63,15 +68,15 @@ The Web provider sends these side-channel headers:
 
 Current field observations from `BardChatUi`:
 
-| Zero-based index | Meaning                                    |
-| :--------------- | :----------------------------------------- |
-| `4`              | Selected model hash                        |
-| `7`              | Temporary-chat flag                        |
+| Zero-based index | Meaning                                                           |
+| :--------------- | :---------------------------------------------------------------- |
+| `4`              | Selected model hash                                               |
+| `7`              | Temporary-chat flag                                               |
 | `8`              | Client capabilities; 3.8 Flash currently uses `[4,5,6,8,4,5,6,8]` |
-| `11`             | Legacy model/mode value retained by Nexus  |
-| `14`             | Native mode category                       |
-| `15`             | Native thinking level                      |
-| `16`             | Request UUID                               |
+| `11`             | Legacy model/mode value retained by Nexus                         |
+| `14`             | Native mode category                                              |
+| `15`             | Native thinking level                                             |
+| `16`             | Request UUID                                                      |
 
 The native Gemini Web thinking enum is:
 
