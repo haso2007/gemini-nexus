@@ -229,7 +229,6 @@ async function writeZipArchive() {
     const zipName = `gemini-nexus-firefox-${manifest.version}.zip`;
     const zipPath = path.join(artifactsDir, zipName);
     await rm(zipPath, { force: true });
-    const relZipPath = path.relative(packageDir, zipPath);
 
     const tryZip = () =>
         new Promise((resolve, reject) => {
@@ -247,35 +246,40 @@ async function writeZipArchive() {
             );
         });
 
-    const tryTar = () =>
-        new Promise((resolve, reject) => {
-            const tarCmd = process.platform === 'win32' ? 'tar.exe' : 'tar';
+    const tryPowerShellZip = () => {
+        const escapedZipPath = zipPath.replace(/'/g, "''");
+        return new Promise((resolve, reject) => {
             execFile(
-                tarCmd,
-                ['-a', '-c', '-f', relZipPath, '.'],
+                'powershell.exe',
+                [
+                    '-NoProfile',
+                    '-NonInteractive',
+                    '-Command',
+                    `Compress-Archive -Path * -DestinationPath '${escapedZipPath}' -CompressionLevel Optimal -Force`,
+                ],
                 { cwd: packageDir },
                 (error, stdout, stderr) => {
                     if (error) {
-                        reject(new Error(`tar failed: ${stderr || error.message}`));
+                        reject(new Error(`PowerShell ZIP creation failed: ${stderr || error.message}`));
                         return;
                     }
                     resolve(stdout);
                 }
             );
         });
+    };
 
     try {
         await tryZip();
     } catch (zipError) {
-        try {
-            await tryTar();
-        } catch (tarError) {
+        if (process.platform !== 'win32') {
             console.warn(
-                `[warn] Could not create zip archive (${zipError.message}; ${tarError.message}). ` +
+                `[warn] Could not create ZIP archive (${zipError.message}). ` +
                     `The unpacked directory at ${path.relative(rootDir, packageDir)} is still usable for debugging.`
             );
             return;
         }
+        await tryPowerShellZip();
     }
     console.log(`Firefox store zip written to ${path.relative(rootDir, zipPath)}`);
 }
