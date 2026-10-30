@@ -615,6 +615,33 @@ describe('StateManager tab ownership', () => {
         });
     });
 
+    it('applies imported settings to the open sandbox without waiting for storage events', () => {
+        setupChromeWithLocalData({
+            geminiProvider: 'web',
+            geminiShortcuts: { openPanel: 'Alt+G' },
+        });
+        const frame = createFrame();
+        const manager = new StateManager(frame);
+
+        manager.init();
+        manager.markUiReady();
+        frame.postMessage.mockClear();
+
+        manager.applyLocalStorageUpdate({
+            geminiProvider: 'anthropic',
+            geminiShortcuts: { openPanel: 'Ctrl+Shift+G' },
+        });
+
+        expect(frame.postMessage).toHaveBeenCalledWith({
+            action: 'RESTORE_SHORTCUTS',
+            payload: { openPanel: 'Ctrl+Shift+G' },
+        });
+        expect(frame.postMessage).toHaveBeenCalledWith({
+            action: 'RESTORE_CONNECTION_SETTINGS',
+            payload: expect.objectContaining({ provider: 'anthropic' }),
+        });
+    });
+
     it('logs storage write failures when saving side panel state', async () => {
         setupChrome(33);
         chrome.storage.local.set.mockRejectedValueOnce(new Error('Storage quota exceeded'));

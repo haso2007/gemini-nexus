@@ -106,14 +106,7 @@
             if (result && typeof result.then === 'function') {
                 return result;
             }
-            // A synchronous listener that neither replies nor returns true is
-            // finished. Resolve on the next turn so a listener that calls
-            // sendResponse before returning (without returning true) is still
-            // delivered, which is what keeps Firefox's reply actor alive.
-            Promise.resolve().then(function () {
-                if (!responded) settle(undefined);
-            });
-            return pending;
+            return undefined;
         }
         wrapped.__geminiNexusSendResponse = true;
         return wrapped;

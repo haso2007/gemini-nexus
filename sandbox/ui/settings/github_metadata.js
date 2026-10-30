@@ -11,22 +11,30 @@ async function readResponseField(response, field) {
     }
 }
 
-export async function fetchGithubMetadata(fetchImpl = fetch) {
-    const [starsResponse, releaseResponse] = await Promise.allSettled([
-        fetchImpl(GITHUB_REPOSITORY_BASE_URL),
-        fetchImpl(`${GITHUB_REPOSITORY_BASE_URL}/releases/latest`),
-    ]);
+export async function fetchGithubMetadata(fetchImpl = fetch, timeoutMs = 3500) {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+    const fetchOptions = controller ? { signal: controller.signal } : undefined;
 
-    return {
-        stars:
-            starsResponse.status === 'fulfilled'
-                ? await readResponseField(starsResponse.value, 'stargazers_count')
-                : null,
-        latestVersion:
-            releaseResponse.status === 'fulfilled'
-                ? await readResponseField(releaseResponse.value, 'tag_name')
-                : null,
-    };
+    try {
+        const [starsResponse, releaseResponse] = await Promise.allSettled([
+            fetchImpl(GITHUB_REPOSITORY_BASE_URL, fetchOptions),
+            fetchImpl(`${GITHUB_REPOSITORY_BASE_URL}/releases/latest`, fetchOptions),
+        ]);
+
+        return {
+            stars:
+                starsResponse.status === 'fulfilled'
+                    ? await readResponseField(starsResponse.value, 'stargazers_count')
+                    : null,
+            latestVersion:
+                releaseResponse.status === 'fulfilled'
+                    ? await readResponseField(releaseResponse.value, 'tag_name')
+                    : null,
+        };
+    } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+    }
 }
 
 export function compareVersionStrings(v1, v2) {

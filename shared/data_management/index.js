@@ -68,12 +68,27 @@ function redactHeaders(headers) {
     );
 }
 
+function redactUrlCredentials(value) {
+    if (typeof value !== 'string') return '';
+
+    try {
+        const url = new URL(value);
+        for (const parameterName of Array.from(url.searchParams.keys())) {
+            if (isSensitiveDataKey(parameterName)) url.searchParams.delete(parameterName);
+        }
+        return url.toString();
+    } catch {
+        return value;
+    }
+}
+
 function redactMcpServers(servers) {
     if (!Array.isArray(servers)) return [];
 
     return servers.map((server) => {
         const cloned = cloneJsonSafe(server) || {};
         if (cloned.headers) cloned.headers = redactHeaders(cloned.headers);
+        if (cloned.url) cloned.url = redactUrlCredentials(cloned.url);
         if (cloned.env) cloned.env = {};
         if (cloned.auth && typeof cloned.auth === 'object') {
             cloned.auth = { type: cloned.auth.type };

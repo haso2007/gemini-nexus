@@ -89,16 +89,23 @@ export class MessageBridge {
     }
 
     isRunningInTab() {
+        if (this.state?.hostTabId != null) {
+            return Promise.resolve(Boolean(this.state.hostTabId));
+        }
+        if (this.state?.isStandalonePage) {
+            return Promise.resolve(true);
+        }
+
         return new Promise((resolve) => {
             if (!chrome.tabs || typeof chrome.tabs.getCurrent !== 'function') {
-                this.state.setHostTabId?.(null);
+                this.state?.setHostTabId?.(null);
                 resolve(false);
                 return;
             }
 
             chrome.tabs.getCurrent((tab) => {
                 const tabId = Number.isInteger(tab?.id) && tab.id > 0 ? tab.id : null;
-                this.state.setHostTabId?.(tabId);
+                this.state?.setHostTabId?.(tabId);
                 resolve(Boolean(tabId));
             });
         });
@@ -187,7 +194,9 @@ export class MessageBridge {
     }
 
     importSettingsData(payload) {
-        importSettingsDataPayload(this.frame, payload);
+        importSettingsDataPayload(this.frame, payload, (storageUpdate) => {
+            this.state.applyLocalStorageUpdate(storageUpdate);
+        });
     }
 
     postBackgroundMessage(payload) {

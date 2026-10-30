@@ -15,12 +15,13 @@ function postDataImportResult(frame, kind, ok, error = null) {
     });
 }
 
-function writeImportedStorage(frame, kind, storageUpdate) {
+function writeImportedStorage(frame, kind, storageUpdate, onComplete = null) {
     let settled = false;
     const complete = () => {
         if (settled) return;
         settled = true;
         const writeError = getRuntimeLastError();
+        if (!writeError) onComplete?.(storageUpdate);
         postDataImportResult(frame, kind, !writeError, writeError);
     };
     const fail = (error) => {
@@ -33,8 +34,6 @@ function writeImportedStorage(frame, kind, storageUpdate) {
         const writeResult = chrome.storage.local.set(storageUpdate, complete);
         if (writeResult && typeof writeResult.then === 'function') {
             writeResult.then(complete).catch(fail);
-        } else if (chrome.storage.local.set.length < 2) {
-            queueMicrotask(complete);
         }
     } catch (error) {
         fail(error);
@@ -61,10 +60,10 @@ export function importHistoryData(frame, payload) {
     );
 }
 
-export function importSettingsData(frame, payload) {
+export function importSettingsData(frame, payload, onComplete = null) {
     try {
         const storageUpdate = buildSettingsImportStorageUpdate(payload);
-        writeImportedStorage(frame, 'settings', storageUpdate);
+        writeImportedStorage(frame, 'settings', storageUpdate, onComplete);
     } catch (error) {
         postDataImportResult(frame, 'settings', false, error);
     }

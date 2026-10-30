@@ -115,6 +115,37 @@ describe('app events', () => {
         );
     });
 
+    it('opens settings modal directly when running in a tab', () => {
+        const app = {
+            handleNewChat: vi.fn(),
+            handleTabSwitcher: vi.fn(),
+            toggleBrowserControl: vi.fn(),
+            setCaptureMode: vi.fn(),
+            togglePageContext: vi.fn(),
+            handleModelChange: vi.fn(),
+            handleSendMessage: vi.fn(),
+            isGenerating: false,
+            hostIsTab: true,
+        };
+        const ui = {
+            inputFn: document.getElementById('prompt'),
+            updateStatus: vi.fn(),
+            settings: {
+                open: vi.fn(),
+            },
+        };
+
+        document.body.insertAdjacentHTML('beforeend', '<button id="settings-btn"></button>');
+        bindAppEvents(app, ui);
+        document.getElementById('settings-btn').click();
+
+        expect(ui.settings.open).toHaveBeenCalled();
+        expect(window.parent.postMessage).not.toHaveBeenCalledWith(
+            { action: 'OPEN_SETTINGS_PAGE' },
+            '*'
+        );
+    });
+
     it('opens settings from the collapsed sidebar rail', () => {
         const app = {
             handleNewChat: vi.fn(),

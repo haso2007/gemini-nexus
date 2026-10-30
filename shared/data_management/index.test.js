@@ -38,6 +38,7 @@ describe('data management helpers', () => {
             geminiMcpServers: [
                 {
                     id: 'srv',
+                    url: 'https://mcp.example.test/?tavilyApiKey=secret&safe=yes',
                     headers: {
                         Authorization: 'Bearer local',
                         'X-Trace': 'ok',
@@ -55,6 +56,7 @@ describe('data management helpers', () => {
         expect(payload.settings.geminiTheme).toBe('dark');
         expect(payload.settings.geminiMcpServers[0]).toEqual(
             expect.objectContaining({
+                url: 'https://mcp.example.test/?safe=yes',
                 headers: { 'X-Trace': 'ok' },
                 env: {},
                 auth: { type: 'bearer' },
@@ -91,6 +93,7 @@ describe('data management helpers', () => {
                     geminiAnthropicApiKey: 'anthropic-secret',
                     geminiMcpServers: [
                         {
+                            url: 'https://mcp.example.test/?apiKey=secret&safe=yes',
                             headers: {
                                 Authorization: 'Bearer token',
                                 'X-Workspace': 'docs',
@@ -104,6 +107,7 @@ describe('data management helpers', () => {
         ).toEqual({
             geminiMcpServers: [
                 {
+                    url: 'https://mcp.example.test/?safe=yes',
                     headers: { 'X-Workspace': 'docs' },
                     env: {},
                     auth: { type: 'bearer' },

@@ -173,15 +173,6 @@ export class SettingsController {
         this.view.setContextSettings(this.contextSettings);
         this.view.setConnectionSettings(this.connectionData);
 
-        requestTextSelectionFromStorage();
-        requestTextSelectionBlacklistFromStorage();
-        requestCustomSelectionToolsFromStorage();
-        requestImageToolsFromStorage();
-        requestGeneratedImageWatermarkRemovalFromStorage();
-        requestAccountIndicesFromStorage();
-        requestContextSettingsFromStorage();
-        requestConnectionSettingsFromStorage();
-
         this.refreshGithubMetadata();
     }
 

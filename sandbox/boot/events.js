@@ -46,6 +46,10 @@ export function bindAppEvents(app, ui, setResizeRef) {
         const settingsBtn = document.getElementById(buttonId);
         if (settingsBtn) {
             settingsBtn.addEventListener('click', () => {
+                if (app?.hostIsTab === true && typeof ui?.settings?.open === 'function') {
+                    ui.settings.open();
+                    return;
+                }
                 window.parent.postMessage({ action: 'OPEN_SETTINGS_PAGE' }, '*');
             });
         }

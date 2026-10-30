@@ -178,6 +178,38 @@ describe('shared/compat/firefox_shim', () => {
         expect(response).toEqual({ status: 'completed', echo: 'hi' });
     });
 
+    it('does not claim sendMessage response when a listener does not handle the message', async () => {
+        const { context, browser } = createFirefoxSandbox();
+        browser.runtime.sendMessage = (message) => {
+            const replies = browser.runtime.onMessage.listeners.map((listener) =>
+                listener(message, { id: 'sender' })
+            );
+            const pending = replies.find((reply) => reply && typeof reply.then === 'function');
+            return pending || Promise.resolve(undefined);
+        };
+
+        // First listener ignores the message
+        context.chrome.runtime.onMessage.addListener((message) => {
+            if (message.action === 'OTHER') return true;
+            return false;
+        });
+
+        // Second listener handles the message
+        context.chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+            if (message.action === 'TARGET') {
+                sendResponse({ status: 'handled', echo: message.text });
+                return true;
+            }
+        });
+
+        const response = await context.chrome.runtime.sendMessage({
+            action: 'TARGET',
+            text: 'test-data',
+        });
+
+        expect(response).toEqual({ status: 'handled', echo: 'test-data' });
+    });
+
     it('emulates chrome.sidePanel on top of sidebarAction', () => {
         const { context } = createFirefoxSandbox();
         expect(typeof context.chrome.sidePanel?.setPanelBehavior).toBe('function');

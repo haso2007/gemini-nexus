@@ -335,6 +335,17 @@ export class StateManager {
         }
     }
 
+    applyLocalStorageUpdate(storageUpdate) {
+        if (!storageUpdate || typeof storageUpdate !== 'object' || Array.isArray(storageUpdate)) {
+            return;
+        }
+
+        const changes = Object.fromEntries(
+            Object.entries(storageUpdate).map(([key, value]) => [key, { newValue: value }])
+        );
+        this.syncLocalStorageChanges(changes);
+    }
+
     syncLocalStorageChanges(changes) {
         if (!this.localStorageData) return;
 

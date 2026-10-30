@@ -17,6 +17,7 @@ function createState() {
         getCurrentTabId: vi.fn(() => null),
         getMessageTargetTabId: vi.fn(() => null),
         markUiReady: vi.fn(),
+        applyLocalStorageUpdate: vi.fn(),
         save: vi.fn(),
         saveMany: vi.fn(),
         setHostTabId: vi.fn(),
@@ -1154,6 +1155,32 @@ describe('MessageBridge model persistence', () => {
         expect(frame.postMessage).toHaveBeenCalledWith({
             action: 'DATA_IMPORT_RESULT',
             payload: { kind: 'history', ok: true, error: null },
+        });
+    });
+
+    it('applies imported settings to the open sandbox after writing them', async () => {
+        const frame = createFrame();
+        const state = createState();
+        const bridge = new MessageBridge(frame, state);
+        chrome.storage.local.set.mockImplementation((update, callback) => callback?.());
+
+        bridge.importSettingsData({
+            type: 'GeminiNexus-Settings',
+            settings: {
+                geminiTheme: 'dark',
+                geminiProvider: 'anthropic',
+            },
+        });
+
+        await vi.waitFor(() =>
+            expect(state.applyLocalStorageUpdate).toHaveBeenCalledWith({
+                geminiTheme: 'dark',
+                geminiProvider: 'anthropic',
+            })
+        );
+        expect(frame.postMessage).toHaveBeenCalledWith({
+            action: 'DATA_IMPORT_RESULT',
+            payload: { kind: 'settings', ok: true, error: null },
         });
     });
 
