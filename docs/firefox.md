@@ -1,5 +1,7 @@
 # Firefox 移植说明
 
+下次把别的 Chrome 扩展迁到 Firefox 时，先看通用步骤和这次踩过的坑：`docs/chrome-to-firefox.md`。
+
 同一套源码同时打出 Chrome 版和 Firefox 版。Chrome 版构建流程完全不变；
 Firefox 版通过 `npm run package:firefox` 产出（先跑 `npm run build`）。
 
